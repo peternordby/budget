@@ -53,6 +53,12 @@ function getCategoryHue(name: string) {
   return Math.abs(hash);
 }
 
+function formatDateParts(year: number, month: number, day: number) {
+  const monthValue = String(month).padStart(2, "0");
+  const dayValue = String(day).padStart(2, "0");
+  return `${year}-${monthValue}-${dayValue}`;
+}
+
 function VisualizeContent({ session }: { session: Session }) {
   const today = new Date();
   const currentYear = String(today.getFullYear());
@@ -268,14 +274,10 @@ function VisualizeContent({ session }: { session: Session }) {
         if (filters.month) {
           const monthValue = Number(filters.month);
           if (Number.isFinite(monthValue)) {
-            const monthStartDate = new Date(
-              Number(filters.year),
-              monthValue - 1,
-              1
-            );
-            const monthEndDate = new Date(Number(filters.year), monthValue, 0);
-            const monthStart = monthStartDate.toISOString().slice(0, 10);
-            const monthEnd = monthEndDate.toISOString().slice(0, 10);
+            const yearValue = Number(filters.year);
+            const lastDay = new Date(yearValue, monthValue, 0).getDate();
+            const monthStart = formatDateParts(yearValue, monthValue, 1);
+            const monthEnd = formatDateParts(yearValue, monthValue, lastDay);
             query = query.gte("date", monthStart);
             query = query.lte("date", monthEnd);
           }
