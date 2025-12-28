@@ -35,6 +35,7 @@ type BudgetEntry = {
   budget: number;
   year: number;
   month: number;
+  user_id?: string | null;
   category: Category | null;
 };
 
@@ -59,6 +60,13 @@ function formatDateParts(year: number, month: number, day: number) {
   return `${year}-${monthValue}-${dayValue}`;
 }
 
+function getPreviousPeriod(year: number, month: number) {
+  if (month === 1) {
+    return { year: year - 1, month: 12 };
+  }
+  return { year, month: month - 1 };
+}
+
 function VisualizeContent({ session }: { session: Session }) {
   const today = new Date();
   const currentYear = String(today.getFullYear());
@@ -70,6 +78,12 @@ function VisualizeContent({ session }: { session: Session }) {
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [budgetDraft, setBudgetDraft] = useState("");
   const [budgetSaving, setBudgetSaving] = useState(false);
+  const [budgetHasValue, setBudgetHasValue] = useState(false);
+  const [previousBudgetValue, setPreviousBudgetValue] = useState<number | null>(
+    null
+  );
+  const [previousBudgetLabel, setPreviousBudgetLabel] = useState("");
+  const [previousBudgetLoading, setPreviousBudgetLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -108,6 +122,10 @@ function VisualizeContent({ session }: { session: Session }) {
     if (!available?.length) return allMonthOptions;
     return allMonthOptions.filter((month) => available.includes(month.value));
   }, [allMonthOptions, availableMonthsByYear, filters.year]);
+  const monthsForSelectedYear = useMemo(() => {
+    if (!filters.year) return [];
+    return availableMonthsByYear[filters.year] ?? [];
+  }, [availableMonthsByYear, filters.year]);
   const selectedMonthLabel = useMemo(() => {
     if (!filters.month) return "";
     return (
@@ -115,6 +133,12 @@ function VisualizeContent({ session }: { session: Session }) {
       ""
     );
   }, [allMonthOptions, filters.month]);
+  const periodLabel = useMemo(() => {
+    if (!filters.year) return "Alle år";
+    if (!filters.month) return filters.year;
+    const label = selectedMonthLabel || filters.month;
+    return `${label} ${filters.year}`;
+  }, [filters.month, filters.year, selectedMonthLabel]);
   useEffect(() => {
     let active = true;
 
@@ -423,8 +447,44 @@ function VisualizeContent({ session }: { session: Session }) {
         entry.year === yearValue
     );
 
+    setBudgetHasValue(Boolean(existing));
     setBudgetDraft(existing ? String(existing.budget) : "");
     setEditingCategory(categoryName);
+    setPreviousBudgetValue(null);
+    setPreviousBudgetLabel("");
+    setPreviousBudgetLoading(false);
+
+    if (existing) return;
+
+    const previous = getPreviousPeriod(yearValue, monthValue);
+    const previousLabel =
+      allMonthOptions.find((month) => Number(month.value) === previous.month)
+        ?.label ?? "";
+    setPreviousBudgetLabel(`${previousLabel} ${previous.year}`);
+    setPreviousBudgetLoading(true);
+
+    let previousBudget = budgets.find(
+      (entry) =>
+        entry.category_id === category.id &&
+        entry.month === previous.month &&
+        entry.year === previous.year
+    );
+
+    if (!previousBudget && previous.year !== yearValue) {
+      const { data, error } = await supabase
+        .from("budget")
+        .select("budget")
+        .eq("category_id", category.id)
+        .eq("year", previous.year)
+        .eq("month", previous.month)
+        .maybeSingle();
+      if (!error && data) {
+        previousBudget = { budget: data.budget } as BudgetEntry;
+      }
+    }
+
+    setPreviousBudgetValue(previousBudget?.budget ?? null);
+    setPreviousBudgetLoading(false);
   }
 
   async function handleSaveBudget() {
@@ -499,6 +559,78 @@ function VisualizeContent({ session }: { session: Session }) {
     setDeletingId(null);
   }
 
+  function handlePrevPeriod() {
+    if (!filters.year) return;
+
+    if (filters.month) {
+      const months = monthsForSelectedYear;
+      if (!months.length) return;
+      const currentIndex = months.indexOf(filters.month);
+      if (currentIndex > 0) {
+        setFilters((prev) => ({ ...prev, month: months[currentIndex - 1] }));
+        return;
+      }
+
+      const yearIndex = yearOptions.indexOf(filters.year);
+      if (yearIndex >= 0 && yearIndex < yearOptions.length - 1) {
+        const previousYear = yearOptions[yearIndex + 1];
+        const previousMonths = availableMonthsByYear[previousYear] ?? [];
+        if (!previousMonths.length) {
+          setFilters((prev) => ({ ...prev, year: previousYear, month: "" }));
+          return;
+        }
+        setFilters((prev) => ({
+          ...prev,
+          year: previousYear,
+          month: previousMonths[previousMonths.length - 1],
+        }));
+      }
+      return;
+    }
+
+    const yearIndex = yearOptions.indexOf(filters.year);
+    if (yearIndex >= 0 && yearIndex < yearOptions.length - 1) {
+      const previousYear = yearOptions[yearIndex + 1];
+      setFilters((prev) => ({ ...prev, year: previousYear }));
+    }
+  }
+
+  function handleNextPeriod() {
+    if (!filters.year) return;
+
+    if (filters.month) {
+      const months = monthsForSelectedYear;
+      if (!months.length) return;
+      const currentIndex = months.indexOf(filters.month);
+      if (currentIndex >= 0 && currentIndex < months.length - 1) {
+        setFilters((prev) => ({ ...prev, month: months[currentIndex + 1] }));
+        return;
+      }
+
+      const yearIndex = yearOptions.indexOf(filters.year);
+      if (yearIndex > 0) {
+        const nextYear = yearOptions[yearIndex - 1];
+        const nextMonths = availableMonthsByYear[nextYear] ?? [];
+        if (!nextMonths.length) {
+          setFilters((prev) => ({ ...prev, year: nextYear, month: "" }));
+          return;
+        }
+        setFilters((prev) => ({
+          ...prev,
+          year: nextYear,
+          month: nextMonths[0],
+        }));
+      }
+      return;
+    }
+
+    const yearIndex = yearOptions.indexOf(filters.year);
+    if (yearIndex > 0) {
+      const nextYear = yearOptions[yearIndex - 1];
+      setFilters((prev) => ({ ...prev, year: nextYear }));
+    }
+  }
+
   return (
     <main className="shell">
       <TopNav email={session.user.email} />
@@ -536,6 +668,30 @@ function VisualizeContent({ session }: { session: Session }) {
       <section className="grid" style={{ marginTop: "24px" }}>
         <div className={`card ${editingCategory ? "card-floating" : ""}`}>
           <h2 className="section-title">Filtere</h2>
+          <div className="filter-nav">
+            <div className="filter-nav-label">
+              <span className="helper">Periode</span>
+              <strong>{periodLabel}</strong>
+            </div>
+            <div className="filter-nav-actions">
+              <button
+                className="btn btn-ghost btn-small"
+                type="button"
+                onClick={handlePrevPeriod}
+                disabled={!filters.year}
+              >
+                Forrige
+              </button>
+              <button
+                className="btn btn-ghost btn-small"
+                type="button"
+                onClick={handleNextPeriod}
+                disabled={!filters.year}
+              >
+                Neste
+              </button>
+            </div>
+          </div>
           <div className="form-grid">
             <div className="field">
               <label htmlFor="year">År</label>
@@ -660,6 +816,32 @@ function VisualizeContent({ session }: { session: Session }) {
                             }
                           />
                         </div>
+                        {!budgetHasValue ? (
+                          <div className="budget-popover-row">
+                            <span className="helper">
+                              {previousBudgetLabel
+                                ? `Forrige periode: ${previousBudgetLabel}`
+                                : "Forrige periode"}
+                            </span>
+                            {previousBudgetLoading ? (
+                              <span className="helper">Henter budsjett...</span>
+                            ) : previousBudgetValue !== null ? (
+                              <button
+                                className="btn btn-ghost btn-small"
+                                type="button"
+                                onClick={() =>
+                                  setBudgetDraft(String(previousBudgetValue))
+                                }
+                              >
+                                Kopier {formatCurrency(previousBudgetValue)}
+                              </button>
+                            ) : (
+                              <span className="helper">
+                                Ingen budsjett funnet
+                              </span>
+                            )}
+                          </div>
+                        ) : null}
                         <div className="budget-popover-actions">
                           <button
                             className="btn btn-ghost"
