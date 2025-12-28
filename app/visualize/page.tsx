@@ -460,6 +460,7 @@ function VisualizeContent({ session }: { session: Session }) {
         budget: budgetValue,
         year: yearValue,
         month: monthValue,
+        user_id: session.user.id,
       });
       error = result.error;
     }
