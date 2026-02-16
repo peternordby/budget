@@ -13,6 +13,16 @@ type Filters = {
   month: string;
 };
 
+type ActivityFilters = {
+  itemQuery: string;
+  tag: string;
+  category: string;
+};
+
+type ActivitySortKey = "date" | "tag" | "item" | "amount" | "category";
+
+type ActivitySortDirection = "asc" | "desc";
+
 type Category = {
   id: number;
   category: string;
@@ -46,7 +56,7 @@ function isIncomeCategory(name: string) {
 }
 
 function getCategoryHue(name: string) {
-  const normalized = name.trim().toLowerCase() || "uncategorized";
+  const normalized = name.trim().toLowerCase() || "ukategorisert";
   let hash = 0;
   for (let i = 0; i < normalized.length; i += 1) {
     hash = (hash * 31 + normalized.charCodeAt(i)) % 360;
@@ -65,6 +75,19 @@ function getPreviousPeriod(year: number, month: number) {
     return { year: year - 1, month: 12 };
   }
   return { year, month: month - 1 };
+}
+
+function compareTextValues(a: string, b: string) {
+  return a.localeCompare(b, "nb", { sensitivity: "base" });
+}
+
+function getExpenseCategoryLabel(expense: Expense) {
+  return expense.category?.category || "Ukategorisert";
+}
+
+function getSignedAmount(expense: Expense) {
+  const value = toNumber(expense.price);
+  return isIncomeCategory(getExpenseCategoryLabel(expense)) ? value : -value;
 }
 
 function VisualizeContent({ session }: { session: Session }) {
@@ -87,6 +110,18 @@ function VisualizeContent({ session }: { session: Session }) {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [activityFilters, setActivityFilters] = useState<ActivityFilters>({
+    itemQuery: "",
+    tag: "",
+    category: "",
+  });
+  const [activitySort, setActivitySort] = useState<{
+    key: ActivitySortKey;
+    direction: ActivitySortDirection;
+  }>({
+    key: "date",
+    direction: "desc",
+  });
   const [filters, setFilters] = useState<Filters>({
     year: currentYear,
     month: currentMonth,
@@ -260,7 +295,7 @@ function VisualizeContent({ session }: { session: Session }) {
     if (error) {
       setBudgetStatus(error.message);
     } else {
-      // Supabase may return the joined `category` as an array; normalize to a single object or null.
+      // Supabase may return `category` as an array; normalize to a single object or null.
       const normalized = (data ?? []).map((entry: any) => {
         const category = Array.isArray(entry.category)
           ? entry.category[0] ?? null
@@ -322,7 +357,7 @@ function VisualizeContent({ session }: { session: Session }) {
         setStatus(error.message);
         setExpenses([]);
       } else {
-        // Normalize the returned rows: Supabase may return the joined `category` as an array.
+        // Normalize rows: Supabase may return `category` as an array.
         const normalized = (data ?? []).map((entry: any) => {
           const category = Array.isArray(entry.category)
             ? entry.category[0] ?? null
@@ -370,13 +405,20 @@ function VisualizeContent({ session }: { session: Session }) {
       totals.set(category.category, 0);
     });
     expenses.forEach((expense) => {
-      const key = expense.category?.category || "Uncategorized";
+      const key = expense.category?.category || "Ukategorisert";
       totals.set(key, (totals.get(key) ?? 0) + toNumber(expense.price));
     });
 
     return Array.from(totals.entries())
       .map(([name, total]) => ({ name, total }))
-      .sort((a, b) => b.total - a.total);
+      .sort((a, b) => {
+        const aIncome = isIncomeCategory(a.name);
+        const bIncome = isIncomeCategory(b.name);
+        if (aIncome !== bIncome) {
+          return aIncome ? -1 : 1;
+        }
+        return b.total - a.total;
+      });
   }, [categories, expenses]);
 
   const budgetByCategoryName = useMemo(() => {
@@ -405,6 +447,141 @@ function VisualizeContent({ session }: { session: Session }) {
     });
     return map;
   }, [categories]);
+  const maxCategoryAmount = useMemo(() => {
+    let maxValue = 0;
+
+    categoryTotals.forEach((category) => {
+      maxValue = Math.max(maxValue, category.total);
+      if (filters.year) {
+        maxValue = Math.max(
+          maxValue,
+          budgetByCategoryName.get(category.name) ?? 0
+        );
+      }
+    });
+
+    return Math.max(maxValue, 1);
+  }, [budgetByCategoryName, categoryTotals, filters.year]);
+  const activityTagOptions = useMemo(() => {
+    const tags = new Set<string>();
+    expenses.forEach((expense) => {
+      const value = expense.tag?.trim();
+      if (value) tags.add(value);
+    });
+    return Array.from(tags).sort(compareTextValues);
+  }, [expenses]);
+  const activityCategoryOptions = useMemo(() => {
+    const categoryNames = new Set<string>();
+    expenses.forEach((expense) => {
+      categoryNames.add(getExpenseCategoryLabel(expense));
+    });
+    return Array.from(categoryNames).sort((a, b) => {
+      const aIncome = isIncomeCategory(a);
+      const bIncome = isIncomeCategory(b);
+      if (aIncome !== bIncome) {
+        return aIncome ? -1 : 1;
+      }
+      return compareTextValues(a, b);
+    });
+  }, [expenses]);
+  const filteredAndSortedExpenses = useMemo(() => {
+    const filtered = expenses.filter((expense) => {
+      const categoryName = getExpenseCategoryLabel(expense);
+      const tagValue = expense.tag?.trim() ?? "";
+      const itemValue = expense.item.trim().toLowerCase();
+      const itemQuery = activityFilters.itemQuery.trim().toLowerCase();
+
+      if (activityFilters.tag && tagValue !== activityFilters.tag) {
+        return false;
+      }
+      if (activityFilters.category && categoryName !== activityFilters.category) {
+        return false;
+      }
+      if (itemQuery && !itemValue.includes(itemQuery)) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const direction = activitySort.direction === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      switch (activitySort.key) {
+        case "date": {
+          const aDate = a.date ? new Date(a.date).getTime() : 0;
+          const bDate = b.date ? new Date(b.date).getTime() : 0;
+          return (aDate - bDate) * direction;
+        }
+        case "tag":
+          return compareTextValues(a.tag ?? "", b.tag ?? "") * direction;
+        case "item":
+          return compareTextValues(a.item, b.item) * direction;
+        case "amount":
+          return (getSignedAmount(a) - getSignedAmount(b)) * direction;
+        case "category":
+          return (
+            compareTextValues(
+              getExpenseCategoryLabel(a),
+              getExpenseCategoryLabel(b)
+            ) * direction
+          );
+        default:
+          return 0;
+      }
+    });
+  }, [activityFilters, activitySort, expenses]);
+  const activityTotals = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    let net = 0;
+
+    filteredAndSortedExpenses.forEach((entry) => {
+      const signedAmount = getSignedAmount(entry);
+      net += signedAmount;
+      if (signedAmount >= 0) {
+        income += signedAmount;
+      } else {
+        expense += Math.abs(signedAmount);
+      }
+    });
+
+    return {
+      income,
+      expense,
+      net,
+      count: filteredAndSortedExpenses.length,
+    };
+  }, [filteredAndSortedExpenses]);
+  const hasActivityFilters = Boolean(
+    activityFilters.itemQuery || activityFilters.tag || activityFilters.category
+  );
+  const activityTotalLabel = activityFilters.tag
+    ? `Total for merkelapp «${activityFilters.tag}»`
+    : "Total for filtrert utvalg";
+  const activitySortLabel = useMemo(() => {
+    const labelByKey: Record<ActivitySortKey, string> = {
+      date: "dato",
+      tag: "merkelapp",
+      item: "beskrivelse",
+      amount: "beløp",
+      category: "kategori",
+    };
+    const directionLabel =
+      activitySort.direction === "asc" ? "stigende" : "synkende";
+    return `${labelByKey[activitySort.key]} (${directionLabel})`;
+  }, [activitySort.direction, activitySort.key]);
+
+  useEffect(() => {
+    if (!activityFilters.tag) return;
+    if (activityTagOptions.includes(activityFilters.tag)) return;
+    setActivityFilters((prev) => ({ ...prev, tag: "" }));
+  }, [activityFilters.tag, activityTagOptions]);
+
+  useEffect(() => {
+    if (!activityFilters.category) return;
+    if (activityCategoryOptions.includes(activityFilters.category)) return;
+    setActivityFilters((prev) => ({ ...prev, category: "" }));
+  }, [activityCategoryOptions, activityFilters.category]);
 
   const emptyState = !loading && expenses.length === 0;
   const budgetSummary = useMemo(() => {
@@ -430,7 +607,7 @@ function VisualizeContent({ session }: { session: Session }) {
 
   async function handleOpenBudgetEditor(categoryName: string) {
     if (!filters.year || !filters.month) {
-      setBudgetStatus("Select a year and month to edit budgets.");
+      setBudgetStatus("Velg år og måned for å redigere budsjett.");
       return;
     }
 
@@ -537,7 +714,7 @@ function VisualizeContent({ session }: { session: Session }) {
 
   async function handleDelete(expense: Expense) {
     const confirmed = window.confirm(
-      `Delete ${expense.item}? This cannot be undone.`
+      `Slette ${expense.item}? Dette kan ikke angres.`
     );
     if (!confirmed) return;
 
@@ -631,10 +808,41 @@ function VisualizeContent({ session }: { session: Session }) {
     }
   }
 
+  function handleActivitySort(nextKey: ActivitySortKey) {
+    setActivitySort((prev) => {
+      if (prev.key === nextKey) {
+        return {
+          ...prev,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+
+      const defaultDirection =
+        nextKey === "date" || nextKey === "amount" ? "desc" : "asc";
+      return {
+        key: nextKey,
+        direction: defaultDirection,
+      };
+    });
+  }
+
+  function clearActivityFilters() {
+    setActivityFilters({
+      itemQuery: "",
+      tag: "",
+      category: "",
+    });
+  }
+
+  function getSortIndicator(key: ActivitySortKey) {
+    if (activitySort.key !== key) return "";
+    return activitySort.direction === "asc" ? "↑" : "↓";
+  }
+
   return (
     <main className="shell">
       <TopNav email={session.user.email} />
-      <section className="grid">
+      <section className="grid metrics-grid">
         <div className="card stat">
           <span>Inntekter</span>
           <strong className="text-income">
@@ -657,15 +865,15 @@ function VisualizeContent({ session }: { session: Session }) {
         </div>
       </section>
 
-      <div style={{ marginTop: "24px" }}>
+      <section className="section-gap">
         <BudgetSummary
           spentTotal={summary.expensesTotal}
           budgetTotal={budgetSummary.budgetTotal}
           percentUsed={budgetSummary.percentUsed}
         />
-      </div>
+      </section>
 
-      <section className="grid" style={{ marginTop: "24px" }}>
+      <section className="grid section-gap">
         <div className={`card ${editingCategory ? "card-floating" : ""}`}>
           <h2 className="section-title">Filtere</h2>
           <div className="filter-nav">
@@ -749,41 +957,91 @@ function VisualizeContent({ session }: { session: Session }) {
         </div>
         <div className="card">
           <h2 className="section-title">Kategorier</h2>
+          <p className="helper category-chart-intro">
+            Stolpediagrammet viser forbruk opp mot budsjett i valgt periode.
+          </p>
+          <div className="category-chart-legend">
+            <span className="legend-chip legend-spent">Forbruk</span>
+            {filters.year ? (
+              <>
+                <span className="legend-chip legend-budget">Budsjett</span>
+                <span className="legend-chip legend-under">Under budsjett</span>
+                <span className="legend-chip legend-over">Over budsjett</span>
+              </>
+            ) : null}
+            <span className="legend-max">
+              Maks: {formatCurrency(maxCategoryAmount)}
+            </span>
+          </div>
           {budgetStatus ? <div className="status">{budgetStatus}</div> : null}
           {categoryTotals.length ? (
-            <div className="bar-list">
+            <div className="category-chart-list">
               {categoryTotals.map((category) => {
                 const isIncome = isIncomeCategory(category.name);
                 const budgetValue =
                   budgetByCategoryName.get(category.name) ?? 0;
+                const hasBudget = budgetValue > 0;
+                const spentPercent = (category.total / maxCategoryAmount) * 100;
+                const budgetPercentOfScale =
+                  (budgetValue / maxCategoryAmount) * 100;
+                const spentWidth =
+                  category.total > 0
+                    ? Math.max(Math.min(spentPercent, 100), 1.8)
+                    : 0;
+                const budgetWidth =
+                  budgetValue > 0
+                    ? Math.max(Math.min(budgetPercentOfScale, 100), 1.8)
+                    : 0;
                 const percentUsed =
                   budgetValue > 0 ? (category.total / budgetValue) * 100 : 0;
-                const clampedPercent = Math.min(percentUsed, 200);
-                const fillWidth = (clampedPercent / 200) * 100;
-                const isOverBudget = budgetValue > 0 && percentUsed > 100;
+                const isOverBudget = hasBudget && percentUsed > 100;
+                const categoryBudgetStateClass =
+                  !isIncome && hasBudget
+                    ? isOverBudget
+                      ? "over-budget"
+                      : "under-budget"
+                    : "";
+                const spentBarStateClass = isIncome
+                  ? "income"
+                  : hasBudget
+                    ? isOverBudget
+                      ? "over"
+                      : "under-budget"
+                    : "no-budget";
                 const isEditing = editingCategory === category.name;
                 const canEditBudget = Boolean(filters.year && filters.month);
                 return (
                   <div
                     key={category.name}
-                    className={`bar-row ${isEditing ? "is-editing" : ""}`}
+                    className={`category-chart-row ${
+                      isEditing ? "is-editing" : ""
+                    } ${categoryBudgetStateClass}`}
                   >
-                    <div className="bar-header">
+                    <div className="category-chart-header">
                       <strong className={isIncome ? "text-income" : ""}>
                         {category.name}
                       </strong>
-                      <div className="bar-meta">
-                        <span>
-                          <span className="helper">
-                            {formatCurrency(category.total)}
-                          </span>
-                          {filters.year && budgetValue > 0 ? (
-                            <span className="helper">
-                              {" / "}
-                              {formatCurrency(budgetValue)}
-                            </span>
-                          ) : null}
+                      <div className="category-chart-values">
+                        <span className="category-value">
+                          {formatCurrency(category.total)}
                         </span>
+                        {filters.year ? (
+                          <span className="category-value helper">
+                            Budsjett:{" "}
+                            {hasBudget
+                              ? formatCurrency(budgetValue)
+                              : "Ikke satt"}
+                          </span>
+                        ) : null}
+                        {hasBudget && !isIncome ? (
+                          <span
+                            className={`category-value ${
+                              isOverBudget ? "text-expense" : "text-income"
+                            }`}
+                          >
+                            {percentUsed.toFixed(0)} % brukt
+                          </span>
+                        ) : null}
                       </div>
                       <button
                         className="icon-button"
@@ -791,11 +1049,9 @@ function VisualizeContent({ session }: { session: Session }) {
                         onClick={() => handleOpenBudgetEditor(category.name)}
                         disabled={!canEditBudget}
                         title={
-                          canEditBudget
-                            ? "Edit budget"
-                            : "Select a year and month"
+                          canEditBudget ? "Rediger budsjett" : "Velg år og måned"
                         }
-                        aria-label={`Edit budget for ${category.name}`}
+                        aria-label={`Rediger budsjett for ${category.name}`}
                       >
                         ✎
                       </button>
@@ -861,14 +1117,19 @@ function VisualizeContent({ session }: { session: Session }) {
                         </div>
                       </div>
                     ) : null}
-                    <div className="bar-track">
-                      <div className="bar-marker" />
+                    <div className="category-chart-track">
+                      {filters.year && hasBudget ? (
+                        <div
+                          className="category-chart-bar budget"
+                          style={{
+                            width: `${budgetWidth}%`,
+                          }}
+                        />
+                      ) : null}
                       <div
-                        className={`bar-fill ${isIncome ? "income" : ""} ${
-                          isOverBudget ? "over" : ""
-                        }`}
+                        className={`category-chart-bar spent ${spentBarStateClass}`}
                         style={{
-                          width: `${fillWidth}%`,
+                          width: `${spentWidth}%`,
                         }}
                       />
                     </div>
@@ -882,21 +1143,173 @@ function VisualizeContent({ session }: { session: Session }) {
         </div>
       </section>
 
-      <section className="card" style={{ marginTop: "24px" }}>
-        <h2 className="section-title">Aktivitet</h2>
+      <section className="card section-gap activity-card">
+        <div className="activity-head">
+          <h2 className="section-title">Aktivitet</h2>
+          <span className="helper">Sortert på {activitySortLabel}</span>
+        </div>
         {status ? <div className="status">{status}</div> : null}
+        <div className="activity-controls">
+          <div className="field">
+            <label htmlFor="activity-item-query">Beskrivelse</label>
+            <input
+              id="activity-item-query"
+              value={activityFilters.itemQuery}
+              onChange={(event) =>
+                setActivityFilters((prev) => ({
+                  ...prev,
+                  itemQuery: event.target.value,
+                }))
+              }
+              placeholder="Søk i beskrivelse"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="activity-tag-filter">Merkelapp</label>
+            <select
+              id="activity-tag-filter"
+              value={activityFilters.tag}
+              onChange={(event) =>
+                setActivityFilters((prev) => ({
+                  ...prev,
+                  tag: event.target.value,
+                }))
+              }
+            >
+              <option value="">Alle merkelapper</option>
+              {activityTagOptions.map((tag) => (
+                <option key={tag} value={tag}>
+                  {tag}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="activity-category-filter">Kategori</label>
+            <select
+              id="activity-category-filter"
+              value={activityFilters.category}
+              onChange={(event) =>
+                setActivityFilters((prev) => ({
+                  ...prev,
+                  category: event.target.value,
+                }))
+              }
+            >
+              <option value="">Alle kategorier</option>
+              {activityCategoryOptions.map((categoryName) => (
+                <option key={categoryName} value={categoryName}>
+                  {categoryName}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            className="btn btn-ghost btn-small activity-clear"
+            type="button"
+            onClick={clearActivityFilters}
+            disabled={!hasActivityFilters}
+          >
+            Nullstill filtre
+          </button>
+        </div>
+        <div className="activity-total-row">
+          <div className="activity-total">
+            <span className="helper">{activityTotalLabel}</span>
+            <strong
+              className={activityTotals.net >= 0 ? "text-income" : "text-expense"}
+            >
+              {activityTotals.net >= 0 ? "+" : "-"}
+              {formatCurrency(Math.abs(activityTotals.net))}
+            </strong>
+          </div>
+          <div className="activity-total-meta helper">
+            Inntekter {formatCurrency(activityTotals.income)} | Utgifter{" "}
+            {formatCurrency(activityTotals.expense)} | {activityTotals.count}{" "}
+            transaksjoner
+          </div>
+        </div>
         {loading ? <div className="helper">Laster transaksjoner...</div> : null}
-        {emptyState ? (
+        {!loading && emptyState ? (
           <div className="empty">
             Ingen transaksjoner matcher de nåværende filterene.
           </div>
-        ) : (
+        ) : null}
+        {!loading && !emptyState && filteredAndSortedExpenses.length === 0 ? (
+          <div className="empty">
+            Ingen transaksjoner matcher filtrene i aktivitetstabellen.
+          </div>
+        ) : null}
+        {!loading && !emptyState && filteredAndSortedExpenses.length > 0 ? (
           <div className="list">
-            {expenses.map((expense, index) => {
-              const categoryName =
-                expense.category?.category || "Uncategorized";
-              const isIncome = isIncomeCategory(categoryName);
-              const amount = formatCurrency(toNumber(expense.price));
+            <div className="list-header" role="row">
+              <button
+                className={`list-sort ${
+                  activitySort.key === "date" ? "active" : ""
+                }`}
+                type="button"
+                onClick={() => handleActivitySort("date")}
+              >
+                Dato
+                <span className="list-sort-indicator">
+                  {getSortIndicator("date")}
+                </span>
+              </button>
+              <button
+                className={`list-sort ${
+                  activitySort.key === "tag" ? "active" : ""
+                }`}
+                type="button"
+                onClick={() => handleActivitySort("tag")}
+              >
+                Merkelapp
+                <span className="list-sort-indicator">
+                  {getSortIndicator("tag")}
+                </span>
+              </button>
+              <button
+                className={`list-sort ${
+                  activitySort.key === "item" ? "active" : ""
+                }`}
+                type="button"
+                onClick={() => handleActivitySort("item")}
+              >
+                Beskrivelse
+                <span className="list-sort-indicator">
+                  {getSortIndicator("item")}
+                </span>
+              </button>
+              <button
+                className={`list-sort ${
+                  activitySort.key === "amount" ? "active" : ""
+                }`}
+                type="button"
+                onClick={() => handleActivitySort("amount")}
+              >
+                Beløp
+                <span className="list-sort-indicator">
+                  {getSortIndicator("amount")}
+                </span>
+              </button>
+              <button
+                className={`list-sort ${
+                  activitySort.key === "category" ? "active" : ""
+                }`}
+                type="button"
+                onClick={() => handleActivitySort("category")}
+              >
+                Kategori
+                <span className="list-sort-indicator">
+                  {getSortIndicator("category")}
+                </span>
+              </button>
+              <span className="list-sort empty" aria-hidden="true" />
+            </div>
+            {filteredAndSortedExpenses.map((expense, index) => {
+              const categoryName = getExpenseCategoryLabel(expense);
+              const signedAmount = getSignedAmount(expense);
+              const isIncome = signedAmount >= 0;
+              const amount = formatCurrency(Math.abs(signedAmount));
               const categoryStyle = {
                 "--cat-hue": getCategoryHue(categoryName),
               } as CSSProperties;
@@ -920,8 +1333,8 @@ function VisualizeContent({ session }: { session: Session }) {
                     type="button"
                     onClick={() => handleDelete(expense)}
                     disabled={deletingId === expense.id}
-                    aria-label={`Delete ${expense.item}`}
-                    title="Delete"
+                    aria-label={`Slett ${expense.item}`}
+                    title="Slett"
                   >
                     X
                   </button>
@@ -929,7 +1342,7 @@ function VisualizeContent({ session }: { session: Session }) {
               );
             })}
           </div>
-        )}
+        ) : null}
       </section>
     </main>
   );

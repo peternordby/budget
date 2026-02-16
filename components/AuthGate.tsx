@@ -47,10 +47,10 @@ export default function AuthGate({ children }: AuthGateProps) {
     return (
       <main className="shell">
         <div className="card">
-          <h1 className="section-title">Missing Supabase config</h1>
+          <h1 className="section-title">Mangler Supabase-oppsett</h1>
           <p className="helper">
-            Set NEXT_PUBLIC_SUPABASE_URL and
-            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY in .env.local.
+            Sett `NEXT_PUBLIC_SUPABASE_URL` og
+            `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` i `.env.local`.
           </p>
         </div>
       </main>

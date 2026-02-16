@@ -83,12 +83,15 @@ function InsertForm({ session }: { session: Session }) {
     const priceValue = Number(form.price);
 
     if (!item || !Number.isFinite(categoryId)) {
-      setStatus({ type: "error", message: "Item and category are required." });
+      setStatus({
+        type: "error",
+        message: "Beskrivelse og kategori er påkrevd.",
+      });
       return;
     }
 
     if (!Number.isFinite(priceValue)) {
-      setStatus({ type: "error", message: "Enter a valid price." });
+      setStatus({ type: "error", message: "Skriv inn en gyldig pris." });
       return;
     }
 
@@ -108,7 +111,7 @@ function InsertForm({ session }: { session: Session }) {
     if (error) {
       setStatus({ type: "error", message: error.message });
     } else {
-      setStatus({ type: "success", message: "Expense saved." });
+      setStatus({ type: "success", message: "Utgiften er lagret." });
       setForm((prev) => ({
         item: "",
         price: "",
@@ -124,9 +127,36 @@ function InsertForm({ session }: { session: Session }) {
   return (
     <main className="shell">
       <TopNav email={session.user.email} />
-      <section className="grid">
+      <section className="hero card">
+        <div>
+          <span className="badge">Daglig flyt</span>
+          <h1>Før utgiftene mens de skjer</h1>
+          <p>
+            Legg inn transaksjoner direkte etter kjøp. Når dataen føres tett på
+            hendelsen, blir månedsoversikten mer presis.
+          </p>
+        </div>
+        <div className="tile-grid">
+          <article className="tile">
+            <strong>Kort og tydelig navn</strong>
+            <span>Bruk enkel beskrivelse for rask søk senere.</span>
+          </article>
+          <article className="tile">
+            <strong>Merkelapp når du trenger kontekst</strong>
+            <span>
+              Bruk merkelapp til turer, prosjekter eller arrangementer.
+            </span>
+          </article>
+          <article className="tile">
+            <strong>Sett dato riktig</strong>
+            <span>Dato styrer perioderapporter og budsjettbruk.</span>
+          </article>
+        </div>
+      </section>
+
+      <section className="insert-grid section-gap">
         <div className="card">
-          <h1 className="section-title">Legg til en ny utgift</h1>
+          <h2 className="section-title">Legg til en ny utgift</h2>
           <form className="form-grid" onSubmit={handleSubmit}>
             <div className="field">
               <label htmlFor="item">Beskrivelse</label>
@@ -175,7 +205,7 @@ function InsertForm({ session }: { session: Session }) {
               ) : null}
             </div>
             <div className="field">
-              <label htmlFor="tag">Tag</label>
+              <label htmlFor="tag">Merkelapp</label>
               <input
                 id="tag"
                 value={form.tag}
@@ -198,12 +228,26 @@ function InsertForm({ session }: { session: Session }) {
                 type="submit"
                 disabled={saving}
               >
-                {saving ? "Saving..." : "Save expense"}
+                {saving ? "Lagrer..." : "Lagre utgift"}
               </button>
               {status ? <span className="status">{status.message}</span> : null}
             </div>
           </form>
         </div>
+        <aside className="card side-note">
+          <h2 className="section-title">Rask kvalitetssjekk</h2>
+          <ul className="info-list">
+            <li>Beløp lagres som hele kroner.</li>
+            <li>Velg kategori for at posten skal vises korrekt i grafer.</li>
+            <li>
+              Inntekter bør legges i kategorien <strong>inntekter</strong>.
+            </li>
+          </ul>
+          <p className="helper">
+            Etter lagring finner du posten under <strong>Oversikt</strong>, der
+            du kan filtrere på måned og justere budsjett.
+          </p>
+        </aside>
       </section>
     </main>
   );

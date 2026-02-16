@@ -109,3 +109,4 @@ npm run dev
 
 - Currency formatting is set to NOK with a `kr` suffix in `lib/format.ts`.
 - The insert page uses whole numbers for price and budgets.
+- Frontend documentation is available in `docs/README.md`.

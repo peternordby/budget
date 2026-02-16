@@ -15,7 +15,7 @@ export default function AuthPanel() {
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
-      setMessage("Email and password are required.");
+      setMessage("E-post og passord er påkrevd.");
       return;
     }
 
@@ -46,7 +46,7 @@ export default function AuthPanel() {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
+              placeholder="navn@eksempel.no"
               autoComplete="email"
               required
             />

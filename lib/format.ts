@@ -1,6 +1,6 @@
 export function formatCurrency(value: number) {
   if (!Number.isFinite(value)) {
-    return "$0";
+    return "0 kr";
   }
 
   const formatted = new Intl.NumberFormat("nb-NO", {
@@ -11,10 +11,10 @@ export function formatCurrency(value: number) {
 }
 
 export function formatDate(value: string | null) {
-  if (!value) return "No date";
+  if (!value) return "Ingen dato";
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No date";
+  if (Number.isNaN(date.getTime())) return "Ingen dato";
 
   const day = String(date.getDate()).padStart(2, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");
