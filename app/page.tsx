@@ -1,1 +1,1 @@
-export { default } from "./insert/page";
+export { default } from "./visualize/page";

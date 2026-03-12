@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { Session } from "@supabase/supabase-js";
 import AuthGate from "@/components/AuthGate";
-import BudgetSummary from "@/components/BudgetSummary";
 import TopNav from "@/components/TopNav";
 import { supabase } from "@/lib/supabaseClient";
 import { formatCurrency, formatDate, toNumber } from "@/lib/format";
@@ -48,6 +47,63 @@ type BudgetEntry = {
   user_id?: string | null;
   category: Category | null;
 };
+
+function IconPencil() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24">
+      <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+      <path d="m15 5 4 4" />
+    </svg>
+  );
+}
+
+function IconPlus() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function IconCheck() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+function IconX() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
+function IconTrash() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24">
+      <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
+}
+
+function IconChevronUp() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24">
+      <path d="m18 15-6-6-6 6" />
+    </svg>
+  );
+}
+
+function IconChevronDown() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
 
 const incomeCategoryLabel = "inntekter";
 
@@ -110,6 +166,23 @@ function VisualizeContent({ session }: { session: Session }) {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [editingExpenseId, setEditingExpenseId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState({
+    item: "",
+    price: "",
+    categoryId: "",
+    tag: "",
+    date: "",
+  });
+  const [editSaving, setEditSaving] = useState(false);
+  const [newRowDraft, setNewRowDraft] = useState({
+    item: "",
+    price: "",
+    categoryId: "",
+    tag: "",
+    date: "",
+  });
+  const [newRowSaving, setNewRowSaving] = useState(false);
   const [activityFilters, setActivityFilters] = useState<ActivityFilters>({
     itemQuery: "",
     tag: "",
@@ -586,7 +659,7 @@ function VisualizeContent({ session }: { session: Session }) {
   const emptyState = !loading && expenses.length === 0;
   const budgetSummary = useMemo(() => {
     if (!filters.year) {
-      return { budgetTotal: 0, percentUsed: 0 };
+      return { budgetTotal: 0, percentUsed: 0, remaining: 0, daysLeft: 0, dailyBudget: 0 };
     }
 
     const selectedMonth = filters.month ? Number(filters.month) : null;
@@ -601,9 +674,58 @@ function VisualizeContent({ session }: { session: Session }) {
 
     const percentUsed =
       budgetTotal > 0 ? (summary.expensesTotal / budgetTotal) * 100 : 0;
+    const remaining = budgetTotal - summary.expensesTotal;
 
-    return { budgetTotal, percentUsed };
+    let daysLeft = 0;
+    let dailyBudget = 0;
+    if (filters.month) {
+      const y = Number(filters.year);
+      const m = Number(filters.month);
+      const totalDays = new Date(y, m, 0).getDate();
+      const now = new Date();
+      if (y === now.getFullYear() && m === now.getMonth() + 1) {
+        daysLeft = Math.max(totalDays - now.getDate(), 0);
+      } else if (y > now.getFullYear() || (y === now.getFullYear() && m > now.getMonth() + 1)) {
+        daysLeft = totalDays;
+      }
+      dailyBudget = daysLeft > 0 && remaining > 0 ? remaining / daysLeft : 0;
+    }
+
+    return { budgetTotal, percentUsed, remaining, daysLeft, dailyBudget };
   }, [budgets, filters.month, filters.year, summary.expensesTotal]);
+
+  const budgetInsights = useMemo(() => {
+    if (!filters.year || !filters.month) return null;
+
+    const categoriesWithBudget: { name: string; spent: number; budget: number; percent: number }[] = [];
+
+    categoryTotals.forEach((cat) => {
+      if (isIncomeCategory(cat.name)) return;
+      const bv = budgetByCategoryName.get(cat.name) ?? 0;
+      if (bv <= 0) return;
+      const pct = (cat.total / bv) * 100;
+      categoriesWithBudget.push({ name: cat.name, spent: cat.total, budget: bv, percent: pct });
+    });
+
+    if (!categoriesWithBudget.length) return null;
+
+    const underCount = categoriesWithBudget.filter((c) => c.percent <= 100).length;
+    const overCount = categoriesWithBudget.length - underCount;
+    const worst = [...categoriesWithBudget].sort((a, b) => b.percent - a.percent)[0];
+
+    return { total: categoriesWithBudget.length, underCount, overCount, worst };
+  }, [budgetByCategoryName, categoryTotals, filters.month, filters.year]);
+
+  const expenseBreakdown = useMemo(() => {
+    const items: { name: string; total: number; hue: number }[] = [];
+    let expenseSum = 0;
+    categoryTotals.forEach((cat) => {
+      if (isIncomeCategory(cat.name) || cat.total <= 0) return;
+      items.push({ name: cat.name, total: cat.total, hue: getCategoryHue(cat.name) });
+      expenseSum += cat.total;
+    });
+    return { items, total: expenseSum };
+  }, [categoryTotals]);
 
   async function handleOpenBudgetEditor(categoryName: string) {
     if (!filters.year || !filters.month) {
@@ -834,14 +956,228 @@ function VisualizeContent({ session }: { session: Session }) {
     });
   }
 
+  function handleStartEdit(expense: Expense) {
+    setEditingExpenseId(expense.id);
+    setEditDraft({
+      item: expense.item,
+      price: String(toNumber(expense.price)),
+      categoryId: String(expense.category_id),
+      tag: expense.tag ?? "",
+      date: expense.date ?? "",
+    });
+  }
+
+  function handleCancelEdit() {
+    setEditingExpenseId(null);
+    setEditDraft({ item: "", price: "", categoryId: "", tag: "", date: "" });
+  }
+
+  async function handleSaveEdit() {
+    if (!editingExpenseId) return;
+    const parsed = Number(editDraft.price);
+    if (!editDraft.item.trim() || !editDraft.categoryId || !Number.isFinite(parsed)) return;
+
+    setEditSaving(true);
+    setStatus(null);
+
+    const { error } = await supabase
+      .from("expense")
+      .update({
+        item: editDraft.item.trim(),
+        price: Math.round(parsed),
+        category_id: Number(editDraft.categoryId),
+        tag: editDraft.tag.trim() || null,
+        date: editDraft.date || null,
+      })
+      .eq("id", editingExpenseId)
+      .eq("user_id", session.user.id);
+
+    if (error) {
+      setStatus(error.message);
+    } else {
+      const updatedCategory = categories.find(
+        (c) => c.id === Number(editDraft.categoryId)
+      ) ?? null;
+      setExpenses((prev) =>
+        prev.map((e) =>
+          e.id === editingExpenseId
+            ? {
+                ...e,
+                item: editDraft.item.trim(),
+                price: Math.round(parsed),
+                category_id: Number(editDraft.categoryId),
+                tag: editDraft.tag.trim() || null,
+                date: editDraft.date || null,
+                category: updatedCategory,
+              }
+            : e
+        )
+      );
+      handleCancelEdit();
+    }
+
+    setEditSaving(false);
+  }
+
+  function getDefaultNewRowDate() {
+    if (filters.year && filters.month) {
+      const y = Number(filters.year);
+      const m = Number(filters.month);
+      const now = new Date();
+      if (y === now.getFullYear() && m === now.getMonth() + 1) {
+        return formatDateParts(y, m, now.getDate());
+      }
+      return formatDateParts(y, m, 1);
+    }
+    const now = new Date();
+    return formatDateParts(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  }
+
+  async function handleSaveNewRow() {
+    const parsed = Number(newRowDraft.price);
+    if (!newRowDraft.item.trim() || !newRowDraft.categoryId || !Number.isFinite(parsed) || parsed === 0) return;
+
+    setNewRowSaving(true);
+    setStatus(null);
+
+    const payload = {
+      item: newRowDraft.item.trim(),
+      price: Math.round(Math.abs(parsed)),
+      category_id: Number(newRowDraft.categoryId),
+      tag: newRowDraft.tag.trim() || null,
+      user_id: session.user.id,
+      date: newRowDraft.date || null,
+    };
+
+    const { data, error } = await supabase
+      .from("expense")
+      .insert(payload)
+      .select("id, item, price, category_id, tag, user_id, date, category(id, category)");
+
+    if (error) {
+      setStatus(error.message);
+    } else if (data?.length) {
+      const entry = data[0] as any;
+      const category = Array.isArray(entry.category)
+        ? entry.category[0] ?? null
+        : entry.category ?? null;
+      const newExpense = { ...entry, category } as Expense;
+      setExpenses((prev) => [newExpense, ...prev]);
+      setNewRowDraft({
+        item: "",
+        price: "",
+        categoryId: newRowDraft.categoryId,
+        tag: newRowDraft.tag,
+        date: newRowDraft.date,
+      });
+    }
+
+    setNewRowSaving(false);
+  }
+
+  function handleSpreadsheetKeyDown(
+    event: React.KeyboardEvent,
+    onSave: () => void,
+    onCancel: () => void
+  ) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      onSave();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      onCancel();
+    }
+  }
+
   function getSortIndicator(key: ActivitySortKey) {
     if (activitySort.key !== key) return "";
-    return activitySort.direction === "asc" ? "↑" : "↓";
+    return activitySort.direction === "asc" ? <IconChevronUp /> : <IconChevronDown />;
   }
 
   return (
     <main className="shell">
       <TopNav email={session.user.email} />
+      <section className="card mobile-new-row-card"
+        onKeyDown={(e) =>
+          handleSpreadsheetKeyDown(e, handleSaveNewRow, () =>
+            setNewRowDraft({ item: "", price: "", categoryId: "", tag: "", date: "" })
+          )
+        }
+      >
+        <h2 className="section-title">Ny transaksjon</h2>
+        <div className="mobile-new-row-grid">
+          <div className="field">
+            <label>Beskrivelse</label>
+            <input
+              type="text"
+              value={newRowDraft.item}
+              onChange={(e) =>
+                setNewRowDraft((prev) => ({ ...prev, item: e.target.value }))
+              }
+              placeholder="Hva brukte du penger på?"
+            />
+          </div>
+          <div className="field">
+            <label>Beløp</label>
+            <input
+              type="number"
+              value={newRowDraft.price}
+              onChange={(e) =>
+                setNewRowDraft((prev) => ({ ...prev, price: e.target.value }))
+              }
+              placeholder="0"
+            />
+          </div>
+          <div className="field">
+            <label>Kategori</label>
+            <select
+              value={newRowDraft.categoryId}
+              onChange={(e) =>
+                setNewRowDraft((prev) => ({ ...prev, categoryId: e.target.value }))
+              }
+            >
+              <option value="">Velg kategori...</option>
+              {categories.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.category}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Dato</label>
+            <input
+              type="date"
+              value={newRowDraft.date || getDefaultNewRowDate()}
+              onChange={(e) =>
+                setNewRowDraft((prev) => ({ ...prev, date: e.target.value }))
+              }
+            />
+          </div>
+          <div className="field">
+            <label>Merkelapp</label>
+            <input
+              type="text"
+              value={newRowDraft.tag}
+              onChange={(e) =>
+                setNewRowDraft((prev) => ({ ...prev, tag: e.target.value }))
+              }
+              placeholder="Valgfritt"
+            />
+          </div>
+        </div>
+        <div className="form-actions" style={{ marginTop: 12 }}>
+          <button
+            className="btn btn-primary"
+            style={{ flex: 1 }}
+            type="button"
+            onClick={handleSaveNewRow}
+            disabled={newRowSaving || !newRowDraft.item.trim() || !newRowDraft.categoryId || !newRowDraft.price}
+          >
+            {newRowSaving ? "Lagrer..." : "Legg til"}
+          </button>
+        </div>
+      </section>
       <section className="grid metrics-grid">
         <div className="card stat">
           <span>Inntekter</span>
@@ -865,13 +1201,91 @@ function VisualizeContent({ session }: { session: Session }) {
         </div>
       </section>
 
-      <section className="section-gap">
-        <BudgetSummary
-          spentTotal={summary.expensesTotal}
-          budgetTotal={budgetSummary.budgetTotal}
-          percentUsed={budgetSummary.percentUsed}
-        />
-      </section>
+      {budgetSummary.budgetTotal > 0 ? (
+        <section className="card section-gap gauge-card" style={{
+          "--gauge-pct": Math.min(budgetSummary.percentUsed, 100),
+          "--gauge-color": budgetSummary.percentUsed > 100 ? "var(--expense)" : budgetSummary.percentUsed > 75 ? "#c87f31" : "var(--income)",
+        } as CSSProperties}>
+          <div className="gauge-layout">
+            <div className="gauge-ring-wrap">
+              <div className="gauge-ring" />
+              <div className="gauge-center">
+                <span className="gauge-pct" style={{
+                  color: budgetSummary.percentUsed > 100 ? "var(--expense)" : budgetSummary.percentUsed > 75 ? "#a06828" : "var(--income)",
+                }}>
+                  {budgetSummary.percentUsed.toFixed(0)}%
+                </span>
+                <span className="gauge-label">brukt</span>
+              </div>
+            </div>
+            <div className="gauge-details">
+              <div className="gauge-main-figure">
+                <span className="helper">Brukt av budsjett</span>
+                <strong>{formatCurrency(summary.expensesTotal)} <span className="helper" style={{ fontWeight: 400, fontSize: "16px" }}>/ {formatCurrency(budgetSummary.budgetTotal)}</span></strong>
+              </div>
+              <div className="gauge-stats">
+                <div className={`gauge-stat ${budgetSummary.remaining >= 0 ? "" : "gauge-stat-danger"}`}>
+                  <span className="gauge-stat-value">{budgetSummary.remaining >= 0 ? formatCurrency(budgetSummary.remaining) : `-${formatCurrency(Math.abs(budgetSummary.remaining))}`}</span>
+                  <span className="gauge-stat-label">{budgetSummary.remaining >= 0 ? "Gjenstår" : "Over budsjett"}</span>
+                </div>
+                {budgetSummary.daysLeft > 0 && budgetSummary.remaining > 0 ? (
+                  <div className="gauge-stat">
+                    <span className="gauge-stat-value">{formatCurrency(Math.round(budgetSummary.dailyBudget))}</span>
+                    <span className="gauge-stat-label">Per dag ({budgetSummary.daysLeft} dager igjen)</span>
+                  </div>
+                ) : null}
+              </div>
+              {budgetInsights ? (
+                <div className="gauge-insights">
+                  {budgetInsights.overCount === 0 ? (
+                    <span className="insight-chip insight-good">Alle {budgetInsights.total} kategorier er under budsjett</span>
+                  ) : (
+                    <span className="insight-chip insight-warn">{budgetInsights.overCount} av {budgetInsights.total} kategorier er over budsjett</span>
+                  )}
+                  {budgetInsights.worst && budgetInsights.worst.percent > 100 ? (
+                    <span className="insight-chip insight-bad">{budgetInsights.worst.name}: {budgetInsights.worst.percent.toFixed(0)}% brukt</span>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {expenseBreakdown.items.length > 0 ? (
+        <section className="card section-gap">
+          <h2 className="section-title">Fordeling</h2>
+          <div className="breakdown-bar">
+            {expenseBreakdown.items.map((item) => {
+              const pct = (item.total / expenseBreakdown.total) * 100;
+              return (
+                <div
+                  key={item.name}
+                  className="breakdown-segment"
+                  style={{
+                    width: `${Math.max(pct, 1.5)}%`,
+                    background: `hsl(${item.hue} 52% 56%)`,
+                  } as CSSProperties}
+                  title={`${item.name}: ${formatCurrency(item.total)} (${pct.toFixed(0)}%)`}
+                />
+              );
+            })}
+          </div>
+          <div className="breakdown-legend">
+            {expenseBreakdown.items.map((item) => {
+              const pct = (item.total / expenseBreakdown.total) * 100;
+              return (
+                <div key={item.name} className="breakdown-legend-item">
+                  <span className="breakdown-dot" style={{ background: `hsl(${item.hue} 52% 56%)` }} />
+                  <span className="breakdown-legend-name">{item.name}</span>
+                  <span className="breakdown-legend-value">{formatCurrency(item.total)}</span>
+                  <span className="breakdown-legend-pct">{pct.toFixed(0)}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid section-gap">
         <div className={`card ${editingCategory ? "card-floating" : ""}`}>
@@ -957,22 +1371,6 @@ function VisualizeContent({ session }: { session: Session }) {
         </div>
         <div className="card">
           <h2 className="section-title">Kategorier</h2>
-          <p className="helper category-chart-intro">
-            Stolpediagrammet viser forbruk opp mot budsjett i valgt periode.
-          </p>
-          <div className="category-chart-legend">
-            <span className="legend-chip legend-spent">Forbruk</span>
-            {filters.year ? (
-              <>
-                <span className="legend-chip legend-budget">Budsjett</span>
-                <span className="legend-chip legend-under">Under budsjett</span>
-                <span className="legend-chip legend-over">Over budsjett</span>
-              </>
-            ) : null}
-            <span className="legend-max">
-              Maks: {formatCurrency(maxCategoryAmount)}
-            </span>
-          </div>
           {budgetStatus ? <div className="status">{budgetStatus}</div> : null}
           {categoryTotals.length ? (
             <div className="category-chart-list">
@@ -981,20 +1379,17 @@ function VisualizeContent({ session }: { session: Session }) {
                 const budgetValue =
                   budgetByCategoryName.get(category.name) ?? 0;
                 const hasBudget = budgetValue > 0;
-                const spentPercent = (category.total / maxCategoryAmount) * 100;
-                const budgetPercentOfScale =
-                  (budgetValue / maxCategoryAmount) * 100;
-                const spentWidth =
-                  category.total > 0
-                    ? Math.max(Math.min(spentPercent, 100), 1.8)
-                    : 0;
-                const budgetWidth =
-                  budgetValue > 0
-                    ? Math.max(Math.min(budgetPercentOfScale, 100), 1.8)
-                    : 0;
                 const percentUsed =
                   budgetValue > 0 ? (category.total / budgetValue) * 100 : 0;
                 const isOverBudget = hasBudget && percentUsed > 100;
+                const remaining = budgetValue - category.total;
+
+                const barScale = hasBudget ? budgetValue : maxCategoryAmount;
+                const spentWidth =
+                  category.total > 0
+                    ? Math.max(Math.min((category.total / barScale) * 100, 100), 1.8)
+                    : 0;
+
                 const categoryBudgetStateClass =
                   !isIncome && hasBudget
                     ? isOverBudget
@@ -1010,6 +1405,7 @@ function VisualizeContent({ session }: { session: Session }) {
                     : "no-budget";
                 const isEditing = editingCategory === category.name;
                 const canEditBudget = Boolean(filters.year && filters.month);
+                const catHue = getCategoryHue(category.name);
                 return (
                   <div
                     key={category.name}
@@ -1018,31 +1414,40 @@ function VisualizeContent({ session }: { session: Session }) {
                     } ${categoryBudgetStateClass}`}
                   >
                     <div className="category-chart-header">
-                      <strong className={isIncome ? "text-income" : ""}>
-                        {category.name}
-                      </strong>
+                      <div className="cat-name-row">
+                        <span className="cat-dot" style={{
+                          background: isIncome
+                            ? "var(--income)"
+                            : `hsl(${catHue} 48% 50%)`,
+                        }} />
+                        <strong className={isIncome ? "text-income" : ""}>
+                          {category.name}
+                        </strong>
+                      </div>
                       <div className="category-chart-values">
                         <span className="category-value">
                           {formatCurrency(category.total)}
                         </span>
-                        {filters.year ? (
-                          <span className="category-value helper">
-                            Budsjett:{" "}
-                            {hasBudget
-                              ? formatCurrency(budgetValue)
-                              : "Ikke satt"}
-                          </span>
-                        ) : null}
-                        {hasBudget && !isIncome ? (
-                          <span
-                            className={`category-value ${
-                              isOverBudget ? "text-expense" : "text-income"
-                            }`}
-                          >
-                            {percentUsed.toFixed(0)} % brukt
-                          </span>
+                        {filters.year && hasBudget && !isIncome ? (
+                          <>
+                            <span className="category-value helper">
+                              / {formatCurrency(budgetValue)}
+                            </span>
+                            <span className={`cat-remaining ${isOverBudget ? "text-expense" : "text-income"}`}>
+                              {isOverBudget
+                                ? `${formatCurrency(Math.abs(remaining))} over`
+                                : `${formatCurrency(remaining)} igjen`}
+                            </span>
+                          </>
+                        ) : filters.year && !isIncome ? (
+                          <span className="category-value helper">Budsjett ikke satt</span>
                         ) : null}
                       </div>
+                      {hasBudget && !isIncome ? (
+                        <span className={`cat-pct-badge ${isOverBudget ? "cat-pct-over" : percentUsed > 75 ? "cat-pct-warn" : "cat-pct-ok"}`}>
+                          {percentUsed.toFixed(0)}%
+                        </span>
+                      ) : null}
                       <button
                         className="icon-button"
                         type="button"
@@ -1053,7 +1458,7 @@ function VisualizeContent({ session }: { session: Session }) {
                         }
                         aria-label={`Rediger budsjett for ${category.name}`}
                       >
-                        ✎
+                        <IconPencil />
                       </button>
                     </div>
                     {isEditing ? (
@@ -1117,14 +1522,19 @@ function VisualizeContent({ session }: { session: Session }) {
                         </div>
                       </div>
                     ) : null}
-                    <div className="category-chart-track">
-                      {filters.year && hasBudget ? (
-                        <div
-                          className="category-chart-bar budget"
-                          style={{
-                            width: `${budgetWidth}%`,
-                          }}
-                        />
+                    <div className="category-chart-track" style={{
+                      "--bar-color": isIncome
+                        ? "var(--income)"
+                        : hasBudget
+                          ? isOverBudget
+                            ? "var(--expense)"
+                            : "var(--income)"
+                          : `hsl(${catHue} 42% 52%)`,
+                    } as CSSProperties}>
+                      {hasBudget && !isIncome ? (
+                        <div className="category-chart-budget-mark" style={{
+                          left: `${Math.min((budgetValue / barScale) * 100, 100)}%`,
+                        }} />
                       ) : null}
                       <div
                         className={`category-chart-bar spent ${spentBarStateClass}`}
@@ -1143,7 +1553,7 @@ function VisualizeContent({ session }: { session: Session }) {
         </div>
       </section>
 
-      <section className="card section-gap activity-card">
+      <section className="card section-gap">
         <div className="activity-head">
           <h2 className="section-title">Aktivitet</h2>
           <span className="helper">Sortert på {activitySortLabel}</span>
@@ -1230,17 +1640,7 @@ function VisualizeContent({ session }: { session: Session }) {
           </div>
         </div>
         {loading ? <div className="helper">Laster transaksjoner...</div> : null}
-        {!loading && emptyState ? (
-          <div className="empty">
-            Ingen transaksjoner matcher de nåværende filterene.
-          </div>
-        ) : null}
-        {!loading && !emptyState && filteredAndSortedExpenses.length === 0 ? (
-          <div className="empty">
-            Ingen transaksjoner matcher filtrene i aktivitetstabellen.
-          </div>
-        ) : null}
-        {!loading && !emptyState && filteredAndSortedExpenses.length > 0 ? (
+        {!loading ? (
           <div className="list">
             <div className="list-header" role="row">
               <button
@@ -1305,7 +1705,85 @@ function VisualizeContent({ session }: { session: Session }) {
               </button>
               <span className="list-sort empty" aria-hidden="true" />
             </div>
-            {filteredAndSortedExpenses.map((expense, index) => {
+            <div
+              className="list-row new-row"
+              onKeyDown={(e) =>
+                handleSpreadsheetKeyDown(e, handleSaveNewRow, () =>
+                  setNewRowDraft({ item: "", price: "", categoryId: "", tag: "", date: "" })
+                )
+              }
+            >
+              <input
+                className="cell-input"
+                type="date"
+                value={newRowDraft.date || getDefaultNewRowDate()}
+                onChange={(e) =>
+                  setNewRowDraft((prev) => ({ ...prev, date: e.target.value }))
+                }
+                aria-label="Dato"
+              />
+              <input
+                className="cell-input"
+                type="text"
+                value={newRowDraft.tag}
+                onChange={(e) =>
+                  setNewRowDraft((prev) => ({ ...prev, tag: e.target.value }))
+                }
+                placeholder="Merkelapp"
+                aria-label="Merkelapp"
+              />
+              <input
+                className="cell-input"
+                type="text"
+                value={newRowDraft.item}
+                onChange={(e) =>
+                  setNewRowDraft((prev) => ({ ...prev, item: e.target.value }))
+                }
+                placeholder="Beskrivelse"
+                aria-label="Beskrivelse"
+              />
+              <input
+                className="cell-input cell-input-number"
+                type="number"
+                value={newRowDraft.price}
+                onChange={(e) =>
+                  setNewRowDraft((prev) => ({ ...prev, price: e.target.value }))
+                }
+                placeholder="Beløp"
+                aria-label="Beløp"
+              />
+              <select
+                className="cell-input"
+                value={newRowDraft.categoryId}
+                onChange={(e) =>
+                  setNewRowDraft((prev) => ({ ...prev, categoryId: e.target.value }))
+                }
+                aria-label="Kategori"
+              >
+                <option value="">Kategori...</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.category}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="save-button"
+                type="button"
+                onClick={handleSaveNewRow}
+                disabled={newRowSaving || !newRowDraft.item.trim() || !newRowDraft.categoryId || !newRowDraft.price}
+                aria-label="Lagre ny rad"
+                title="Lagre (Enter)"
+              >
+                {newRowSaving ? "..." : <IconPlus />}
+              </button>
+            </div>
+            {!emptyState && filteredAndSortedExpenses.length === 0 ? (
+              <div className="empty">
+                Ingen transaksjoner matcher filtrene i aktivitetstabellen.
+              </div>
+            ) : null}
+            {filteredAndSortedExpenses.map((expense) => {
               const categoryName = getExpenseCategoryLabel(expense);
               const signedAmount = getSignedAmount(expense);
               const isIncome = signedAmount >= 0;
@@ -1313,11 +1791,104 @@ function VisualizeContent({ session }: { session: Session }) {
               const categoryStyle = {
                 "--cat-hue": getCategoryHue(categoryName),
               } as CSSProperties;
+              const isEditing = editingExpenseId === expense.id;
+
+              if (isEditing) {
+                return (
+                  <div
+                    key={expense.id}
+                    className="list-row editing-row"
+                    onKeyDown={(e) =>
+                      handleSpreadsheetKeyDown(e, handleSaveEdit, handleCancelEdit)
+                    }
+                  >
+                    <input
+                      className="cell-input"
+                      type="date"
+                      value={editDraft.date}
+                      onChange={(e) =>
+                        setEditDraft((prev) => ({ ...prev, date: e.target.value }))
+                      }
+                      aria-label="Dato"
+                    />
+                    <input
+                      className="cell-input"
+                      type="text"
+                      value={editDraft.tag}
+                      onChange={(e) =>
+                        setEditDraft((prev) => ({ ...prev, tag: e.target.value }))
+                      }
+                      placeholder="Merkelapp"
+                      aria-label="Merkelapp"
+                    />
+                    <input
+                      className="cell-input"
+                      type="text"
+                      value={editDraft.item}
+                      onChange={(e) =>
+                        setEditDraft((prev) => ({ ...prev, item: e.target.value }))
+                      }
+                      placeholder="Beskrivelse"
+                      aria-label="Beskrivelse"
+                      autoFocus
+                    />
+                    <input
+                      className="cell-input cell-input-number"
+                      type="number"
+                      value={editDraft.price}
+                      onChange={(e) =>
+                        setEditDraft((prev) => ({ ...prev, price: e.target.value }))
+                      }
+                      placeholder="Beløp"
+                      aria-label="Beløp"
+                    />
+                    <select
+                      className="cell-input"
+                      value={editDraft.categoryId}
+                      onChange={(e) =>
+                        setEditDraft((prev) => ({ ...prev, categoryId: e.target.value }))
+                      }
+                      aria-label="Kategori"
+                    >
+                      <option value="">Kategori...</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={String(c.id)}>
+                          {c.category}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="row-actions">
+                      <button
+                        className="save-button"
+                        type="button"
+                        onClick={handleSaveEdit}
+                        disabled={editSaving}
+                        aria-label="Lagre"
+                        title="Lagre (Enter)"
+                      >
+                        {editSaving ? "..." : <IconCheck />}
+                      </button>
+                      <button
+                        className="cancel-button"
+                        type="button"
+                        onClick={handleCancelEdit}
+                        disabled={editSaving}
+                        aria-label="Avbryt"
+                        title="Avbryt (Esc)"
+                      >
+                        <IconX />
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div
                   key={expense.id}
                   className={`list-row ${isIncome ? "income-row" : ""}`}
-                  style={{ animationDelay: `${index * 40}ms` }}
+                  onDoubleClick={() => handleStartEdit(expense)}
+                  title="Dobbeltklikk for å redigere"
                 >
                   <span>{formatDate(expense.date)}</span>
                   <span>{expense.tag ?? ""}</span>
@@ -1336,7 +1907,7 @@ function VisualizeContent({ session }: { session: Session }) {
                     aria-label={`Slett ${expense.item}`}
                     title="Slett"
                   >
-                    X
+                    <IconTrash />
                   </button>
                 </div>
               );

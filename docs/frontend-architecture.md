@@ -9,9 +9,8 @@
 
 ## Route Map
 
-- `app/page.tsx` -> redirects to the insert page.
-- `app/insert/page.tsx` -> expense entry flow.
-- `app/visualize/page.tsx` -> analytics, filters, budgets, and activity list.
+- `app/page.tsx` -> re-exports the visualize page as the root.
+- `app/visualize/page.tsx` -> single-page dashboard: metrics, budgets, category charts, inline transaction editing, and activity list.
 - `app/layout.tsx` -> global structure, font setup, and atmospheric background layer.
 
 ## Core Components
@@ -25,7 +24,7 @@
   - Renders Supabase auth errors inline in the form.
 
 - `components/TopNav.tsx`
-  - Primary navigation and sign-out action.
+  - Branding and sign-out action.
   - Displays signed-in user identity with truncation for long values.
 
 - `components/BudgetSummary.tsx`
@@ -33,18 +32,14 @@
 
 ## Data Flow Summary
 
-`insert/page.tsx`:
-
-- Loads categories from `category`.
-- Creates new rows in `expense`.
-- Uses authenticated user id for ownership.
-
 `visualize/page.tsx`:
 
 - Loads available periods from `expense.date`.
 - Loads categories from `category`.
 - Loads budgets from `budget` for the selected year.
 - Loads expenses from `expense`, filtered by year/month.
+- Supports inline creation of new transactions (spreadsheet-style input row).
+- Supports inline editing of existing transactions (double-click to edit).
 - Supports activity-table filtering by tag, category, and description.
 - Supports per-column sorting in the activity table.
 - Shows totals for the filtered activity set (including selected tag totals).
@@ -60,9 +55,10 @@
 1. Add new visual variables in `:root` inside `app/globals.css`.
 2. Reuse existing class families before adding one-off classes:
    - layout: `.shell`, `.grid`, `.section-gap`
-   - cards: `.card`, `.stat`, `.side-note`
+   - cards: `.card`, `.stat`
    - forms: `.field`, `.form-grid`, `.form-actions`
    - buttons: `.btn`, `.btn-primary`, `.btn-ghost`, `.btn-small`
+   - inline editing: `.cell-input`, `.new-row`, `.editing-row`
 3. Prefer CSS classes over inline `style` attributes for maintainability.
 4. Add new animations only when they improve orientation or feedback.
 

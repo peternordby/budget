@@ -7,14 +7,10 @@ A Next.js frontend for logging and visualizing expenses stored in Supabase.
 1. Install dependencies:
 
 ```bash
-npm install
+pnpm install
 ```
 
-2. Create `.env.local` based on `.env.example`:
-
-```bash
-cp .env.example .env.local
-```
+2. Create `.env.local`:
 
 Fill in:
 
@@ -97,16 +93,22 @@ create policy "Users can insert their expenses"
   for insert
   to authenticated
   with check (user_id = auth.uid());
+
+create policy "Users can update their expenses"
+  on public.expense
+  for update
+  to authenticated
+  using (user_id = auth.uid());
 ```
 
 4. Run the app:
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 ## Notes
 
 - Currency formatting is set to NOK with a `kr` suffix in `lib/format.ts`.
-- The insert page uses whole numbers for price and budgets.
-- Frontend documentation is available in `docs/README.md`.
+- Prices and budgets use whole numbers (integer kroner).
+- Frontend documentation is available in `docs/`.

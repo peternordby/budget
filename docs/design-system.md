@@ -46,13 +46,21 @@ Reusable primitives:
 - `.shell`: page width and overall vertical rhythm.
 - `.section-gap`: spacing between major sections.
 - `.grid`: responsive auto-fit card layout.
-- `.insert-grid`: two-column form + guidance layout (collapses on smaller screens).
 
 Navigation:
 
 - `.nav` is sticky on larger screens and static on smaller screens.
-- `.nav-tabs` groups primary routes.
 - `.user-chip` keeps user identity visible without dominating the header.
+
+## Inline Editing
+
+Spreadsheet-style input classes:
+
+- `.cell-input`: compact input fields that sit within the table grid.
+- `.new-row`: dashed-border input row for creating new transactions.
+- `.editing-row`: highlighted row for inline editing of existing transactions.
+- `.save-button`, `.cancel-button`: circular action buttons for row operations.
+- `.row-actions`: container for edit/cancel button pairs.
 
 ## Motion
 
@@ -69,7 +77,7 @@ Motion is intentional and limited:
 Primary breakpoints:
 
 - `1024px`: tighter layout and container width.
-- `860px`: stacked navigation, full-width controls, single-column list rows.
+- `860px`: stacked navigation, full-width controls, single-column list rows. Inline editing rows switch to a 2-column grid.
 - `640px` and `480px`: tighter spacing and mobile-friendly form inputs.
 
 Design goals:
