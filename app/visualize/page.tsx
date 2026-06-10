@@ -4,13 +4,17 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { Session } from "@supabase/supabase-js";
 import AuthGate from "@/components/AuthGate";
 import TopNav from "@/components/TopNav";
+import MonthOverMonth from "@/components/MonthOverMonth";
+import Anomalies from "@/components/Anomalies";
 import { supabase } from "@/lib/supabaseClient";
 import { formatCurrency, formatDate, toNumber } from "@/lib/format";
-
-type Filters = {
-  year: string;
-  month: string;
-};
+import {
+  addMonths,
+  listWindowMonths,
+  monthKey,
+  type LedgerEntry,
+  type MonthRef,
+} from "@/lib/insights";
 
 type ActivityFilters = {
   itemQuery: string;
@@ -21,6 +25,42 @@ type ActivityFilters = {
 type ActivitySortKey = "date" | "tag" | "item" | "amount" | "category";
 
 type ActivitySortDirection = "asc" | "desc";
+
+type ColumnKey = ActivitySortKey;
+
+const DEFAULT_COLUMN_ORDER: ColumnKey[] = [
+  "date",
+  "tag",
+  "item",
+  "amount",
+  "category",
+];
+
+const COLUMN_STORAGE_KEY = "budget.column-order.v1";
+
+const COLUMN_TRACKS: Record<ColumnKey, string> = {
+  date: "minmax(88px, 0.82fr)",
+  tag: "minmax(72px, 0.68fr)",
+  item: "minmax(140px, 1.55fr)",
+  amount: "minmax(96px, 0.95fr)",
+  category: "minmax(106px, 1fr)",
+};
+
+const COLUMN_LABELS: Record<ColumnKey, string> = {
+  date: "Dato",
+  tag: "Merkelapp",
+  item: "Beskrivelse",
+  amount: "Beløp",
+  category: "Kategori",
+};
+
+function isValidColumnOrder(value: unknown): value is ColumnKey[] {
+  return (
+    Array.isArray(value) &&
+    value.length === DEFAULT_COLUMN_ORDER.length &&
+    DEFAULT_COLUMN_ORDER.every((key) => value.includes(key))
+  );
+}
 
 type Category = {
   id: number;
@@ -155,6 +195,7 @@ function VisualizeContent({ session }: { session: Session }) {
   const [budgets, setBudgets] = useState<BudgetEntry[]>([]);
   const [budgetStatus, setBudgetStatus] = useState<string | null>(null);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
   const [budgetDraft, setBudgetDraft] = useState("");
   const [budgetSaving, setBudgetSaving] = useState(false);
   const [budgetHasValue, setBudgetHasValue] = useState(false);
@@ -183,6 +224,13 @@ function VisualizeContent({ session }: { session: Session }) {
     date: "",
   });
   const [newRowSaving, setNewRowSaving] = useState(false);
+  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(
+    DEFAULT_COLUMN_ORDER
+  );
+  const [dragColumn, setDragColumn] = useState<ColumnKey | null>(null);
+  const [dropTarget, setDropTarget] = useState<ColumnKey | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<LedgerEntry[]>([]);
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [activityFilters, setActivityFilters] = useState<ActivityFilters>({
     itemQuery: "",
     tag: "",
@@ -195,10 +243,19 @@ function VisualizeContent({ session }: { session: Session }) {
     key: "date",
     direction: "desc",
   });
-  const [filters, setFilters] = useState<Filters>({
-    year: currentYear,
-    month: currentMonth,
-  });
+  const todayRef = useMemo<MonthRef>(
+    () => ({ year: today.getFullYear(), month: today.getMonth() + 1 }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+  // The set of selected month keys ("YYYY-MM") that scopes every figure on the
+  // page, the trailing window the chart shows, and whether plain clicks toggle.
+  const [selectedMonths, setSelectedMonths] = useState<Set<string>>(
+    () => new Set([monthKey(todayRef.year, todayRef.month)])
+  );
+  const [windowEnd, setWindowEnd] = useState<MonthRef>(todayRef);
+  const [multiSelect, setMultiSelect] = useState(false);
+  const [selectionReady, setSelectionReady] = useState(false);
   const [availableYears, setAvailableYears] = useState<string[]>([]);
   const [availableMonthsByYear, setAvailableMonthsByYear] = useState<
     Record<string, string[]>
@@ -220,33 +277,59 @@ function VisualizeContent({ session }: { session: Session }) {
     ],
     []
   );
-  const yearOptions = useMemo(() => {
-    if (availableYears.length) return availableYears;
-    return [currentYear];
-  }, [availableYears, currentYear]);
-  const filterMonthOptions = useMemo(() => {
-    if (!filters.year) return allMonthOptions;
-    const available = availableMonthsByYear[filters.year];
-    if (!available?.length) return allMonthOptions;
-    return allMonthOptions.filter((month) => available.includes(month.value));
-  }, [allMonthOptions, availableMonthsByYear, filters.year]);
-  const monthsForSelectedYear = useMemo(() => {
-    if (!filters.year) return [];
-    return availableMonthsByYear[filters.year] ?? [];
-  }, [availableMonthsByYear, filters.year]);
+  // Stable string signal for the selection so effects/memos can depend on the
+  // contents of the Set rather than its identity.
+  const selectedKey = useMemo(
+    () => Array.from(selectedMonths).sort().join(","),
+    [selectedMonths]
+  );
+  const selectedList = useMemo<MonthRef[]>(() => {
+    return Array.from(selectedMonths)
+      .map((key) => {
+        const [year, month] = key.split("-");
+        return { year: Number(year), month: Number(month) };
+      })
+      .sort((a, b) => a.year - b.year || a.month - b.month);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedKey]);
+  const singleMonth = selectedList.length === 1 ? selectedList[0] : null;
+  const hasPeriod = selectedList.length > 0;
+  const selectedYears = useMemo(
+    () => Array.from(new Set(selectedList.map((ref) => ref.year))),
+    [selectedList]
+  );
+  const selectedYearsKey = selectedYears.join(",");
+  const yearButtons = useMemo(() => {
+    const set = new Set(availableYears.map(Number));
+    set.add(todayRef.year);
+    // Offer next year too so budgets can be planned ahead.
+    set.add(todayRef.year + 1);
+    return Array.from(set).sort((a, b) => a - b);
+  }, [availableYears, todayRef.year]);
   const selectedMonthLabel = useMemo(() => {
-    if (!filters.month) return "";
+    if (!singleMonth) return "";
     return (
-      allMonthOptions.find((month) => month.value === filters.month)?.label ??
-      ""
+      allMonthOptions.find((month) => Number(month.value) === singleMonth.month)
+        ?.label ?? ""
     );
-  }, [allMonthOptions, filters.month]);
+  }, [allMonthOptions, singleMonth]);
   const periodLabel = useMemo(() => {
-    if (!filters.year) return "Alle år";
-    if (!filters.month) return filters.year;
-    const label = selectedMonthLabel || filters.month;
-    return `${label} ${filters.year}`;
-  }, [filters.month, filters.year, selectedMonthLabel]);
+    if (!selectedList.length) return "Ingen periode";
+    if (selectedList.length === 1) {
+      const ref = selectedList[0];
+      const label =
+        allMonthOptions.find((month) => Number(month.value) === ref.month)
+          ?.label ?? String(ref.month);
+      return `${label} ${ref.year}`;
+    }
+    const years = new Set(selectedList.map((ref) => ref.year));
+    if (years.size === 1) {
+      const year = selectedList[0].year;
+      if (selectedList.length === 12) return String(year);
+      return `${selectedList.length} måneder ${year}`;
+    }
+    return `${selectedList.length} måneder valgt`;
+  }, [allMonthOptions, selectedList]);
   useEffect(() => {
     let active = true;
 
@@ -298,38 +381,37 @@ function VisualizeContent({ session }: { session: Session }) {
     };
   }, [session.user.id]);
 
+  // Once we know which months actually have data, default the selection to the
+  // current month when it has data, otherwise the most recent month that does.
+  // Runs once; after that the user owns the selection.
   useEffect(() => {
+    if (selectionReady) return;
     if (!availableYears.length) return;
 
-    setFilters((prev) => {
-      let nextYear = prev.year;
-      if (!nextYear || !availableYears.includes(nextYear)) {
-        nextYear = availableYears[0];
+    const currentMonthsForYear = availableMonthsByYear[currentYear] ?? [];
+    let target = todayRef;
+    if (!currentMonthsForYear.includes(currentMonth)) {
+      const latestYear = availableYears[0];
+      const months = availableMonthsByYear[latestYear] ?? [];
+      if (months.length) {
+        target = {
+          year: Number(latestYear),
+          month: Number(months[months.length - 1]),
+        };
       }
+    }
 
-      let nextMonth = prev.month;
-      if (nextYear) {
-        const availableMonths = availableMonthsByYear[nextYear];
-        if (availableMonths?.length && !availableMonths.includes(nextMonth)) {
-          nextMonth = availableMonths.includes(currentMonth)
-            ? currentMonth
-            : availableMonths[0];
-        }
-      } else {
-        nextMonth = "";
-      }
-
-      if (nextYear === prev.year && nextMonth === prev.month) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        year: nextYear,
-        month: nextMonth,
-      };
-    });
-  }, [availableMonthsByYear, availableYears, currentMonth]);
+    setSelectedMonths(new Set([monthKey(target.year, target.month)]));
+    setWindowEnd(target);
+    setSelectionReady(true);
+  }, [
+    availableMonthsByYear,
+    availableYears,
+    currentMonth,
+    currentYear,
+    selectionReady,
+    todayRef,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -356,13 +438,19 @@ function VisualizeContent({ session }: { session: Session }) {
     };
   }, []);
 
-  async function fetchBudgets(yearValue: number) {
+  async function fetchBudgets(years: number[]) {
     setBudgetStatus(null);
+
+    if (!years.length) {
+      setBudgets([]);
+      return;
+    }
 
     const { data, error } = await supabase
       .from("budget")
       .select("id, category_id, budget, year, month, category(id, category)")
-      .eq("year", yearValue)
+      .eq("user_id", session.user.id)
+      .in("year", years)
       .order("month", { ascending: true });
 
     if (error) {
@@ -383,9 +471,9 @@ function VisualizeContent({ session }: { session: Session }) {
   }
 
   useEffect(() => {
-    if (!filters.year) return;
-    fetchBudgets(Number(filters.year));
-  }, [filters.year]);
+    fetchBudgets(selectedYears);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedYearsKey]);
 
   useEffect(() => {
     let active = true;
@@ -394,35 +482,29 @@ function VisualizeContent({ session }: { session: Session }) {
       setLoading(true);
       setStatus(null);
 
-      let query = supabase
+      if (!selectedList.length) {
+        setExpenses([]);
+        setLoading(false);
+        return;
+      }
+
+      // Selected months may be non-contiguous; fetch the spanning range, then
+      // keep only rows whose month is in the selection.
+      const first = selectedList[0];
+      const last = selectedList[selectedList.length - 1];
+      const lastDay = new Date(last.year, last.month, 0).getDate();
+      const start = formatDateParts(first.year, first.month, 1);
+      const end = formatDateParts(last.year, last.month, lastDay);
+
+      const { data, error } = await supabase
         .from("expense")
         .select(
           "id, item, price, category_id, tag, user_id, date, category(id, category)"
         )
         .eq("user_id", session.user.id)
+        .gte("date", start)
+        .lte("date", end)
         .order("id", { ascending: false });
-
-      if (filters.year) {
-        if (filters.month) {
-          const monthValue = Number(filters.month);
-          if (Number.isFinite(monthValue)) {
-            const yearValue = Number(filters.year);
-            const lastDay = new Date(yearValue, monthValue, 0).getDate();
-            const monthStart = formatDateParts(yearValue, monthValue, 1);
-            const monthEnd = formatDateParts(yearValue, monthValue, lastDay);
-            query = query.gte("date", monthStart);
-            query = query.lte("date", monthEnd);
-          }
-        } else {
-          const yearStart = `${filters.year}-01-01`;
-          const yearEnd = `${filters.year}-12-31`;
-
-          query = query.gte("date", yearStart);
-          query = query.lte("date", yearEnd);
-        }
-      }
-
-      const { data, error } = await query;
 
       if (!active) return;
 
@@ -431,12 +513,18 @@ function VisualizeContent({ session }: { session: Session }) {
         setExpenses([]);
       } else {
         // Normalize rows: Supabase may return `category` as an array.
-        const normalized = (data ?? []).map((entry: any) => {
-          const category = Array.isArray(entry.category)
-            ? entry.category[0] ?? null
-            : entry.category ?? null;
-          return { ...entry, category } as Expense;
-        });
+        const normalized = (data ?? [])
+          .map((entry: any) => {
+            const category = Array.isArray(entry.category)
+              ? entry.category[0] ?? null
+              : entry.category ?? null;
+            return { ...entry, category } as Expense;
+          })
+          .filter(
+            (entry) =>
+              Boolean(entry.date) &&
+              selectedMonths.has((entry.date as string).slice(0, 7))
+          );
         setExpenses(normalized);
       }
 
@@ -448,7 +536,171 @@ function VisualizeContent({ session }: { session: Session }) {
     return () => {
       active = false;
     };
-  }, [session.user.id, filters.year, filters.month]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.user.id, selectedKey]);
+
+  // The chart's trailing 12-month window, driven by the window navigation
+  // rather than the selection so you can scroll through history freely.
+  const anchor = windowEnd;
+
+  const selectedMonthRef = singleMonth;
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadHistory() {
+      const windowMonths = listWindowMonths(anchor, 12);
+      const first = windowMonths[0];
+      const start = formatDateParts(first.year, first.month, 1);
+      const lastDay = new Date(anchor.year, anchor.month, 0).getDate();
+      const end = formatDateParts(anchor.year, anchor.month, lastDay);
+
+      const { data, error } = await supabase
+        .from("expense")
+        .select("id, item, price, tag, date, category(id, category)")
+        .eq("user_id", session.user.id)
+        .gte("date", start)
+        .lte("date", end);
+
+      if (!active) return;
+
+      if (error) {
+        setHistoryEntries([]);
+        return;
+      }
+
+      const normalized: LedgerEntry[] = (data ?? [])
+        .filter((entry: any) => Boolean(entry.date))
+        .map((entry: any) => {
+          const category = Array.isArray(entry.category)
+            ? entry.category[0] ?? null
+            : entry.category ?? null;
+          const name = category?.category || "Ukategorisert";
+          return {
+            id: entry.id,
+            item: entry.item,
+            amount: toNumber(entry.price),
+            category: name,
+            isIncome: isIncomeCategory(name),
+            date: entry.date as string,
+            tag: entry.tag ?? null,
+          };
+        });
+      setHistoryEntries(normalized);
+    }
+
+    loadHistory();
+
+    return () => {
+      active = false;
+    };
+  }, [session.user.id, anchor.year, anchor.month, historyVersion]);
+
+  // Hydrate the per-device column order preference after mount.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(COLUMN_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (isValidColumnOrder(parsed)) {
+        setColumnOrder(parsed);
+      }
+    } catch {
+      // Ignore unreadable preferences and keep the default order.
+    }
+  }, []);
+
+  // Keep the new-row date in sync with the viewed period so the value shown
+  // in the input is also the value that gets saved.
+  useEffect(() => {
+    setNewRowDraft((prev) => ({ ...prev, date: getDefaultNewRowDate() }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedKey]);
+
+  const listColumnStyle = useMemo(
+    () =>
+      ({
+        "--list-cols": columnOrder
+          .map((key) => COLUMN_TRACKS[key])
+          .join(" "),
+      }) as CSSProperties,
+    [columnOrder]
+  );
+
+  function persistColumnOrder(next: ColumnKey[]) {
+    setColumnOrder(next);
+    try {
+      window.localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // Preference simply won't survive a reload if storage is unavailable.
+    }
+  }
+
+  function moveColumn(key: ColumnKey, offset: number) {
+    const index = columnOrder.indexOf(key);
+    const target = index + offset;
+    if (index < 0 || target < 0 || target >= columnOrder.length) return;
+    const next = [...columnOrder];
+    next.splice(index, 1);
+    next.splice(target, 0, key);
+    persistColumnOrder(next);
+  }
+
+  function handleColumnDrop(targetKey: ColumnKey) {
+    if (!dragColumn || dragColumn === targetKey) {
+      setDragColumn(null);
+      setDropTarget(null);
+      return;
+    }
+    const next = columnOrder.filter((key) => key !== dragColumn);
+    next.splice(columnOrder.indexOf(targetKey), 0, dragColumn);
+    persistColumnOrder(next);
+    setDragColumn(null);
+    setDropTarget(null);
+  }
+
+  function selectSingleMonth(ref: MonthRef) {
+    setSelectedMonths(new Set([monthKey(ref.year, ref.month)]));
+  }
+
+  function toggleMonth(ref: MonthRef) {
+    setSelectedMonths((prev) => {
+      const key = monthKey(ref.year, ref.month);
+      const next = new Set(prev);
+      if (next.has(key)) {
+        // Always keep at least one month selected.
+        if (next.size > 1) next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  function handleSelectMonth(ref: MonthRef, additive: boolean) {
+    if (additive || multiSelect) {
+      toggleMonth(ref);
+    } else {
+      selectSingleMonth(ref);
+    }
+  }
+
+  function handleSelectYear(year: number) {
+    const keys: string[] = [];
+    for (let month = 1; month <= 12; month += 1) {
+      keys.push(monthKey(year, month));
+    }
+    setSelectedMonths(new Set(keys));
+    setWindowEnd({ year, month: 12 });
+  }
+
+  function shiftWindow(delta: number) {
+    setWindowEnd((prev) => addMonths(prev, delta));
+  }
+
+  function resetWindow() {
+    setWindowEnd(todayRef);
+  }
 
   const summary = useMemo(() => {
     let income = 0;
@@ -497,22 +749,22 @@ function VisualizeContent({ session }: { session: Session }) {
   const budgetByCategoryName = useMemo(() => {
     const map = new Map<string, number>();
 
-    if (!filters.year) return map;
+    if (!hasPeriod) return map;
 
     categories.forEach((category) => {
       map.set(category.category, 0);
     });
 
-    const selectedMonth = filters.month ? Number(filters.month) : null;
     budgets.forEach((entry) => {
-      if (selectedMonth && entry.month !== selectedMonth) return;
+      if (!selectedMonths.has(monthKey(entry.year, entry.month))) return;
       const name = entry.category?.category;
       if (!name) return;
       map.set(name, (map.get(name) ?? 0) + entry.budget);
     });
 
     return map;
-  }, [budgets, categories, filters.month, filters.year]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [budgets, categories, hasPeriod, selectedKey]);
   const categoryByName = useMemo(() => {
     const map = new Map<string, Category>();
     categories.forEach((category) => {
@@ -525,7 +777,7 @@ function VisualizeContent({ session }: { session: Session }) {
 
     categoryTotals.forEach((category) => {
       maxValue = Math.max(maxValue, category.total);
-      if (filters.year) {
+      if (hasPeriod) {
         maxValue = Math.max(
           maxValue,
           budgetByCategoryName.get(category.name) ?? 0
@@ -534,7 +786,7 @@ function VisualizeContent({ session }: { session: Session }) {
     });
 
     return Math.max(maxValue, 1);
-  }, [budgetByCategoryName, categoryTotals, filters.year]);
+  }, [budgetByCategoryName, categoryTotals, hasPeriod]);
   const activityTagOptions = useMemo(() => {
     const tags = new Set<string>();
     expenses.forEach((expense) => {
@@ -658,17 +910,16 @@ function VisualizeContent({ session }: { session: Session }) {
 
   const emptyState = !loading && expenses.length === 0;
   const budgetSummary = useMemo(() => {
-    if (!filters.year) {
+    if (!hasPeriod) {
       return { budgetTotal: 0, percentUsed: 0, remaining: 0, daysLeft: 0, dailyBudget: 0 };
     }
 
-    const selectedMonth = filters.month ? Number(filters.month) : null;
     let budgetTotal = 0;
 
     budgets.forEach((entry) => {
       const name = entry.category?.category;
       if (!name || isIncomeCategory(name)) return;
-      if (selectedMonth && entry.month !== selectedMonth) return;
+      if (!selectedMonths.has(monthKey(entry.year, entry.month))) return;
       budgetTotal += entry.budget;
     });
 
@@ -676,11 +927,12 @@ function VisualizeContent({ session }: { session: Session }) {
       budgetTotal > 0 ? (summary.expensesTotal / budgetTotal) * 100 : 0;
     const remaining = budgetTotal - summary.expensesTotal;
 
+    // Daily-budget pacing only makes sense for a single concrete month.
     let daysLeft = 0;
     let dailyBudget = 0;
-    if (filters.month) {
-      const y = Number(filters.year);
-      const m = Number(filters.month);
+    if (singleMonth) {
+      const y = singleMonth.year;
+      const m = singleMonth.month;
       const totalDays = new Date(y, m, 0).getDate();
       const now = new Date();
       if (y === now.getFullYear() && m === now.getMonth() + 1) {
@@ -692,10 +944,11 @@ function VisualizeContent({ session }: { session: Session }) {
     }
 
     return { budgetTotal, percentUsed, remaining, daysLeft, dailyBudget };
-  }, [budgets, filters.month, filters.year, summary.expensesTotal]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [budgets, hasPeriod, selectedKey, singleMonth, summary.expensesTotal]);
 
   const budgetInsights = useMemo(() => {
-    if (!filters.year || !filters.month) return null;
+    if (!hasPeriod) return null;
 
     const categoriesWithBudget: { name: string; spent: number; budget: number; percent: number }[] = [];
 
@@ -714,7 +967,7 @@ function VisualizeContent({ session }: { session: Session }) {
     const worst = [...categoriesWithBudget].sort((a, b) => b.percent - a.percent)[0];
 
     return { total: categoriesWithBudget.length, underCount, overCount, worst };
-  }, [budgetByCategoryName, categoryTotals, filters.month, filters.year]);
+  }, [budgetByCategoryName, categoryTotals, hasPeriod]);
 
   const expenseBreakdown = useMemo(() => {
     const items: { name: string; total: number; hue: number }[] = [];
@@ -728,8 +981,8 @@ function VisualizeContent({ session }: { session: Session }) {
   }, [categoryTotals]);
 
   async function handleOpenBudgetEditor(categoryName: string) {
-    if (!filters.year || !filters.month) {
-      setBudgetStatus("Velg år og måned for å redigere budsjett.");
+    if (!singleMonth) {
+      setBudgetStatus("Velg én måned for å redigere budsjett.");
       return;
     }
 
@@ -737,8 +990,8 @@ function VisualizeContent({ session }: { session: Session }) {
     if (!category) return;
 
     setBudgetStatus(null);
-    const monthValue = Number(filters.month);
-    const yearValue = Number(filters.year);
+    const monthValue = singleMonth.month;
+    const yearValue = singleMonth.year;
     const existing = budgets.find(
       (entry) =>
         entry.category_id === category.id &&
@@ -787,13 +1040,13 @@ function VisualizeContent({ session }: { session: Session }) {
   }
 
   async function handleSaveBudget() {
-    if (!editingCategory || !filters.year || !filters.month) return;
+    if (!editingCategory || !singleMonth) return;
 
     const category = categoryByName.get(editingCategory);
     if (!category) return;
 
-    const monthValue = Number(filters.month);
-    const yearValue = Number(filters.year);
+    const monthValue = singleMonth.month;
+    const yearValue = singleMonth.year;
     const parsed = Number(budgetDraft);
     const budgetValue = Number.isFinite(parsed) ? Math.round(parsed) : 0;
     const existing = budgets.find(
@@ -827,7 +1080,7 @@ function VisualizeContent({ session }: { session: Session }) {
     if (error) {
       setBudgetStatus(error.message);
     } else {
-      await fetchBudgets(yearValue);
+      await fetchBudgets(selectedYears);
       setEditingCategory(null);
     }
 
@@ -853,81 +1106,10 @@ function VisualizeContent({ session }: { session: Session }) {
       setStatus(error.message);
     } else {
       setExpenses((prev) => prev.filter((entry) => entry.id !== expense.id));
+      setHistoryVersion((version) => version + 1);
     }
 
     setDeletingId(null);
-  }
-
-  function handlePrevPeriod() {
-    if (!filters.year) return;
-
-    if (filters.month) {
-      const months = monthsForSelectedYear;
-      if (!months.length) return;
-      const currentIndex = months.indexOf(filters.month);
-      if (currentIndex > 0) {
-        setFilters((prev) => ({ ...prev, month: months[currentIndex - 1] }));
-        return;
-      }
-
-      const yearIndex = yearOptions.indexOf(filters.year);
-      if (yearIndex >= 0 && yearIndex < yearOptions.length - 1) {
-        const previousYear = yearOptions[yearIndex + 1];
-        const previousMonths = availableMonthsByYear[previousYear] ?? [];
-        if (!previousMonths.length) {
-          setFilters((prev) => ({ ...prev, year: previousYear, month: "" }));
-          return;
-        }
-        setFilters((prev) => ({
-          ...prev,
-          year: previousYear,
-          month: previousMonths[previousMonths.length - 1],
-        }));
-      }
-      return;
-    }
-
-    const yearIndex = yearOptions.indexOf(filters.year);
-    if (yearIndex >= 0 && yearIndex < yearOptions.length - 1) {
-      const previousYear = yearOptions[yearIndex + 1];
-      setFilters((prev) => ({ ...prev, year: previousYear }));
-    }
-  }
-
-  function handleNextPeriod() {
-    if (!filters.year) return;
-
-    if (filters.month) {
-      const months = monthsForSelectedYear;
-      if (!months.length) return;
-      const currentIndex = months.indexOf(filters.month);
-      if (currentIndex >= 0 && currentIndex < months.length - 1) {
-        setFilters((prev) => ({ ...prev, month: months[currentIndex + 1] }));
-        return;
-      }
-
-      const yearIndex = yearOptions.indexOf(filters.year);
-      if (yearIndex > 0) {
-        const nextYear = yearOptions[yearIndex - 1];
-        const nextMonths = availableMonthsByYear[nextYear] ?? [];
-        if (!nextMonths.length) {
-          setFilters((prev) => ({ ...prev, year: nextYear, month: "" }));
-          return;
-        }
-        setFilters((prev) => ({
-          ...prev,
-          year: nextYear,
-          month: nextMonths[0],
-        }));
-      }
-      return;
-    }
-
-    const yearIndex = yearOptions.indexOf(filters.year);
-    if (yearIndex > 0) {
-      const nextYear = yearOptions[yearIndex - 1];
-      setFilters((prev) => ({ ...prev, year: nextYear }));
-    }
   }
 
   function handleActivitySort(nextKey: ActivitySortKey) {
@@ -1013,6 +1195,7 @@ function VisualizeContent({ session }: { session: Session }) {
             : e
         )
       );
+      setHistoryVersion((version) => version + 1);
       handleCancelEdit();
     }
 
@@ -1020,16 +1203,15 @@ function VisualizeContent({ session }: { session: Session }) {
   }
 
   function getDefaultNewRowDate() {
-    if (filters.year && filters.month) {
-      const y = Number(filters.year);
-      const m = Number(filters.month);
-      const now = new Date();
+    const now = new Date();
+    if (singleMonth) {
+      const y = singleMonth.year;
+      const m = singleMonth.month;
       if (y === now.getFullYear() && m === now.getMonth() + 1) {
         return formatDateParts(y, m, now.getDate());
       }
       return formatDateParts(y, m, 1);
     }
-    const now = new Date();
     return formatDateParts(now.getFullYear(), now.getMonth() + 1, now.getDate());
   }
 
@@ -1046,7 +1228,8 @@ function VisualizeContent({ session }: { session: Session }) {
       category_id: Number(newRowDraft.categoryId),
       tag: newRowDraft.tag.trim() || null,
       user_id: session.user.id,
-      date: newRowDraft.date || null,
+      // Fall back to the default so the date shown in the input is what gets saved.
+      date: newRowDraft.date || getDefaultNewRowDate(),
     };
 
     const { data, error } = await supabase
@@ -1063,6 +1246,7 @@ function VisualizeContent({ session }: { session: Session }) {
         : entry.category ?? null;
       const newExpense = { ...entry, category } as Expense;
       setExpenses((prev) => [newExpense, ...prev]);
+      setHistoryVersion((version) => version + 1);
       setNewRowDraft({
         item: "",
         price: "",
@@ -1094,77 +1278,275 @@ function VisualizeContent({ session }: { session: Session }) {
     return activitySort.direction === "asc" ? <IconChevronUp /> : <IconChevronDown />;
   }
 
+  function renderMobileFieldInput(key: ColumnKey) {
+    switch (key) {
+      case "item":
+        return (
+          <input
+            type="text"
+            value={newRowDraft.item}
+            onChange={(e) =>
+              setNewRowDraft((prev) => ({ ...prev, item: e.target.value }))
+            }
+            placeholder="Hva brukte du penger på?"
+          />
+        );
+      case "amount":
+        return (
+          <input
+            type="number"
+            value={newRowDraft.price}
+            onChange={(e) =>
+              setNewRowDraft((prev) => ({ ...prev, price: e.target.value }))
+            }
+            placeholder="0"
+          />
+        );
+      case "category":
+        return (
+          <select
+            value={newRowDraft.categoryId}
+            onChange={(e) =>
+              setNewRowDraft((prev) => ({ ...prev, categoryId: e.target.value }))
+            }
+          >
+            <option value="">Velg kategori...</option>
+            {categories.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.category}
+              </option>
+            ))}
+          </select>
+        );
+      case "date":
+        return (
+          <input
+            type="date"
+            value={newRowDraft.date}
+            onChange={(e) =>
+              setNewRowDraft((prev) => ({ ...prev, date: e.target.value }))
+            }
+          />
+        );
+      case "tag":
+        return (
+          <input
+            type="text"
+            value={newRowDraft.tag}
+            onChange={(e) =>
+              setNewRowDraft((prev) => ({ ...prev, tag: e.target.value }))
+            }
+            placeholder="Valgfritt"
+          />
+        );
+    }
+  }
+
+  function renderNewRowCell(key: ColumnKey) {
+    switch (key) {
+      case "date":
+        return (
+          <input
+            key={key}
+            className="cell-input"
+            type="date"
+            value={newRowDraft.date}
+            onChange={(e) =>
+              setNewRowDraft((prev) => ({ ...prev, date: e.target.value }))
+            }
+            aria-label="Dato"
+          />
+        );
+      case "tag":
+        return (
+          <input
+            key={key}
+            className="cell-input"
+            type="text"
+            value={newRowDraft.tag}
+            onChange={(e) =>
+              setNewRowDraft((prev) => ({ ...prev, tag: e.target.value }))
+            }
+            placeholder="Merkelapp"
+            aria-label="Merkelapp"
+          />
+        );
+      case "item":
+        return (
+          <input
+            key={key}
+            className="cell-input"
+            type="text"
+            value={newRowDraft.item}
+            onChange={(e) =>
+              setNewRowDraft((prev) => ({ ...prev, item: e.target.value }))
+            }
+            placeholder="Beskrivelse"
+            aria-label="Beskrivelse"
+          />
+        );
+      case "amount":
+        return (
+          <input
+            key={key}
+            className="cell-input cell-input-number"
+            type="number"
+            value={newRowDraft.price}
+            onChange={(e) =>
+              setNewRowDraft((prev) => ({ ...prev, price: e.target.value }))
+            }
+            placeholder="Beløp"
+            aria-label="Beløp"
+          />
+        );
+      case "category":
+        return (
+          <select
+            key={key}
+            className="cell-input"
+            value={newRowDraft.categoryId}
+            onChange={(e) =>
+              setNewRowDraft((prev) => ({ ...prev, categoryId: e.target.value }))
+            }
+            aria-label="Kategori"
+          >
+            <option value="">Kategori...</option>
+            {categories.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.category}
+              </option>
+            ))}
+          </select>
+        );
+    }
+  }
+
+  function renderEditCell(key: ColumnKey) {
+    switch (key) {
+      case "date":
+        return (
+          <input
+            key={key}
+            className="cell-input"
+            type="date"
+            value={editDraft.date}
+            onChange={(e) =>
+              setEditDraft((prev) => ({ ...prev, date: e.target.value }))
+            }
+            aria-label="Dato"
+          />
+        );
+      case "tag":
+        return (
+          <input
+            key={key}
+            className="cell-input"
+            type="text"
+            value={editDraft.tag}
+            onChange={(e) =>
+              setEditDraft((prev) => ({ ...prev, tag: e.target.value }))
+            }
+            placeholder="Merkelapp"
+            aria-label="Merkelapp"
+          />
+        );
+      case "item":
+        return (
+          <input
+            key={key}
+            className="cell-input"
+            type="text"
+            value={editDraft.item}
+            onChange={(e) =>
+              setEditDraft((prev) => ({ ...prev, item: e.target.value }))
+            }
+            placeholder="Beskrivelse"
+            aria-label="Beskrivelse"
+            autoFocus
+          />
+        );
+      case "amount":
+        return (
+          <input
+            key={key}
+            className="cell-input cell-input-number"
+            type="number"
+            value={editDraft.price}
+            onChange={(e) =>
+              setEditDraft((prev) => ({ ...prev, price: e.target.value }))
+            }
+            placeholder="Beløp"
+            aria-label="Beløp"
+          />
+        );
+      case "category":
+        return (
+          <select
+            key={key}
+            className="cell-input"
+            value={editDraft.categoryId}
+            onChange={(e) =>
+              setEditDraft((prev) => ({ ...prev, categoryId: e.target.value }))
+            }
+            aria-label="Kategori"
+          >
+            <option value="">Kategori...</option>
+            {categories.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.category}
+              </option>
+            ))}
+          </select>
+        );
+    }
+  }
+
   return (
     <main className="shell">
       <TopNav email={session.user.email} />
       <section className="card mobile-new-row-card"
         onKeyDown={(e) =>
           handleSpreadsheetKeyDown(e, handleSaveNewRow, () =>
-            setNewRowDraft({ item: "", price: "", categoryId: "", tag: "", date: "" })
+            setNewRowDraft({
+            item: "",
+            price: "",
+            categoryId: "",
+            tag: "",
+            date: getDefaultNewRowDate(),
+          })
           )
         }
       >
         <h2 className="section-title">Ny transaksjon</h2>
         <div className="mobile-new-row-grid">
-          <div className="field">
-            <label>Beskrivelse</label>
-            <input
-              type="text"
-              value={newRowDraft.item}
-              onChange={(e) =>
-                setNewRowDraft((prev) => ({ ...prev, item: e.target.value }))
-              }
-              placeholder="Hva brukte du penger på?"
-            />
-          </div>
-          <div className="field">
-            <label>Beløp</label>
-            <input
-              type="number"
-              value={newRowDraft.price}
-              onChange={(e) =>
-                setNewRowDraft((prev) => ({ ...prev, price: e.target.value }))
-              }
-              placeholder="0"
-            />
-          </div>
-          <div className="field">
-            <label>Kategori</label>
-            <select
-              value={newRowDraft.categoryId}
-              onChange={(e) =>
-                setNewRowDraft((prev) => ({ ...prev, categoryId: e.target.value }))
-              }
-            >
-              <option value="">Velg kategori...</option>
-              {categories.map((c) => (
-                <option key={c.id} value={String(c.id)}>
-                  {c.category}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>Dato</label>
-            <input
-              type="date"
-              value={newRowDraft.date || getDefaultNewRowDate()}
-              onChange={(e) =>
-                setNewRowDraft((prev) => ({ ...prev, date: e.target.value }))
-              }
-            />
-          </div>
-          <div className="field">
-            <label>Merkelapp</label>
-            <input
-              type="text"
-              value={newRowDraft.tag}
-              onChange={(e) =>
-                setNewRowDraft((prev) => ({ ...prev, tag: e.target.value }))
-              }
-              placeholder="Valgfritt"
-            />
-          </div>
+          {columnOrder.map((key, index) => (
+            <div className="field" key={key}>
+              <div className="field-label-row">
+                <label>{COLUMN_LABELS[key]}</label>
+                <div className="field-move">
+                  <button
+                    type="button"
+                    onClick={() => moveColumn(key, -1)}
+                    disabled={index === 0}
+                    aria-label={`Flytt ${COLUMN_LABELS[key]} tidligere`}
+                    title="Flytt tidligere"
+                  >
+                    <IconChevronUp />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveColumn(key, 1)}
+                    disabled={index === columnOrder.length - 1}
+                    aria-label={`Flytt ${COLUMN_LABELS[key]} senere`}
+                    title="Flytt senere"
+                  >
+                    <IconChevronDown />
+                  </button>
+                </div>
+              </div>
+              {renderMobileFieldInput(key)}
+            </div>
+          ))}
         </div>
         <div className="form-actions" style={{ marginTop: 12 }}>
           <button
@@ -1178,40 +1560,18 @@ function VisualizeContent({ session }: { session: Session }) {
           </button>
         </div>
       </section>
-      <section className="grid metrics-grid">
-        <div className="card stat">
-          <span>Inntekter</span>
-          <strong className="text-income">
-            {formatCurrency(summary.income)}
-          </strong>
-        </div>
-        <div className="card stat">
-          <span>Utgifter</span>
-          <strong>{formatCurrency(summary.expensesTotal)}</strong>
-        </div>
-        <div className="card stat">
-          <span>Netto</span>
-          <strong className={summary.net >= 0 ? "text-income" : "text-expense"}>
-            {formatCurrency(summary.net)}
-          </strong>
-        </div>
-        <div className="card stat">
-          <span>Transaksjoner</span>
-          <strong>{summary.count}</strong>
-        </div>
-      </section>
 
       {budgetSummary.budgetTotal > 0 ? (
         <section className="card section-gap gauge-card" style={{
           "--gauge-pct": Math.min(budgetSummary.percentUsed, 100),
-          "--gauge-color": budgetSummary.percentUsed > 100 ? "var(--expense)" : budgetSummary.percentUsed > 75 ? "#c87f31" : "var(--income)",
+          "--gauge-color": budgetSummary.percentUsed > 100 ? "var(--expense)" : budgetSummary.percentUsed > 75 ? "var(--gauge-warn)" : "var(--income)",
         } as CSSProperties}>
           <div className="gauge-layout">
             <div className="gauge-ring-wrap">
               <div className="gauge-ring" />
               <div className="gauge-center">
                 <span className="gauge-pct" style={{
-                  color: budgetSummary.percentUsed > 100 ? "var(--expense)" : budgetSummary.percentUsed > 75 ? "#a06828" : "var(--income)",
+                  color: budgetSummary.percentUsed > 100 ? "var(--expense)" : budgetSummary.percentUsed > 75 ? "var(--gauge-warn-ink)" : "var(--income)",
                 }}>
                   {budgetSummary.percentUsed.toFixed(0)}%
                 </span>
@@ -1264,7 +1624,7 @@ function VisualizeContent({ session }: { session: Session }) {
                   className="breakdown-segment"
                   style={{
                     width: `${Math.max(pct, 1.5)}%`,
-                    background: `hsl(${item.hue} 52% 56%)`,
+                    background: `hsl(${item.hue} var(--seg-s) var(--seg-l))`,
                   } as CSSProperties}
                   title={`${item.name}: ${formatCurrency(item.total)} (${pct.toFixed(0)}%)`}
                 />
@@ -1276,7 +1636,7 @@ function VisualizeContent({ session }: { session: Session }) {
               const pct = (item.total / expenseBreakdown.total) * 100;
               return (
                 <div key={item.name} className="breakdown-legend-item">
-                  <span className="breakdown-dot" style={{ background: `hsl(${item.hue} 52% 56%)` }} />
+                  <span className="breakdown-dot" style={{ background: `hsl(${item.hue} var(--seg-s) var(--seg-l))` }} />
                   <span className="breakdown-legend-name">{item.name}</span>
                   <span className="breakdown-legend-value">{formatCurrency(item.total)}</span>
                   <span className="breakdown-legend-pct">{pct.toFixed(0)}%</span>
@@ -1287,93 +1647,49 @@ function VisualizeContent({ session }: { session: Session }) {
         </section>
       ) : null}
 
-      <section className="grid section-gap">
-        <div className={`card ${editingCategory ? "card-floating" : ""}`}>
-          <h2 className="section-title">Filtere</h2>
-          <div className="filter-nav">
-            <div className="filter-nav-label">
-              <span className="helper">Periode</span>
-              <strong>{periodLabel}</strong>
-            </div>
-            <div className="filter-nav-actions">
-              <button
-                className="btn btn-ghost btn-small"
-                type="button"
-                onClick={handlePrevPeriod}
-                disabled={!filters.year}
-              >
-                Forrige
-              </button>
-              <button
-                className="btn btn-ghost btn-small"
-                type="button"
-                onClick={handleNextPeriod}
-                disabled={!filters.year}
-              >
-                Neste
-              </button>
-            </div>
-          </div>
-          <div className="form-grid">
-            <div className="field">
-              <label htmlFor="year">År</label>
-              <select
-                id="year"
-                value={filters.year}
-                onChange={(event) => {
-                  const nextYear = event.target.value;
-                  setFilters((prev) => {
-                    if (!nextYear) {
-                      return { ...prev, year: "", month: "" };
-                    }
+      <MonthOverMonth
+        entries={historyEntries}
+        anchor={anchor}
+        selectedKeys={selectedMonths}
+        single={selectedMonthRef}
+        years={yearButtons}
+        multiSelect={multiSelect}
+        onSelectMonth={handleSelectMonth}
+        onSelectYear={handleSelectYear}
+        onShiftWindow={shiftWindow}
+        onResetWindow={resetWindow}
+        onToggleMultiSelect={() => setMultiSelect((value) => !value)}
+      />
 
-                    let nextMonth = prev.month;
-                    const availableMonths = availableMonthsByYear[nextYear];
-                    if (availableMonths?.length) {
-                      if (!availableMonths.includes(nextMonth)) {
-                        nextMonth = availableMonths.includes(currentMonth)
-                          ? currentMonth
-                          : availableMonths[0];
-                      }
-                    }
+      <Anomalies
+        entries={historyEntries}
+        selected={selectedMonthRef}
+        periodLabel={periodLabel}
+      />
 
-                    return { ...prev, year: nextYear, month: nextMonth };
-                  });
-                }}
-              >
-                <option value="">Alle år</option>
-                {yearOptions.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="month">Måned</label>
-              <select
-                id="month"
-                value={filters.month}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, month: event.target.value }))
-                }
-                disabled={!filters.year}
-              >
-                <option value="">Alle måneder</option>
-                {filterMonthOptions.map((month) => (
-                  <option key={month.value} value={month.value}>
-                    {month.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+      <section
+        className={`card section-gap category-card${editingCategory ? " editing" : ""}`}
+      >
+        <div className="category-head">
+          <button
+            type="button"
+            className="collapse-toggle"
+            onClick={() => setCategoriesCollapsed((value) => !value)}
+            aria-expanded={!categoriesCollapsed}
+            aria-controls="category-list"
+          >
+            <span className={`collapse-chevron ${categoriesCollapsed ? "collapsed" : ""}`}>
+              <IconChevronDown />
+            </span>
+            <h2 className="section-title">Kategorier</h2>
+          </button>
+          <span className="helper">{periodLabel}</span>
         </div>
-        <div className="card">
-          <h2 className="section-title">Kategorier</h2>
-          {budgetStatus ? <div className="status">{budgetStatus}</div> : null}
-          {categoryTotals.length ? (
-            <div className="category-chart-list">
+        {!categoriesCollapsed ? (
+          <>
+            {budgetStatus ? <div className="status">{budgetStatus}</div> : null}
+            {categoryTotals.length ? (
+              <div className="category-chart-list" id="category-list">
               {categoryTotals.map((category) => {
                 const isIncome = isIncomeCategory(category.name);
                 const budgetValue =
@@ -1404,7 +1720,7 @@ function VisualizeContent({ session }: { session: Session }) {
                       : "under-budget"
                     : "no-budget";
                 const isEditing = editingCategory === category.name;
-                const canEditBudget = Boolean(filters.year && filters.month);
+                const canEditBudget = Boolean(singleMonth);
                 const catHue = getCategoryHue(category.name);
                 return (
                   <div
@@ -1418,7 +1734,7 @@ function VisualizeContent({ session }: { session: Session }) {
                         <span className="cat-dot" style={{
                           background: isIncome
                             ? "var(--income)"
-                            : `hsl(${catHue} 48% 50%)`,
+                            : `hsl(${catHue} var(--dot-s) var(--dot-l))`,
                         }} />
                         <strong className={isIncome ? "text-income" : ""}>
                           {category.name}
@@ -1428,7 +1744,7 @@ function VisualizeContent({ session }: { session: Session }) {
                         <span className="category-value">
                           {formatCurrency(category.total)}
                         </span>
-                        {filters.year && hasBudget && !isIncome ? (
+                        {hasPeriod && hasBudget && !isIncome ? (
                           <>
                             <span className="category-value helper">
                               / {formatCurrency(budgetValue)}
@@ -1439,7 +1755,7 @@ function VisualizeContent({ session }: { session: Session }) {
                                 : `${formatCurrency(remaining)} igjen`}
                             </span>
                           </>
-                        ) : filters.year && !isIncome ? (
+                        ) : hasPeriod && !isIncome ? (
                           <span className="category-value helper">Budsjett ikke satt</span>
                         ) : null}
                       </div>
@@ -1454,7 +1770,7 @@ function VisualizeContent({ session }: { session: Session }) {
                         onClick={() => handleOpenBudgetEditor(category.name)}
                         disabled={!canEditBudget}
                         title={
-                          canEditBudget ? "Rediger budsjett" : "Velg år og måned"
+                          canEditBudget ? "Rediger budsjett" : "Velg én måned"
                         }
                         aria-label={`Rediger budsjett for ${category.name}`}
                       >
@@ -1529,7 +1845,7 @@ function VisualizeContent({ session }: { session: Session }) {
                           ? isOverBudget
                             ? "var(--expense)"
                             : "var(--income)"
-                          : `hsl(${catHue} 42% 52%)`,
+                          : `hsl(${catHue} var(--bar-s) var(--bar-l))`,
                     } as CSSProperties}>
                       {hasBudget && !isIncome ? (
                         <div className="category-chart-budget-mark" style={{
@@ -1546,11 +1862,12 @@ function VisualizeContent({ session }: { session: Session }) {
                   </div>
                 );
               })}
-            </div>
-          ) : (
-            <div className="empty">Ingen kategorier</div>
-          )}
-        </div>
+              </div>
+            ) : (
+              <div className="empty">Ingen kategorier</div>
+            )}
+          </>
+        ) : null}
       </section>
 
       <section className="card section-gap">
@@ -1641,132 +1958,66 @@ function VisualizeContent({ session }: { session: Session }) {
         </div>
         {loading ? <div className="helper">Laster transaksjoner...</div> : null}
         {!loading ? (
-          <div className="list">
+          <div className="list" style={listColumnStyle}>
             <div className="list-header" role="row">
-              <button
-                className={`list-sort ${
-                  activitySort.key === "date" ? "active" : ""
-                }`}
-                type="button"
-                onClick={() => handleActivitySort("date")}
-              >
-                Dato
-                <span className="list-sort-indicator">
-                  {getSortIndicator("date")}
-                </span>
-              </button>
-              <button
-                className={`list-sort ${
-                  activitySort.key === "tag" ? "active" : ""
-                }`}
-                type="button"
-                onClick={() => handleActivitySort("tag")}
-              >
-                Merkelapp
-                <span className="list-sort-indicator">
-                  {getSortIndicator("tag")}
-                </span>
-              </button>
-              <button
-                className={`list-sort ${
-                  activitySort.key === "item" ? "active" : ""
-                }`}
-                type="button"
-                onClick={() => handleActivitySort("item")}
-              >
-                Beskrivelse
-                <span className="list-sort-indicator">
-                  {getSortIndicator("item")}
-                </span>
-              </button>
-              <button
-                className={`list-sort ${
-                  activitySort.key === "amount" ? "active" : ""
-                }`}
-                type="button"
-                onClick={() => handleActivitySort("amount")}
-              >
-                Beløp
-                <span className="list-sort-indicator">
-                  {getSortIndicator("amount")}
-                </span>
-              </button>
-              <button
-                className={`list-sort ${
-                  activitySort.key === "category" ? "active" : ""
-                }`}
-                type="button"
-                onClick={() => handleActivitySort("category")}
-              >
-                Kategori
-                <span className="list-sort-indicator">
-                  {getSortIndicator("category")}
-                </span>
-              </button>
+              {columnOrder.map((key) => (
+                <button
+                  key={key}
+                  className={`list-sort draggable ${
+                    activitySort.key === key ? "active" : ""
+                  } ${dragColumn === key ? "dragging" : ""} ${
+                    dropTarget === key && dragColumn && dragColumn !== key
+                      ? "drop-target"
+                      : ""
+                  }`}
+                  type="button"
+                  draggable
+                  onDragStart={(e) => {
+                    setDragColumn(key);
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragEnd={() => {
+                    setDragColumn(null);
+                    setDropTarget(null);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    setDropTarget(key);
+                  }}
+                  onDragLeave={() =>
+                    setDropTarget((prev) => (prev === key ? null : prev))
+                  }
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    handleColumnDrop(key);
+                  }}
+                  onClick={() => handleActivitySort(key)}
+                  title="Klikk for å sortere, dra for å flytte kolonnen"
+                >
+                  {COLUMN_LABELS[key]}
+                  <span className="list-sort-indicator">
+                    {getSortIndicator(key)}
+                  </span>
+                </button>
+              ))}
               <span className="list-sort empty" aria-hidden="true" />
             </div>
             <div
               className="list-row new-row"
               onKeyDown={(e) =>
                 handleSpreadsheetKeyDown(e, handleSaveNewRow, () =>
-                  setNewRowDraft({ item: "", price: "", categoryId: "", tag: "", date: "" })
+                  setNewRowDraft({
+            item: "",
+            price: "",
+            categoryId: "",
+            tag: "",
+            date: getDefaultNewRowDate(),
+          })
                 )
               }
             >
-              <input
-                className="cell-input"
-                type="date"
-                value={newRowDraft.date || getDefaultNewRowDate()}
-                onChange={(e) =>
-                  setNewRowDraft((prev) => ({ ...prev, date: e.target.value }))
-                }
-                aria-label="Dato"
-              />
-              <input
-                className="cell-input"
-                type="text"
-                value={newRowDraft.tag}
-                onChange={(e) =>
-                  setNewRowDraft((prev) => ({ ...prev, tag: e.target.value }))
-                }
-                placeholder="Merkelapp"
-                aria-label="Merkelapp"
-              />
-              <input
-                className="cell-input"
-                type="text"
-                value={newRowDraft.item}
-                onChange={(e) =>
-                  setNewRowDraft((prev) => ({ ...prev, item: e.target.value }))
-                }
-                placeholder="Beskrivelse"
-                aria-label="Beskrivelse"
-              />
-              <input
-                className="cell-input cell-input-number"
-                type="number"
-                value={newRowDraft.price}
-                onChange={(e) =>
-                  setNewRowDraft((prev) => ({ ...prev, price: e.target.value }))
-                }
-                placeholder="Beløp"
-                aria-label="Beløp"
-              />
-              <select
-                className="cell-input"
-                value={newRowDraft.categoryId}
-                onChange={(e) =>
-                  setNewRowDraft((prev) => ({ ...prev, categoryId: e.target.value }))
-                }
-                aria-label="Kategori"
-              >
-                <option value="">Kategori...</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.category}
-                  </option>
-                ))}
-              </select>
+              {columnOrder.map((key) => renderNewRowCell(key))}
               <button
                 className="save-button"
                 type="button"
@@ -1802,61 +2053,7 @@ function VisualizeContent({ session }: { session: Session }) {
                       handleSpreadsheetKeyDown(e, handleSaveEdit, handleCancelEdit)
                     }
                   >
-                    <input
-                      className="cell-input"
-                      type="date"
-                      value={editDraft.date}
-                      onChange={(e) =>
-                        setEditDraft((prev) => ({ ...prev, date: e.target.value }))
-                      }
-                      aria-label="Dato"
-                    />
-                    <input
-                      className="cell-input"
-                      type="text"
-                      value={editDraft.tag}
-                      onChange={(e) =>
-                        setEditDraft((prev) => ({ ...prev, tag: e.target.value }))
-                      }
-                      placeholder="Merkelapp"
-                      aria-label="Merkelapp"
-                    />
-                    <input
-                      className="cell-input"
-                      type="text"
-                      value={editDraft.item}
-                      onChange={(e) =>
-                        setEditDraft((prev) => ({ ...prev, item: e.target.value }))
-                      }
-                      placeholder="Beskrivelse"
-                      aria-label="Beskrivelse"
-                      autoFocus
-                    />
-                    <input
-                      className="cell-input cell-input-number"
-                      type="number"
-                      value={editDraft.price}
-                      onChange={(e) =>
-                        setEditDraft((prev) => ({ ...prev, price: e.target.value }))
-                      }
-                      placeholder="Beløp"
-                      aria-label="Beløp"
-                    />
-                    <select
-                      className="cell-input"
-                      value={editDraft.categoryId}
-                      onChange={(e) =>
-                        setEditDraft((prev) => ({ ...prev, categoryId: e.target.value }))
-                      }
-                      aria-label="Kategori"
-                    >
-                      <option value="">Kategori...</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={String(c.id)}>
-                          {c.category}
-                        </option>
-                      ))}
-                    </select>
+                    {columnOrder.map((key) => renderEditCell(key))}
                     <div className="row-actions">
                       <button
                         className="save-button"
@@ -1890,15 +2087,43 @@ function VisualizeContent({ session }: { session: Session }) {
                   onDoubleClick={() => handleStartEdit(expense)}
                   title="Dobbeltklikk for å redigere"
                 >
-                  <span>{formatDate(expense.date)}</span>
-                  <span>{expense.tag ?? ""}</span>
-                  <strong>{expense.item}</strong>
-                  <strong className={isIncome ? "text-income" : ""}>
-                    {isIncome ? `+${amount}` : `-${amount}`}
-                  </strong>
-                  <span className="category-pill" style={categoryStyle}>
-                    {categoryName}
-                  </span>
+                  {columnOrder.map((key) => {
+                    switch (key) {
+                      case "date":
+                        return <span key={key}>{formatDate(expense.date)}</span>;
+                      case "tag":
+                        return <span key={key}>{expense.tag ?? ""}</span>;
+                      case "item":
+                        return <strong key={key}>{expense.item}</strong>;
+                      case "amount":
+                        return (
+                          <strong
+                            key={key}
+                            className={isIncome ? "text-income" : ""}
+                          >
+                            {isIncome ? `+${amount}` : `-${amount}`}
+                          </strong>
+                        );
+                      case "category":
+                        return (
+                          <span
+                            key={key}
+                            className="category-pill"
+                            style={categoryStyle}
+                          >
+                            {categoryName}
+                          </span>
+                        );
+                    }
+                  })}
+                  <button
+                    className="edit-button"
+                    type="button"
+                    onClick={() => handleStartEdit(expense)}
+                    aria-label={`Rediger ${expense.item}`}
+                  >
+                    Rediger
+                  </button>
                   <button
                     className="delete-button"
                     type="button"

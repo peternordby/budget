@@ -11,3 +11,6 @@ pnpm-debug.log*
 .DS_Store
 .vercel
 .claude
+
+# TypeScript incremental build info
+*.tsbuildinfo

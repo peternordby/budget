@@ -1,6 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabaseClient";
+import ThemeToggle from "@/components/ThemeToggle";
 
 type TopNavProps = {
   email?: string | null;
@@ -16,9 +17,12 @@ export default function TopNav({ email }: TopNavProps) {
         <div className="brand">Regnskap</div>
       </div>
       <div className="nav-links">
-        <span className="user-chip" title={emailLabel}>
-          {emailLabel}
-        </span>
+        <div className="nav-meta">
+          <span className="user-chip" title={emailLabel}>
+            {emailLabel}
+          </span>
+          <ThemeToggle />
+        </div>
         <button
           className="btn btn-ghost"
           type="button"

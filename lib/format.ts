@@ -13,14 +13,14 @@ export function formatCurrency(value: number) {
 export function formatDate(value: string | null) {
   if (!value) return "Ingen dato";
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Ingen dato";
+  // Parse YYYY-MM-DD directly to avoid UTC-to-local timezone shift
+  // when using new Date("2025-01-15") which is UTC midnight.
+  const parts = value.split("-");
+  if (parts.length !== 3) return "Ingen dato";
+  const [year, month, day] = parts;
+  if (!year || !month || !day) return "Ingen dato";
 
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = String(date.getFullYear()).slice(-2);
-
-  return `${day}.${month}.${year}`;
+  return `${day}.${month}.${year.slice(-2)}`;
 }
 
 export function toNumber(value: number | string | null) {
