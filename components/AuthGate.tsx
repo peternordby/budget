@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { hasSupabaseEnv, supabase } from "@/lib/supabaseClient";
+import { lock } from "@/lib/crypto";
 
 
 type AuthGateProps = {
@@ -35,7 +36,10 @@ export default function AuthGate({ children }: AuthGateProps) {
         setLoading(false);
       });
 
-    const { data } = supabase.auth.onAuthStateChange((_event, updated) => {
+    const { data } = supabase.auth.onAuthStateChange((event, updated) => {
+      // Clear the unlocked DEK when the user signs out so a subsequent login in
+      // the same tab does not silently reuse the previous tab's key.
+      if (event === "SIGNED_OUT") lock();
       setSession(updated);
     });
 
