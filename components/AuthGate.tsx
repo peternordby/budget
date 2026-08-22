@@ -1,15 +1,17 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { hasSupabaseEnv, supabase } from "@/lib/supabaseClient";
-import AuthPanel from "@/components/AuthPanel";
+
 
 type AuthGateProps = {
   children: (session: Session) => ReactNode;
 };
 
 export default function AuthGate({ children }: AuthGateProps) {
+  const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -43,6 +45,15 @@ export default function AuthGate({ children }: AuthGateProps) {
     };
   }, []);
 
+  // Redirect in an effect rather than during render: router.replace during
+  // render is a React state update on another component, and `loading` has to
+  // resolve first or a signed-in reload would bounce to the login screen
+  // before getSession has answered.
+  useEffect(() => {
+    if (!hasSupabaseEnv || loading || session) return;
+    router.replace("/logg-inn");
+  }, [loading, session, router]);
+
   if (!hasSupabaseEnv) {
     return (
       <main className="shell">
@@ -66,7 +77,14 @@ export default function AuthGate({ children }: AuthGateProps) {
   }
 
   if (!session) {
-    return <AuthPanel />;
+    // The login form lives at its own route rather than inline here, so there
+    // is one login surface rather than two — /logg-inn is also where the
+    // signup and reset links point back to.
+    return (
+      <main className="shell">
+        <div className="card">Sender deg til innlogging...</div>
+      </main>
+    );
   }
 
   return <>{children(session)}</>;

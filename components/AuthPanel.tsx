@@ -1,13 +1,25 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, type FormEvent } from "react";
+import { hasSupabaseEnv, supabase } from "@/lib/supabaseClient";
 
 export default function AuthPanel() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  // Someone who is already signed in has no business on the login screen —
+  // typically a bookmark, or the back button after logging in.
+  useEffect(() => {
+    if (!hasSupabaseEnv) return;
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) router.replace("/oversikt");
+    });
+  }, [router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -27,9 +39,13 @@ export default function AuthPanel() {
 
     if (result.error) {
       setMessage(result.error.message);
+      setPending(false);
+      return;
     }
 
-    setPending(false);
+    // AuthGate's onAuthStateChange would pick this up on its own, but only
+    // once something renders it — and nothing does on this route.
+    router.replace("/oversikt");
   }
 
   return (
@@ -70,9 +86,15 @@ export default function AuthPanel() {
             >
               {pending ? "Laster..." : "Logg inn"}
             </button>
+            <Link className="btn btn-ghost" href="/glemt-passord">
+              Glemt passord?
+            </Link>
           </div>
           {message ? <span className="status">{message}</span> : null}
         </form>
+        <p className="helper">
+          Har du ikke konto? <Link href="/registrer">Registrer deg</Link>.
+        </p>
       </div>
     </div>
   );

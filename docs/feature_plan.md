@@ -1,0 +1,11 @@
+- Create a budget page where the budget can be set and visualized with each category
+- Keep the total budget tracker in the overview
+- 'Innsikt' page is a mess
+  - I want to be able to delete faste utgifter recommendations
+  - I want to tooltips for category trends
+  - When pressing a category trend to open the sidebar, pressing it again should close it
+  - Remove Sparerate
+  - Fast vs variable does not gain any insigiht, replace it with a graph to see delta between income and expense month for month, copying the style of velg periode
+- For faste utgifter I want to be able to delete
+  - I also want visual cue to which are missing in the current month and the ability to dismiss the warning that 1 mangler if it acutally does not belong in this month.
+- Go through supabase documentation and set up email authentication flow with password reset and invitation, and sign up page. This app is hosted at budget.nordby.dev
