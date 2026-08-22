@@ -13,6 +13,7 @@ import {
 import { IconCheck, IconChevronDown, IconTrash, IconX } from "@/components/icons";
 import { missingFixedRef, useDismissals } from "@/lib/dismissals";
 import { monthKey } from "@/lib/insights";
+import { encField } from "@/lib/crypto";
 import styles from "./RecurringPanel.module.css";
 
 type RecurringPanelProps = {
@@ -86,15 +87,17 @@ export default function RecurringPanel({
     setBusy(true);
     setStatus(null);
 
-    const rows = pending.map((template) => ({
-      item: template.item,
-      price: template.price,
-      category_id: template.category_id,
-      tag: template.tag,
-      user_id: userId,
-      date: materializationDate(template, month.year, month.month),
-      recurring_id: template.id,
-    }));
+    const rows = await Promise.all(
+      pending.map(async (template) => ({
+        item: await encField(template.item),
+        price: await encField(template.price),
+        category_id: template.category_id,
+        tag: await encField(template.tag),
+        user_id: userId,
+        date: materializationDate(template, month.year, month.month),
+        recurring_id: template.id,
+      }))
+    );
 
     const { error } = await supabase.from("expense").insert(rows);
 
@@ -118,10 +121,10 @@ export default function RecurringPanel({
     setStatus(null);
 
     const { error } = await supabase.from("recurring_expense").insert({
-      item: draft.item.trim(),
-      price: Math.round(Math.abs(parsed)),
+      item: await encField(draft.item.trim()),
+      price: await encField(Math.round(Math.abs(parsed))),
       category_id: Number(draft.categoryId),
-      tag: draft.tag.trim() || null,
+      tag: await encField(draft.tag.trim() || null),
       day_of_month: day,
       user_id: userId,
     });

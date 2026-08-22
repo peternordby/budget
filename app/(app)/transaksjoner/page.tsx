@@ -37,6 +37,7 @@ import {
   type CategoryKind,
 } from "@/lib/categories";
 import { toCsv } from "@/lib/csv";
+import { encField } from "@/lib/crypto";
 import styles from "./transaksjoner.module.css";
 
 type ActivityFilters = {
@@ -534,10 +535,10 @@ export default function TransaksjonerPage() {
     const { data, error } = await supabase
       .from("expense")
       .insert({
-        item: expense.item,
-        price: toNumber(expense.price),
+        item: await encField(expense.item),
+        price: await encField(toNumber(expense.price)),
         category_id: expense.category_id,
-        tag: expense.tag,
+        tag: await encField(expense.tag),
         user_id: ledger.userId,
         date: expense.date,
         recurring_id: expense.recurring_id,
@@ -561,7 +562,11 @@ export default function TransaksjonerPage() {
         : null;
       const normalized: LedgerExpense = {
         ...entry,
-        price: Number(entry.price) || 0,
+        // The row comes back encrypted, and there is nothing to learn from
+        // decrypting it: these three values are the ones just sent.
+        item: expense.item,
+        price: toNumber(expense.price),
+        tag: expense.tag,
         category,
       };
       ledger.upsertExpense(normalized);
@@ -663,10 +668,10 @@ export default function TransaksjonerPage() {
     const { error } = await supabase
       .from("expense")
       .update({
-        item: editDraft.item.trim(),
-        price: Math.round(parsed),
+        item: await encField(editDraft.item.trim()),
+        price: await encField(Math.round(parsed)),
         category_id: Number(editDraft.categoryId),
-        tag: editDraft.tag.trim() || null,
+        tag: await encField(editDraft.tag.trim() || null),
         date: editDraft.date || null,
       })
       .eq("id", editingExpenseId)
@@ -716,11 +721,15 @@ export default function TransaksjonerPage() {
     setNewRowSaving(true);
     setStatus(null);
 
+    const item = newRowDraft.item.trim();
+    const price = Math.round(Math.abs(parsed));
+    const tag = newRowDraft.tag.trim() || null;
+
     const payload = {
-      item: newRowDraft.item.trim(),
-      price: Math.round(Math.abs(parsed)),
+      item: await encField(item),
+      price: await encField(price),
       category_id: Number(newRowDraft.categoryId),
-      tag: newRowDraft.tag.trim() || null,
+      tag: await encField(tag),
       user_id: ledger.userId,
       // Fall back to the default so the date shown in the input is what gets saved.
       date: newRowDraft.date || getDefaultNewRowDate(),
@@ -743,7 +752,11 @@ export default function TransaksjonerPage() {
         : null;
       const normalized: LedgerExpense = {
         ...entry,
-        price: Number(entry.price) || 0,
+        // As in handleRestore: the plaintext is right here, the row that came
+        // back is ciphertext.
+        item,
+        price,
+        tag,
         category,
       };
       ledger.upsertExpense(normalized);

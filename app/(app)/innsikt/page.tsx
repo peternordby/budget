@@ -26,6 +26,7 @@ import {
 } from "@/lib/subscriptions";
 import { IconX } from "@/components/icons";
 import { useDismissals } from "@/lib/dismissals";
+import { decField, encField } from "@/lib/crypto";
 import styles from "./innsikt.module.css";
 
 const SHORT_MONTHS = [
@@ -240,8 +241,8 @@ export default function InnsiktPage() {
     setSubscriptionStatus(null);
 
     const fields = {
-      item: sub.item,
-      price: sub.typicalAmount,
+      item: await encField(sub.item),
+      price: await encField(sub.typicalAmount),
       category_id: category.id,
       tag: null,
       day_of_month: dayOfMonthFromDate(sub.lastDate),
@@ -367,9 +368,19 @@ export default function InnsiktPage() {
           return;
         }
 
-        const currentMonthIds = (currentMonthRows ?? [])
-          .filter((row: any) => normaliseItem(row.item) === normalised)
-          .map((row: any) => row.id);
+        // `item` comes back encrypted, so it has to be decrypted before the
+        // name comparison. Comparing the ciphertext would match nothing, this
+        // month's hand-entered row would keep `recurring_id` null, and
+        // RecurringPanel would offer to book it a second time.
+        const decrypted = await Promise.all(
+          (currentMonthRows ?? []).map(async (row: any) => ({
+            id: row.id,
+            item: (await decField(row.item)) ?? "",
+          }))
+        );
+        const currentMonthIds = decrypted
+          .filter((row) => normaliseItem(row.item) === normalised)
+          .map((row) => row.id);
 
         if (currentMonthIds.length) {
           const { error } = await supabase

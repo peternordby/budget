@@ -20,6 +20,7 @@ import {
   type Snapshot,
 } from "@/lib/savings";
 import { IconTrash } from "@/components/icons";
+import { decNumber, encField } from "@/lib/crypto";
 import styles from "./sparing.module.css";
 
 // Per-device, like the activity table's column order (budget.column-order.v1):
@@ -73,13 +74,20 @@ export default function SparingPage() {
       setLoading(false);
       return;
     }
+    // This page does not go through LedgerProvider (a savings history is small
+    // and is only useful in full), so it decrypts its own amounts. `category`
+    // is plaintext by design: it sits in `unique (user_id, category, date)`,
+    // and ciphertext that differs on every write would make a re-imported CSV
+    // duplicate rows instead of updating them.
     setSnapshots(
-      (data ?? []).map((row: any) => ({
-        id: row.id,
-        category: String(row.category),
-        date: String(row.date),
-        amount: Number(row.amount) || 0,
-      }))
+      await Promise.all(
+        (data ?? []).map(async (row: any) => ({
+          id: row.id,
+          category: String(row.category),
+          date: String(row.date),
+          amount: await decNumber(row.amount),
+        }))
+      )
     );
     setStatus(null);
     setLoading(false);
@@ -217,12 +225,14 @@ export default function SparingPage() {
   // updates instead of duplicating.
   async function writeSnapshots(rows: DraftSnapshot[]) {
     return supabase.from("savings_snapshot").upsert(
-      rows.map((row) => ({
-        user_id: ledger.userId,
-        category: row.category.trim(),
-        date: row.date,
-        amount: row.amount,
-      })),
+      await Promise.all(
+        rows.map(async (row) => ({
+          user_id: ledger.userId,
+          category: row.category.trim(),
+          date: row.date,
+          amount: await encField(row.amount),
+        }))
+      ),
       { onConflict: "user_id,category,date" }
     );
   }

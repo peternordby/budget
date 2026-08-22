@@ -4,6 +4,7 @@ import { Suspense, type ReactNode } from "react";
 import type { User } from "@supabase/supabase-js";
 import { usePathname } from "next/navigation";
 import AuthGate from "@/components/AuthGate";
+import EncryptionGate from "@/components/EncryptionGate";
 import LedgerProvider, { useLedger } from "@/components/LedgerProvider";
 import PeriodPicker from "@/components/PeriodPicker";
 import TopNav from "@/components/TopNav";
@@ -47,16 +48,21 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <AuthGate>
       {(session) => (
-        <LedgerProvider session={session}>
-          <main className="shell">
-            {/* useSearchParams (in TopNav, and later PeriodPicker) requires a
-                Suspense boundary in the App Router. One boundary covers both
-                TopNav and the page content. */}
-            <Suspense fallback={null}>
-              <AppChrome user={session.user}>{children}</AppChrome>
-            </Suspense>
-          </main>
-        </LedgerProvider>
+        // EncryptionGate sits above LedgerProvider because the provider's fetch
+        // is useless without the key: it would decrypt nothing and every figure
+        // in the app would render as 0.
+        <EncryptionGate session={session}>
+          <LedgerProvider session={session}>
+            <main className="shell">
+              {/* useSearchParams (in TopNav, and later PeriodPicker) requires a
+                  Suspense boundary in the App Router. One boundary covers both
+                  TopNav and the page content. */}
+              <Suspense fallback={null}>
+                <AppChrome user={session.user}>{children}</AppChrome>
+              </Suspense>
+            </main>
+          </LedgerProvider>
+        </EncryptionGate>
       )}
     </AuthGate>
   );

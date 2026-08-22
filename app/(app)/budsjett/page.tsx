@@ -8,6 +8,7 @@ import { getCategoryHue } from "@/lib/categoryColor";
 import { IconCheck, IconPencil, IconPlus, IconTrash, IconX } from "@/components/icons";
 import { formatCurrency, monthLabel, monthName, toNumber } from "@/lib/format";
 import { monthKey, type MonthRef } from "@/lib/insights";
+import { decNumber, encField } from "@/lib/crypto";
 import {
   CATEGORY_KINDS,
   KIND_LABELS,
@@ -159,13 +160,15 @@ export default function BudsjettPage() {
       // 0006_budget_owner.sql is what makes this a single statement instead of
       // the find-then-update-or-insert this page used to do per category.
       const result = await supabase.from("budget").upsert(
-        keep.map((row) => ({
-          category_id: row.id,
-          budget: parseDraft(drafts[row.id]),
-          year: single.year,
-          month: single.month,
-          user_id: ledger.userId,
-        })),
+        await Promise.all(
+          keep.map(async (row) => ({
+            category_id: row.id,
+            budget: await encField(parseDraft(drafts[row.id])),
+            year: single.year,
+            month: single.month,
+            user_id: ledger.userId,
+          }))
+        ),
         { onConflict: "user_id,category_id,year,month" }
       );
       error = result.error;
@@ -221,9 +224,9 @@ export default function BudsjettPage() {
         setCopying(false);
         return;
       }
-      (data ?? []).forEach((entry) => {
-        next[entry.category_id] = String(entry.budget);
-      });
+      for (const entry of data ?? []) {
+        next[entry.category_id] = String(await decNumber(entry.budget));
+      }
     }
 
     if (!Object.keys(next).length) {

@@ -5,6 +5,8 @@ import type { User } from "@supabase/supabase-js";
 import Avatar from "@/components/Avatar";
 import { supabase } from "@/lib/supabaseClient";
 import { displayName, fullName } from "@/lib/profile";
+import { lock, rewrapForPassword, type EncMeta } from "@/lib/crypto";
+import { countPlaintext, reencryptAll } from "@/lib/reencrypt";
 import styles from "./profil.module.css";
 
 type Feedback = { tone: "ok" | "error"; text: string } | null;
@@ -28,6 +30,11 @@ export default function ProfilPage() {
   const [passwordFeedback, setPasswordFeedback] = useState<Feedback>(null);
 
   const [signingOut, setSigningOut] = useState(false);
+
+  // Rows written before encryption existed. Null while unknown.
+  const [plaintextRows, setPlaintextRows] = useState<number | null>(null);
+  const [encrypting, setEncrypting] = useState(false);
+  const [encryptFeedback, setEncryptFeedback] = useState<Feedback>(null);
 
   // The user object rather than the session: `new_email` (the pending address
   // during a change) lives on it, and it is what auth.updateUser returns.
@@ -136,7 +143,31 @@ export default function ProfilPage() {
       return;
     }
 
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    // The ledger key is wrapped under the old password, so it has to be
+    // rewrapped under the new one or the next sign-in would need the recovery
+    // code. Both go in a single updateUser call on purpose: a password that
+    // changed without its wrap (or the reverse) locks the owner out of their
+    // own figures until they dig out the code.
+    let rewrapped: EncMeta;
+    try {
+      rewrapped = await rewrapForPassword(
+        currentPassword,
+        newPassword,
+        (user.user_metadata ?? {}) as EncMeta
+      );
+    } catch {
+      setPasswordFeedback({
+        tone: "error",
+        text: "Klarte ikke å flytte krypteringsnøkkelen til det nye passordet. Passordet er ikke endret.",
+      });
+      setPasswordSaving(false);
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+      data: rewrapped,
+    });
     if (error) {
       setPasswordFeedback({ tone: "error", text: error.message });
     } else {
@@ -148,6 +179,47 @@ export default function ProfilPage() {
     setPasswordSaving(false);
   }
 
+  useEffect(() => {
+    if (!user?.id) return;
+    let active = true;
+    countPlaintext(user.id)
+      .then((count) => {
+        if (active) setPlaintextRows(count);
+      })
+      // A failure here only means the button stays hidden; nothing on this page
+      // depends on the number.
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  async function handleEncryptExisting() {
+    if (!user?.id) return;
+    setEncrypting(true);
+    setEncryptFeedback(null);
+    try {
+      const { updated } = await reencryptAll(user.id, ({ updated: done }) =>
+        setEncryptFeedback({ tone: "ok", text: `Krypterer... ${done} rader.` })
+      );
+      setPlaintextRows(await countPlaintext(user.id));
+      setEncryptFeedback({
+        tone: "ok",
+        text: updated
+          ? `Ferdig. ${updated} rader er kryptert.`
+          : "Alt var allerede kryptert.",
+      });
+    } catch (error) {
+      setEncryptFeedback({
+        tone: "error",
+        // Half-finished is a working state, so this is a "try again", not a
+        // "something is broken".
+        text: `${error instanceof Error ? error.message : "Ukjent feil"}. Radene som ble ferdige er kryptert — kjør igjen for resten.`,
+      });
+    }
+    setEncrypting(false);
+  }
+
   async function handleSignOut() {
     setSigningOut(true);
     // Awaited, unlike the old nav button: a failed sign-out that is never
@@ -155,6 +227,11 @@ export default function ProfilPage() {
     const { error } = await supabase.auth.signOut();
     if (error) {
       setSigningOut(false);
+    } else {
+      // Drop the ledger key with the session. Without this, the next person to
+      // sign in on this tab would inherit an unlocked key that is not theirs —
+      // it would decrypt nothing of their own, but it has no business staying.
+      lock();
     }
     // On success AuthGate's listener sees the null session and redirects.
   }
@@ -302,6 +379,44 @@ export default function ProfilPage() {
             </span>
           ) : null}
         </form>
+      </section>
+
+      <section className="card section-gap">
+        <div className="card-head">
+          <h2 className="section-title">Kryptering</h2>
+        </div>
+        <p className="helper">
+          Beløp og beskrivelser krypteres i nettleseren din før de lagres, med en
+          nøkkel som utledes av passordet ditt. Databasen — og den som drifter
+          den — ser bare kryptert tekst. Selve nettsiden lastes fortsatt ned fra
+          en server, så dette beskytter dataene i databasen, ikke mot koden som
+          kjører i nettleseren din.
+        </p>
+        {plaintextRows === null ? null : plaintextRows > 0 ? (
+          <>
+            <p className="helper">
+              {plaintextRows} rader ble lagret før krypteringen ble slått på, og
+              ligger fortsatt i klartekst.
+            </p>
+            <div className="form-actions">
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={handleEncryptExisting}
+                disabled={encrypting}
+              >
+                {encrypting ? "Krypterer..." : "Krypter eksisterende data"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="helper">Alle radene dine er krypterte.</p>
+        )}
+        {encryptFeedback ? (
+          <span className={encryptFeedback.tone === "ok" ? "helper" : "status"}>
+            {encryptFeedback.text}
+          </span>
+        ) : null}
       </section>
 
       <section className="card section-gap">

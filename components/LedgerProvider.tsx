@@ -20,6 +20,7 @@ import {
   type MonthRef,
 } from "@/lib/insights";
 import type { RecurringTemplate } from "@/lib/recurring";
+import { decField, decNumber } from "@/lib/crypto";
 
 export type LedgerCategory = {
   id: number;
@@ -326,47 +327,60 @@ export default function LedgerProvider({
         return;
       }
 
-      setExpenses(
-        (expenseResult.data ?? []).map((row: any) => ({
+      // The one place the ledger is decrypted. Everything downstream — every
+      // useMemo, the search box, the CSV export, insights.ts — receives plain
+      // numbers and strings and has no idea any of this is encrypted.
+      //
+      // Decrypting is awaited, which reopens the window a superseded load could
+      // land in, so the rows go into locals and `active` is checked once more
+      // before any of them reach state.
+      const decryptedExpenses = await Promise.all(
+        (expenseResult.data ?? []).map(async (row: any) => ({
           id: row.id,
-          item: row.item,
-          price: Number(row.price) || 0,
+          item: (await decField(row.item)) ?? "",
+          price: await decNumber(row.price),
           category_id: row.category_id,
-          tag: row.tag ?? null,
+          tag: await decField(row.tag ?? null),
           date: row.date ?? null,
           recurring_id: row.recurring_id ?? null,
           category: normalizeCategory(row.category),
         }))
       );
 
-      setCategories(
-        (categoryResult.data ?? []).map((row: any) => ({
-          id: row.id,
-          category: row.category,
-          kind: toCategoryKind(row.kind),
-        }))
-      );
-
-      setBudgets(
-        (budgetResult.data ?? []).map((row: any) => ({
+      const decryptedBudgets = await Promise.all(
+        (budgetResult.data ?? []).map(async (row: any) => ({
           id: row.id,
           category_id: row.category_id,
-          budget: row.budget,
+          budget: await decNumber(row.budget),
           year: row.year,
           month: row.month,
           category: normalizeCategory(row.category),
         }))
       );
 
-      setTemplates(
-        (templateResult.data ?? []).map((row: any) => ({
+      const decryptedTemplates = await Promise.all(
+        (templateResult.data ?? []).map(async (row: any) => ({
           id: row.id,
-          item: row.item,
-          price: Number(row.price) || 0,
+          item: (await decField(row.item)) ?? "",
+          price: await decNumber(row.price),
           category_id: row.category_id,
-          tag: row.tag ?? null,
+          tag: await decField(row.tag ?? null),
           day_of_month: row.day_of_month,
           active: row.active,
+        }))
+      );
+
+      if (!active) return;
+
+      setExpenses(decryptedExpenses);
+      setBudgets(decryptedBudgets);
+      setTemplates(decryptedTemplates);
+
+      setCategories(
+        (categoryResult.data ?? []).map((row: any) => ({
+          id: row.id,
+          category: row.category,
+          kind: toCategoryKind(row.kind),
         }))
       );
 

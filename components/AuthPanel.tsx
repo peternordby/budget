@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { hasSupabaseEnv, supabase } from "@/lib/supabaseClient";
+import { hasEncryption, unlockWithPassword, type EncMeta } from "@/lib/crypto";
 
 export default function AuthPanel() {
   const router = useRouter();
@@ -41,6 +42,16 @@ export default function AuthPanel() {
       setMessage(result.error.message);
       setPending(false);
       return;
+    }
+
+    // The password is in hand exactly here, so unlock the ledger key now
+    // rather than making EncryptionGate ask for the same password one render
+    // later. A failure is not worth reporting on this screen: the sign-in did
+    // work, and EncryptionGate handles every reason the key would not open
+    // (no key yet, or one wrapped under a password since reset).
+    const meta = result.data.user?.user_metadata as EncMeta | undefined;
+    if (hasEncryption(meta)) {
+      await unlockWithPassword(password, meta!, result.data.user!.id).catch(() => {});
     }
 
     // AuthGate's onAuthStateChange would pick this up on its own, but only
