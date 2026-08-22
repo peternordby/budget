@@ -40,7 +40,8 @@ components/
   TopNav.tsx          Header with branding, route tabs, theme toggle and sign-out
   ThemeToggle.tsx     Light/dark switch (persists to localStorage "budget-theme")
   MonthOverMonth.tsx  Comparison stats and movers vs. the previous month (no chart; that moved to PeriodPicker)
-  Anomalies.tsx       Anomaly list for the selected month
+  Anomalies.tsx       Anomaly list for the selected month (incl. unbooked fixed expenses)
+  Goals.tsx           Savings goals: target vs. sum of savings tagged with the goal name
   RecurringPanel.tsx  Fixed monthly expense templates and generation
   Sparkline.tsx       Minimal SVG line chart, used on /innsikt
   CategoryDrilldown.tsx  Category history panel, opened from /oversikt and /innsikt
@@ -61,12 +62,13 @@ See `docs/frontend-architecture.md` for how these fit together.
 
 ## Database Tables
 
-Four tables in Supabase: `category`, `expense`, `budget`, `recurring_expense`.
+Five tables in Supabase: `category`, `expense`, `budget`, `recurring_expense`, `goal`.
 
 - `expense.price` is stored as integer (whole kroner, `bigint`)
 - `expense.user_id` scopes data per user via RLS
 - `budget` entries are per category/month/year
 - Income is identified by `category.kind === "income"`, via the predicates in `lib/categories.ts`; the four kinds are `income`/`fixed`/`variable`/`savings`
+- `goal` holds savings goals (name + target); progress is the sum of savings-kind expenses whose `tag` matches the goal name, so there is no `expense.goal_id`
 - `recurring_expense` holds fixed-expense templates (item, price, category, day of month); it carries `user_id` like the others and is fetched by `LedgerProvider` (exposed as `templates`) — `RecurringPanel.tsx` reads it from there and only writes to it directly (insert/update)
 
 ## Key Conventions
