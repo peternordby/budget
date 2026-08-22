@@ -199,6 +199,14 @@ a {
   z-index: 1;
 }
 
+/* Clears the fixed bottom tab bar TopNav.module.css switches to at this
+   width, so the last card is never trapped underneath it. */
+@media (max-width: 640px) {
+  .shell {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+}
+
 .section-gap {
   margin-top: 20px;
 }
@@ -297,37 +305,6 @@ a {
   min-width: 0;
 }
 
-.nav-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--bg-alt);
-}
-
-.nav-link {
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--muted);
-  transition: color 150ms ease, background 150ms ease;
-}
-
-.nav-link:hover {
-  color: var(--ink);
-}
-
-.nav-link.active {
-  color: var(--ink);
-  border-color: var(--border);
-  background: var(--surface-solid);
-  box-shadow: var(--shadow-tight);
-}
-
 .user-chip {
   max-width: 260px;
   overflow: hidden;
@@ -389,93 +366,12 @@ a {
   z-index: 1;
 }
 
-.hero {
-  display: grid;
-  gap: 16px;
-}
-
-.hero h1 {
-  font-size: clamp(28px, 4vw, 40px);
-  font-weight: 700;
-  line-height: 1.1;
-  margin: 0;
-  letter-spacing: -0.02em;
-}
-
-.hero p {
-  margin: 0;
-  max-width: 68ch;
-  color: var(--muted);
-  font-size: 15px;
-}
-
-.tile-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 12px;
-}
-
-.tile {
-  display: grid;
-  gap: 6px;
-  padding: 14px;
-  border-radius: var(--radius-soft);
-  border: 1px solid var(--border);
-  background: var(--surface-solid);
-  transition: box-shadow 150ms ease;
-}
-
-.tile:hover {
-  box-shadow: var(--shadow-soft);
-}
-
-.tile strong {
-  font-size: 14px;
-}
-
-.tile span {
-  font-size: 13px;
-  color: var(--muted);
-}
-
 .section-title {
   font-size: clamp(20px, 2.2vw, 24px);
   font-weight: 700;
   line-height: 1.2;
   margin: 0 0 14px;
   letter-spacing: -0.01em;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-}
-
-.metrics-grid .card {
-  min-height: 100px;
-}
-
-.stat {
-  display: grid;
-  gap: 4px;
-  align-content: center;
-}
-
-.stat span {
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.stat strong {
-  font-size: clamp(24px, 3.2vw, 32px);
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
 }
 
 .form-grid {
@@ -650,53 +546,6 @@ select:focus {
   background: var(--accent-soft);
   color: var(--ink);
   border-color: var(--accent);
-}
-
-.budget-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
-.budget-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 12px;
-}
-
-.budget-card {
-  display: grid;
-  gap: 10px;
-  background: var(--surface-solid);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-soft);
-  padding: 14px;
-}
-
-.budget-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.budget-list {
-  display: grid;
-  gap: 8px;
-}
-
-.budget-row {
-  display: grid;
-  grid-template-columns: 1fr 120px;
-  gap: 12px;
-  align-items: center;
-}
-
-.budget-input {
-  text-align: right;
 }
 
 .collapse-toggle {

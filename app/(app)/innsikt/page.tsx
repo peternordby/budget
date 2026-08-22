@@ -390,7 +390,14 @@ export default function InnsiktPage() {
                   <div
                     key={point.key}
                     className={`${styles["split-col"]} ${isSelected ? styles["active"] : ""}`}
+                    // The column is a readout, not a control — nothing here is
+                    // clickable, so this stays a div rather than becoming a
+                    // button that does nothing. role/aria-label is what makes
+                    // the same figures a `title` shows available to a screen
+                    // reader, which a bare title attribute is not.
+                    role="img"
                     title={`${monthLabel} ${ref.year}: fast ${formatCurrency(point.fixed)}, variabelt ${formatCurrency(point.variable)}, totalt ${formatCurrency(total)}`}
+                    aria-label={`${monthLabel} ${ref.year}: fast ${formatCurrency(point.fixed)}, variabelt ${formatCurrency(point.variable)}, totalt ${formatCurrency(total)}`}
                   >
                     <div className={styles["split-track"]}>
                       <div
