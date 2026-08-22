@@ -43,3 +43,19 @@
     font-size: 13px;
   }
 }
+
+/* One of the two labels is always hidden. Swapping text with CSS rather than
+   a width hook keeps the nav a server-renderable list with no layout jump. */
+.nav-route-short {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .nav-route-full {
+    display: none;
+  }
+
+  .nav-route-short {
+    display: inline;
+  }
+}

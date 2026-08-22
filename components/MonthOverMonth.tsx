@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { formatCurrency, formatSignedCurrency } from "@/lib/format";
+import { MONTH_NAMES, formatCurrency, formatSignedCurrency } from "@/lib/format";
 import {
   compareMonths,
   previousMonth,
@@ -9,21 +9,6 @@ import {
   type MonthRef,
 } from "@/lib/insights";
 import styles from "./MonthOverMonth.module.css";
-
-const FULL_MONTHS = [
-  "januar",
-  "februar",
-  "mars",
-  "april",
-  "mai",
-  "juni",
-  "juli",
-  "august",
-  "september",
-  "oktober",
-  "november",
-  "desember",
-];
 
 type MonthOverMonthProps = {
   entries: LedgerEntry[];
@@ -80,7 +65,7 @@ export default function MonthOverMonth({
     () => (single ? compareMonths(entries, single) : null),
     [entries, single]
   );
-  const prevLabel = single ? FULL_MONTHS[previousMonth(single).month - 1] : "";
+  const prevLabel = single ? MONTH_NAMES[previousMonth(single).month - 1] : "";
 
   return (
     <section className="card section-gap mom-card">

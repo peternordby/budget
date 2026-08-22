@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+
 import {
   useCallback,
   useMemo,
@@ -16,13 +19,10 @@ import Anomalies from "@/components/Anomalies";
 import CategoryDrilldown from "@/components/CategoryDrilldown";
 import { usePeriod } from "@/lib/usePeriod";
 import { getCategoryHue } from "@/lib/categoryColor";
-import { IconChevronDown, IconPencil } from "@/components/icons";
-import { supabase } from "@/lib/supabaseClient";
+import { IconChevronDown } from "@/components/icons";
 import { formatCurrency, toNumber } from "@/lib/format";
 import { monthKey, type MonthRef } from "@/lib/insights";
 import {
-  CATEGORY_KINDS,
-  KIND_LABELS,
   isIncomeKind,
   isSavingsKind,
   isSpendingKind,
@@ -46,13 +46,6 @@ type BudgetEntry = {
   category: Category | null;
 };
 
-function getPreviousPeriod(year: number, month: number) {
-  if (month === 1) {
-    return { year: year - 1, month: 12 };
-  }
-  return { year, month: month - 1 };
-}
-
 export default function OversiktPage() {
   const ledger = useLedger();
   const fallback = useMemo<MonthRef>(
@@ -60,20 +53,13 @@ export default function OversiktPage() {
     []
   );
   const { selectedKeys, selectedList, single, anchor } = usePeriod(fallback);
+  // Carry the selected period across to the budget page, the same way TopNav
+  // does for every route.
+  const periodQuery = useSearchParams().toString();
   const historyEntries = useLedgerHistory(anchor);
   const expenses = useLedgerSelection(selectedKeys);
 
-  const [budgetStatus, setBudgetStatus] = useState<string | null>(null);
-  const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
-  const [budgetDraft, setBudgetDraft] = useState("");
-  const [budgetSaving, setBudgetSaving] = useState(false);
-  const [budgetHasValue, setBudgetHasValue] = useState(false);
-  const [previousBudgetValue, setPreviousBudgetValue] = useState<number | null>(
-    null
-  );
-  const [previousBudgetLabel, setPreviousBudgetLabel] = useState("");
-  const [previousBudgetLoading, setPreviousBudgetLoading] = useState(false);
   const [drilldownCategory, setDrilldownCategory] = useState<string | null>(null);
 
   const hasPeriod = selectedList.length > 0;
@@ -95,13 +81,6 @@ export default function OversiktPage() {
     ],
     []
   );
-  const selectedMonthLabel = useMemo(() => {
-    if (!single) return "";
-    return (
-      allMonthOptions.find((month) => Number(month.value) === single.month)
-        ?.label ?? ""
-    );
-  }, [allMonthOptions, single]);
   const periodLabel = useMemo(() => {
     if (!selectedList.length) return "Ingen periode";
     if (selectedList.length === 1) {
@@ -295,171 +274,29 @@ export default function OversiktPage() {
     return { items, total: expenseSum };
   }, [categoryTotals]);
 
-  // The row also contains the budget-edit pencil button and, while editing,
-  // an input plus Avbryt/Lagre/Kopier buttons in the popover. None of those
-  // clicks should also open the drill-down — guarded on the event target,
-  // the same idea as the activity table row's onKeyDown guard
-  // (event.target !== event.currentTarget) in
-  // app/(app)/transaksjoner/page.tsx, adapted for click bubbling through the
-  // row's own text and bars rather than requiring an exact target match.
-  // The popover also contains non-interactive content (the "Budsjett for
-  // {måned}" label, the popover's own row divs) that the closest("button,
-  // input") guard does not match, so bail on the editing state first —
-  // checking editingCategory is more robust than enumerating popover
-  // selectors, because it cannot drift as the popover markup changes.
   function handleCategoryRowClick(
     event: React.MouseEvent<HTMLDivElement>,
     categoryName: string
   ) {
-    if (editingCategory === categoryName) return;
+    // The row still contains the kind/pencil-free chart only, but a click on
+    // any future control inside it should not also open the drill-down.
     if ((event.target as HTMLElement).closest("button, input")) return;
-    setDrilldownCategory(categoryName);
+    setDrilldownCategory((current) =>
+      current === categoryName ? null : categoryName
+    );
   }
 
   function handleCategoryRowKeyDown(
     event: React.KeyboardEvent<HTMLDivElement>,
     categoryName: string
   ) {
-    if (editingCategory === categoryName) return;
     if (event.target !== event.currentTarget) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      setDrilldownCategory(categoryName);
+      setDrilldownCategory((current) =>
+        current === categoryName ? null : categoryName
+      );
     }
-  }
-
-  async function handleOpenBudgetEditor(categoryName: string) {
-    if (!single) {
-      setBudgetStatus("Velg én måned for å redigere budsjett.");
-      return;
-    }
-
-    const category = categoryByName.get(categoryName);
-    if (!category) return;
-
-    setBudgetStatus(null);
-    const monthValue = single.month;
-    const yearValue = single.year;
-    const existing = ledger.budgets.find(
-      (entry) =>
-        entry.category_id === category.id &&
-        entry.month === monthValue &&
-        entry.year === yearValue
-    );
-
-    setBudgetHasValue(Boolean(existing));
-    setBudgetDraft(existing ? String(existing.budget) : "");
-    setEditingCategory(categoryName);
-    setPreviousBudgetValue(null);
-    setPreviousBudgetLabel("");
-    setPreviousBudgetLoading(false);
-
-    if (existing) return;
-
-    const previous = getPreviousPeriod(yearValue, monthValue);
-    const previousLabel =
-      allMonthOptions.find((month) => Number(month.value) === previous.month)
-        ?.label ?? "";
-    setPreviousBudgetLabel(`${previousLabel} ${previous.year}`);
-    setPreviousBudgetLoading(true);
-
-    let previousBudget = ledger.budgets.find(
-      (entry) =>
-        entry.category_id === category.id &&
-        entry.month === previous.month &&
-        entry.year === previous.year
-    );
-
-    if (!previousBudget && previous.year !== yearValue) {
-      // The previous period can fall outside the provider's fetched budget
-      // set (the prior December when editing January), so this one read
-      // legitimately stays a direct query rather than a ledger lookup.
-      const { data, error } = await supabase
-        .from("budget")
-        .select("budget")
-        .eq("user_id", ledger.userId)
-        .eq("category_id", category.id)
-        .eq("year", previous.year)
-        .eq("month", previous.month)
-        .maybeSingle();
-      if (!error && data) {
-        previousBudget = { budget: data.budget } as BudgetEntry;
-      }
-    }
-
-    setPreviousBudgetValue(previousBudget?.budget ?? null);
-    setPreviousBudgetLoading(false);
-  }
-
-  // The kind drives every split in the app (spending vs income vs savings), so
-  // it needs an editor somewhere. The budget popover is where a category is
-  // already being configured, which is cheaper than a settings route nobody
-  // would visit twice.
-  async function handleChangeKind(categoryName: string, kind: CategoryKind) {
-    const category = categoryByName.get(categoryName);
-    if (!category) return;
-
-    setBudgetStatus(null);
-    const { error } = await supabase
-      .from("category")
-      .update({ kind })
-      .eq("id", category.id)
-      .eq("user_id", ledger.userId);
-
-    if (error) {
-      setBudgetStatus(error.message);
-      return;
-    }
-    await ledger.refetch();
-  }
-
-  async function handleSaveBudget() {
-    if (!editingCategory || !single) return;
-
-    const category = categoryByName.get(editingCategory);
-    if (!category) return;
-
-    const monthValue = single.month;
-    const yearValue = single.year;
-    const parsed = Number(budgetDraft);
-    const budgetValue = Number.isFinite(parsed) ? Math.round(parsed) : 0;
-    const existing = ledger.budgets.find(
-      (entry) =>
-        entry.category_id === category.id &&
-        entry.month === monthValue &&
-        entry.year === yearValue
-    );
-
-    setBudgetSaving(true);
-    setBudgetStatus(null);
-
-    let error = null;
-    if (existing?.id) {
-      const result = await supabase
-        .from("budget")
-        .update({ budget: budgetValue })
-        .eq("id", existing.id)
-        .eq("user_id", ledger.userId);
-      error = result.error;
-    } else {
-      const result = await supabase.from("budget").insert({
-        category_id: category.id,
-        budget: budgetValue,
-        year: yearValue,
-        month: monthValue,
-        user_id: ledger.userId,
-      });
-      error = result.error;
-    }
-
-    if (error) {
-      setBudgetStatus(error.message);
-    } else {
-      await ledger.refetch();
-      setEditingCategory(null);
-    }
-
-    setBudgetSaving(false);
   }
 
   return (
@@ -598,7 +435,7 @@ export default function OversiktPage() {
       />
 
       <section
-        className={`card section-gap ${styles["category-card"]}${editingCategory ? ` ${styles["editing"]}` : ""}`}
+        className={`card section-gap ${styles["category-card"]}`}
       >
         <div className="card-head">
           <button
@@ -613,11 +450,15 @@ export default function OversiktPage() {
             </span>
             <h2 className="section-title">Kategorier</h2>
           </button>
-          <span className="helper">{periodLabel}</span>
+          <div className="card-head-meta">
+            <span className="helper">{periodLabel}</span>
+            <Link className="btn btn-ghost btn-small" href={`/budsjett${periodQuery ? `?${periodQuery}` : ""}`}>
+              Rediger budsjett
+            </Link>
+          </div>
         </div>
         {!categoriesCollapsed ? (
           <>
-            {budgetStatus ? <div className="status">{budgetStatus}</div> : null}
             {categoryTotals.length ? (
               <div className={styles["category-chart-list"]} id="category-list">
               {categoryTotals.map((category) => {
@@ -649,15 +490,11 @@ export default function OversiktPage() {
                       ? "over"
                       : "under-budget"
                     : "no-budget";
-                const isEditing = editingCategory === category.name;
-                const canEditBudget = Boolean(single);
                 const catHue = getCategoryHue(category.name);
                 return (
                   <div
                     key={category.name}
-                    className={`${styles["category-chart-row"]} ${
-                      isEditing ? styles["is-editing"] : ""
-                    } ${styles[categoryBudgetStateClass] ?? ""}`}
+                    className={`${styles["category-chart-row"]} ${styles[categoryBudgetStateClass] ?? ""}`}
                     tabIndex={0}
                     onClick={(event) => handleCategoryRowClick(event, category.name)}
                     onKeyDown={(event) => handleCategoryRowKeyDown(event, category.name)}
@@ -701,99 +538,7 @@ export default function OversiktPage() {
                           </span>
                         ) : null}
                       </span>
-                      <button
-                        className="icon-btn"
-                        type="button"
-                        onClick={() => handleOpenBudgetEditor(category.name)}
-                        disabled={!canEditBudget}
-                        title={
-                          canEditBudget ? "Rediger budsjett" : "Velg én måned"
-                        }
-                        aria-label={`Rediger budsjett for ${category.name}`}
-                      >
-                        <IconPencil />
-                      </button>
                     </div>
-                    {isEditing ? (
-                      <div className={styles["budget-popover"]}>
-                        <div className={styles["budget-popover-row"]}>
-                          <span className="helper">
-                            Budsjett for {selectedMonthLabel}
-                          </span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={budgetDraft}
-                            onChange={(event) =>
-                              setBudgetDraft(event.target.value)
-                            }
-                          />
-                        </div>
-                        {!budgetHasValue ? (
-                          <div className={styles["budget-popover-row"]}>
-                            <span className="helper">
-                              {previousBudgetLabel
-                                ? `Forrige periode: ${previousBudgetLabel}`
-                                : "Forrige periode"}
-                            </span>
-                            {previousBudgetLoading ? (
-                              <span className="helper">Henter budsjett...</span>
-                            ) : previousBudgetValue !== null ? (
-                              <button
-                                className="btn btn-ghost btn-small"
-                                type="button"
-                                onClick={() =>
-                                  setBudgetDraft(String(previousBudgetValue))
-                                }
-                              >
-                                Kopier {formatCurrency(previousBudgetValue)}
-                              </button>
-                            ) : (
-                              <span className="helper">
-                                Ingen budsjett funnet
-                              </span>
-                            )}
-                          </div>
-                        ) : null}
-                        <div className={styles["budget-popover-row"]}>
-                          <span className="helper">Type</span>
-                          <select
-                            value={category.kind}
-                            onChange={(event) =>
-                              handleChangeKind(
-                                category.name,
-                                event.target.value as CategoryKind
-                              )
-                            }
-                            aria-label={`Type for ${category.name}`}
-                          >
-                            {CATEGORY_KINDS.map((kind) => (
-                              <option key={kind} value={kind}>
-                                {KIND_LABELS[kind]}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className={styles["budget-popover-actions"]}>
-                          <button
-                            className="btn btn-ghost"
-                            type="button"
-                            onClick={() => setEditingCategory(null)}
-                          >
-                            Avbryt
-                          </button>
-                          <button
-                            className="btn btn-primary"
-                            type="button"
-                            onClick={handleSaveBudget}
-                            disabled={budgetSaving}
-                          >
-                            {budgetSaving ? "Lagrer..." : "Lagre"}
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
                     <div className={styles["category-chart-track"]} style={{
                       "--bar-color": isIncome
                         ? "var(--income)"

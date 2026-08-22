@@ -1,0 +1,126 @@
+/* The budget editor: one row per category, six real grid columns plus a
+   full-bleed track underneath. Same shape as /oversikt's category list, but
+   this one is an editing surface, so the amounts are inputs and the row
+   carries rename/delete controls instead of opening a drill-down. */
+
+.budget-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.budget-header,
+.budget-row,
+.budget-total {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px 110px 100px 100px 68px;
+  gap: 10px;
+  align-items: center;
+}
+
+.budget-header {
+  padding: 0 10px 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.budget-row {
+  position: relative;
+  padding: 8px 10px 12px;
+  border-radius: var(--radius-soft);
+}
+
+.budget-row:hover {
+  background: var(--bg-alt);
+}
+
+.budget-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.budget-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.budget-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.budget-kind,
+.budget-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.budget-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+/* The track spans the whole row under the columns, so a glance down the list
+   reads as a chart rather than as a table of numbers. */
+.budget-track {
+  grid-column: 1 / -1;
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--track-bg);
+}
+
+.budget-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  border-radius: 3px;
+  background: var(--bar-color);
+  transition: width 400ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.budget-total {
+  margin-top: 8px;
+  padding: 12px 10px 0;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+}
+
+/* Below the breakpoint the six columns starve the name into a single letter,
+   so the name and its controls take the top line and the figures wrap under
+   it — the same concession /oversikt's category row makes at 720px. */
+@media (max-width: 860px) {
+  .budget-header {
+    display: none;
+  }
+
+  .budget-row,
+  .budget-total {
+    grid-template-columns: minmax(0, 1fr) 100px 100px;
+  }
+
+  .budget-name {
+    grid-column: 1 / 3;
+  }
+
+  .budget-actions {
+    grid-column: 3;
+  }
+
+  .budget-kind {
+    grid-column: 1 / -1;
+  }
+
+  .budget-input {
+    grid-column: 1;
+  }
+}

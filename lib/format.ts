@@ -42,3 +42,30 @@ export function formatDateParts(year: number, month: number, day: number) {
   const dayValue = String(day).padStart(2, "0");
   return `${year}-${monthValue}-${dayValue}`;
 }
+
+// Norwegian month names, index 0 = januar. This existed as five copies —
+// three `FULL_MONTHS` arrays and two `allMonthOptions` lists — before the
+// budget page would have made it six.
+export const MONTH_NAMES = [
+  "januar",
+  "februar",
+  "mars",
+  "april",
+  "mai",
+  "juni",
+  "juli",
+  "august",
+  "september",
+  "oktober",
+  "november",
+  "desember",
+];
+
+// 1-based month, matching MonthRef and the database.
+export function monthName(month: number) {
+  return MONTH_NAMES[month - 1] ?? String(month);
+}
+
+export function monthLabel(year: number, month: number) {
+  return `${monthName(month)} ${year}`;
+}

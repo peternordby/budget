@@ -10,11 +10,15 @@ type TopNavProps = {
   email?: string | null;
 };
 
+// `short` is what the phone's bottom tab bar shows. Four tabs fit their full
+// names; the fifth pushed "Transaksjoner" past its share of a 375px screen, so
+// the narrow layout gets abbreviations rather than ellipses.
 const ROUTES = [
-  { href: "/oversikt", label: "Oversikt" },
-  { href: "/transaksjoner", label: "Transaksjoner" },
-  { href: "/innsikt", label: "Innsikt" },
-  { href: "/sparing", label: "Sparing" },
+  { href: "/oversikt", label: "Oversikt", short: "Oversikt" },
+  { href: "/transaksjoner", label: "Transaksjoner", short: "Trans." },
+  { href: "/budsjett", label: "Budsjett", short: "Budsjett" },
+  { href: "/innsikt", label: "Innsikt", short: "Innsikt" },
+  { href: "/sparing", label: "Sparing", short: "Sparing" },
 ];
 
 export default function TopNav({ email }: TopNavProps) {
@@ -37,7 +41,8 @@ export default function TopNav({ email }: TopNavProps) {
             href={`${route.href}${suffix}`}
             className={`${styles["nav-route"]} ${pathname === route.href ? styles["active"] : ""}`}
           >
-            {route.label}
+            <span className={styles["nav-route-full"]}>{route.label}</span>
+            <span className={styles["nav-route-short"]}>{route.short}</span>
           </Link>
         ))}
       </div>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useLedger, useLedgerHistory } from "@/components/LedgerProvider";
 import { usePeriod } from "@/lib/usePeriod";
-import { formatCurrency, formatSignedCurrency } from "@/lib/format";
+import { MONTH_NAMES, formatCurrency, formatSignedCurrency } from "@/lib/format";
 import {
   addMonths,
   aggregateByMonth,
@@ -26,21 +26,6 @@ const SHORT_MONTHS = [
   "okt",
   "nov",
   "des",
-];
-
-const FULL_MONTHS = [
-  "januar",
-  "februar",
-  "mars",
-  "april",
-  "mai",
-  "juni",
-  "juli",
-  "august",
-  "september",
-  "oktober",
-  "november",
-  "desember",
 ];
 
 export default function PeriodPicker() {
@@ -225,8 +210,8 @@ export default function PeriodPicker() {
               }
               title={
                 hasData
-                  ? `${FULL_MONTHS[month.month - 1]} ${month.year}: inntekter ${formatCurrency(month.income)}, utgifter ${formatCurrency(month.expenses)}, netto ${formatSignedCurrency(month.net)}`
-                  : `${FULL_MONTHS[month.month - 1]} ${month.year}: ingen data`
+                  ? `${MONTH_NAMES[month.month - 1]} ${month.year}: inntekter ${formatCurrency(month.income)}, utgifter ${formatCurrency(month.expenses)}, netto ${formatSignedCurrency(month.net)}`
+                  : `${MONTH_NAMES[month.month - 1]} ${month.year}: ingen data`
               }
             >
               <span className={styles["mom-bars"]} aria-hidden="true">

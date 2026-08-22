@@ -240,13 +240,9 @@
   outline-offset: -2px;
 }
 
-.category-chart-row.is-editing {
-  z-index: 6;
-}
-
 .category-chart-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 46px 28px;
+  grid-template-columns: minmax(0, 1fr) auto 46px;
   gap: 12px;
   align-items: center;
 }
@@ -340,12 +336,6 @@
 
 /* --- Category card --- */
 
-/* Lift the whole card (a stacking context via backdrop-filter) above later
-   sibling cards so the budget popover paints over the Aktivitet section. */
-.category-card.editing {
-  z-index: 30;
-}
-
 .category-value {
   font-size: 13px;
   font-weight: 600;
@@ -353,41 +343,12 @@
   font-variant-numeric: tabular-nums;
 }
 
-.budget-popover {
-  position: absolute;
-  right: 12px;
-  top: 44px;
-  min-width: 236px;
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--surface-popover);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
-  z-index: 24;
-  animation: card-rise 200ms ease both;
-}
-
-html[data-theme="dark"] .budget-popover {
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
-}
-
-.budget-popover-row {
-  display: grid;
-  gap: 6px;
-}
-
-.budget-popover-actions {
-  display: flex;
-  gap: 8px;
-}
-
 @media (max-width: 720px) {
-  /* Four columns don't fit a phone: the nowrap amounts starve the name column
-     until it truncates to a single letter. Give the name its own line. */
+  /* Three columns don't fit a phone: the nowrap amounts starve the name
+     column until it truncates to a single letter. Give the name its own
+     line. (It was four before the budget pencil moved to /budsjett.) */
   .category-chart-header {
-    grid-template-columns: minmax(0, 1fr) 46px 28px;
+    grid-template-columns: minmax(0, 1fr) 46px;
   }
 
   .cat-name-row {
@@ -420,14 +381,5 @@ html[data-theme="dark"] .budget-popover {
 
   .breakdown-legend {
     grid-template-columns: 1fr;
-  }
-
-  .budget-popover {
-    position: static;
-    min-width: 100%;
-  }
-
-  .budget-popover-actions {
-    flex-direction: column;
   }
 }
