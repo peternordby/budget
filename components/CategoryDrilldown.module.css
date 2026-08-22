@@ -55,41 +55,15 @@
   overflow-wrap: break-word;
 }
 
-.close-button {
-  flex: none;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 4px;
-}
-
-.close-button:hover {
-  color: var(--ink);
-}
-
 .body {
   display: grid;
   gap: 20px;
   padding: 0 20px 20px;
+  min-width: 0;
 }
 
-.stats {
-  display: flex;
-  gap: 20px;
-}
-
-.stat {
-  display: grid;
-  gap: 2px;
-}
-
-.stat strong {
-  font-size: 18px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+.body > * {
+  min-width: 0;
 }
 
 .bars {
@@ -165,14 +139,29 @@
 .budget-table {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .budget-row {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 4px 10px;
   align-items: baseline;
   font-size: 13px;
+  min-width: 0;
+}
+
+.budget-figures {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-figures > * {
+  white-space: nowrap;
 }
 
 .budget-row .over {
@@ -186,11 +175,12 @@
 .transactions {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .transaction-row {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 10px;
   align-items: baseline;
   font-size: 13px;
@@ -200,7 +190,14 @@
   background: var(--surface-solid);
 }
 
+.transaction-item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .transaction-amount {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  white-space: nowrap;
 }

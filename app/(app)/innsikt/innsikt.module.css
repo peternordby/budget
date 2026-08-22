@@ -4,14 +4,14 @@
   display: flex;
   align-items: stretch;
   gap: 4px;
-  height: 170px;
+  height: 190px;
   margin-top: 4px;
   overflow-x: auto;
   padding-bottom: 4px;
 }
 
 .split-col {
-  flex: 0 0 auto;
+  flex: 1 1 0;
   min-width: 22px;
   display: flex;
   flex-direction: column;
@@ -30,7 +30,8 @@
 
 .split-track {
   position: relative;
-  width: 14px;
+  width: 100%;
+  max-width: 30px;
   flex: 1;
   border-radius: 4px 4px 2px 2px;
   overflow: hidden;
@@ -107,20 +108,7 @@
 }
 
 .savings-stats {
-  display: flex;
-  gap: 20px;
   flex-shrink: 0;
-}
-
-.savings-stat {
-  display: grid;
-  gap: 2px;
-}
-
-.savings-stat strong {
-  font-size: 20px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
 }
 
 /* --- Section 3: Kategorier over tid --- */
@@ -134,7 +122,7 @@
 
 .category-tile {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   padding: 14px;
   border-radius: var(--radius-soft);
   border: 1px solid var(--border);
@@ -159,11 +147,24 @@
 }
 
 .category-tile-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: grid;
+  gap: 3px;
   font-size: 12px;
-  color: var(--muted);
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+
+/* Label left, amount flush right, so the three figures form a column that
+   can be compared tile to tile. */
+.tile-stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tile-stat .num {
+  font-weight: 600;
 }
 
 /* --- Section 4: Abonnementer --- */
@@ -177,7 +178,7 @@
 .subscription-head,
 .subscription-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1.6fr) minmax(100px, 1fr) minmax(70px, 0.7fr) minmax(90px, 0.8fr) minmax(90px, 0.8fr) minmax(150px, 1fr);
+  grid-template-columns: minmax(120px, 2fr) minmax(100px, 1.2fr) 110px 110px 110px 170px;
   gap: 12px;
   align-items: center;
   padding: 10px 14px;
@@ -217,9 +218,6 @@
     gap: 14px;
   }
 
-  .savings-stats {
-    gap: 24px;
-  }
 
   .subscription-head {
     display: none;
@@ -228,5 +226,11 @@
   .subscription-row {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+
+  /* Stacked to one column, a right-aligned number reads as detached from
+     the row it belongs to. */
+  .subscription-row .num {
+    text-align: left;
   }
 }

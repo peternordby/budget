@@ -13,6 +13,13 @@
   padding: 0 14px;
 }
 
+/* The amount column is right-aligned (.num); its draggable header button has
+   to follow, or the label floats away from the digits it sorts. */
+.list-sort.align-end {
+  justify-content: flex-end;
+  text-align: right;
+}
+
 .list-sort {
   border: none;
   background: transparent;
@@ -104,72 +111,10 @@
   outline-offset: -2px;
 }
 
-.activity-controls {
-  margin-top: 8px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-  align-items: end;
-}
-
-.activity-clear {
-  justify-self: end;
-  width: auto;
-}
-
-.activity-export {
-  justify-self: end;
-  width: auto;
-}
-
-.activity-toggle {
-  align-self: end;
-}
-
-.activity-toggle label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: normal;
-  text-transform: none;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.activity-toggle input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
 .activity-total-row {
-  margin: 12px 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.activity-total {
-  display: grid;
-  gap: 2px;
-}
-
-.activity-total strong {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-}
-
-.activity-total-meta {
-  font-size: 13px;
+  margin: 4px 0 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .category-pill {
@@ -185,33 +130,14 @@
   font-weight: 600;
 }
 
-.delete-button {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface-solid);
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1;
-  display: grid;
-  place-items: center;
+/* Positioning only — the look comes from .icon-btn/.icon-btn-danger in
+   globals.css. The row reserves a grid column for it, but it is pinned so it
+   stays centred against a row whose height varies with wrapped content. */
+.row-delete {
   position: absolute;
   top: 50%;
   right: 8px;
   transform: translateY(-50%);
-  cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
-}
-
-.delete-button:hover:not(:disabled) {
-  background: var(--cancel-bg);
-  color: var(--expense);
-}
-
-.delete-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .mobile-new-row-card {
@@ -293,54 +219,6 @@ select.cell-input {
   justify-content: flex-end;
 }
 
-.save-button {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  border: 1px solid var(--save-border);
-  background: var(--save-bg);
-  color: var(--income);
-  font-size: 14px;
-  line-height: 1;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition: background 150ms ease;
-}
-
-.save-button:hover:not(:disabled) {
-  background: var(--save-bg-hover);
-}
-
-.save-button:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.cancel-button {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  border: 1px solid var(--cancel-border);
-  background: var(--cancel-bg);
-  color: var(--expense);
-  font-size: 14px;
-  line-height: 1;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition: background 150ms ease;
-}
-
-.cancel-button:hover:not(:disabled) {
-  background: var(--cancel-bg-hover);
-}
-
-.cancel-button:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
 /* Keyboard-accessible edit trigger; visually hidden, revealed on focus. */
 .edit-button {
   position: absolute;
@@ -400,28 +278,16 @@ select.cell-input {
     grid-column: span 1;
   }
 
-  .list-row.new-row > .save-button,
+  .list-row.new-row > .icon-btn,
   .list-row.editing-row > .row-actions {
     grid-column: 1 / -1;
     justify-self: stretch;
   }
 
-  .list-row.new-row > .save-button {
+  .list-row.new-row > .icon-btn {
     width: 100%;
     border-radius: 8px;
     height: 36px;
-  }
-
-  .activity-controls {
-    grid-template-columns: 1fr;
-  }
-
-  .activity-clear {
-    justify-self: stretch;
-  }
-
-  .activity-export {
-    justify-self: stretch;
   }
 
   .mobile-new-row-card {
@@ -433,9 +299,3 @@ select.cell-input {
   }
 }
 
-@media (max-width: 640px) {
-  .activity-total-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}

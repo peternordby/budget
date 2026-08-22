@@ -1,0 +1,143 @@
+/* The order controls sit between chart and legend. */
+.legend-head-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+/* --- CSV import --- */
+
+.import {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.import-head {
+  display: grid;
+  gap: 4px;
+}
+
+/* The native file input, restyled only as far as its button pseudo-element
+   allows — enough to stop it reading as unstyled browser chrome. */
+.import-file {
+  padding: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.import-file::file-selector-button {
+  margin-right: 12px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-solid);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.import-file::file-selector-button:hover {
+  background: var(--bg-alt);
+}
+
+.import-preview {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+}
+
+.import-errors summary {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warn-ink);
+  cursor: pointer;
+}
+
+.import-errors ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* --- History table --- */
+
+.history {
+  display: grid;
+  gap: 8px;
+}
+
+.history-header,
+.history-row {
+  display: grid;
+  grid-template-columns: minmax(70px, 0.7fr) minmax(100px, 1.4fr) minmax(90px, 1fr) minmax(90px, 1fr) 32px;
+  gap: 12px;
+  align-items: center;
+}
+
+.history-header {
+  padding: 0 14px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.history-row {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  font-size: 13px;
+  transition: box-shadow 200ms ease;
+}
+
+.history-row:hover {
+  box-shadow: var(--shadow-soft);
+}
+
+.history-row strong {
+  font-size: 14px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .history-header {
+    display: none;
+  }
+
+  /* Stacked to one column, a right-aligned number reads as detached from the
+     row it belongs to — the same rule /innsikt's subscription table uses. */
+  .history-row {
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+  }
+
+  .history-row .num {
+    text-align: left;
+  }
+
+  .history-row .icon-btn {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+  }
+}

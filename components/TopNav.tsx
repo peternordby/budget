@@ -14,6 +14,7 @@ const ROUTES = [
   { href: "/oversikt", label: "Oversikt" },
   { href: "/transaksjoner", label: "Transaksjoner" },
   { href: "/innsikt", label: "Innsikt" },
+  { href: "/sparing", label: "Sparing" },
 ];
 
 export default function TopNav({ email }: TopNavProps) {

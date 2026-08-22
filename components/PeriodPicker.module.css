@@ -35,27 +35,15 @@
   margin: 12px 0 2px;
 }
 
+/* Shape only. The year chips are .btn btn-ghost btn-small like the controls
+   beside them, and their selected state is the shared .btn.is-on — which
+   .mom-year.active used to duplicate rule for rule, so the two toggles in this
+   one toolbar expressed "on" through two code paths that only happened to
+   agree. */
 .mom-year {
-  border: 1px solid var(--border);
-  background: var(--surface-solid);
-  color: var(--muted);
   border-radius: 999px;
   padding: 3px 12px;
   font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
-}
-
-.mom-year:hover {
-  color: var(--ink);
-  background: var(--bg-alt);
-}
-
-.mom-year.active {
-  background: var(--accent-soft);
-  color: var(--ink);
-  border-color: var(--accent);
 }
 
 .mom-col.empty .mom-bars {

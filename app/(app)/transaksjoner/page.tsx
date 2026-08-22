@@ -11,6 +11,15 @@ import RecurringPanel from "@/components/RecurringPanel";
 import ItemAutocomplete from "@/components/ItemAutocomplete";
 import Toast from "@/components/Toast";
 import { supabase } from "@/lib/supabaseClient";
+import { getCategoryHue } from "@/lib/categoryColor";
+import {
+  IconCheck,
+  IconChevronDown,
+  IconChevronUp,
+  IconPlus,
+  IconTrash,
+  IconX,
+} from "@/components/icons";
 import { useToast } from "@/lib/useToast";
 import { usePeriod } from "@/lib/usePeriod";
 import { refToKey } from "@/lib/period";
@@ -85,63 +94,6 @@ type Category = {
 // The page derives its rows from the ledger provider now; this is just the
 // provider's shape under the page's existing local name.
 type Expense = LedgerExpense;
-
-function IconPlus() {
-  return (
-    <svg className="icon" viewBox="0 0 24 24">
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}
-
-function IconCheck() {
-  return (
-    <svg className="icon" viewBox="0 0 24 24">
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
-}
-
-function IconX() {
-  return (
-    <svg className="icon" viewBox="0 0 24 24">
-      <path d="M18 6 6 18M6 6l12 12" />
-    </svg>
-  );
-}
-
-function IconTrash() {
-  return (
-    <svg className="icon" viewBox="0 0 24 24">
-      <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-    </svg>
-  );
-}
-
-function IconChevronUp() {
-  return (
-    <svg className="icon" viewBox="0 0 24 24">
-      <path d="m18 15-6-6-6 6" />
-    </svg>
-  );
-}
-
-function IconChevronDown() {
-  return (
-    <svg className="icon" viewBox="0 0 24 24">
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
-function getCategoryHue(name: string) {
-  const normalized = name.trim().toLowerCase() || "ukategorisert";
-  let hash = 0;
-  for (let i = 0; i < normalized.length; i += 1) {
-    hash = (hash * 31 + normalized.charCodeAt(i)) % 360;
-  }
-  return Math.abs(hash);
-}
 
 function compareTextValues(a: string, b: string) {
   return a.localeCompare(b, "nb", { sensitivity: "base" });
@@ -841,6 +793,8 @@ export default function TransaksjonerPage() {
   }
 
   function renderMobileFieldInput(key: ColumnKey) {
+    // Matches the htmlFor the label beside it uses.
+    const id = `mobile-new-${key}`;
     switch (key) {
       case "item":
         return (
@@ -853,11 +807,13 @@ export default function TransaksjonerPage() {
             index={itemIndex}
             placeholder="Hva brukte du penger på?"
             ariaLabel="Beskrivelse"
+            inputId={id}
           />
         );
       case "amount":
         return (
           <input
+            id={id}
             type="number"
             value={newRowDraft.price}
             onChange={(e) =>
@@ -869,6 +825,7 @@ export default function TransaksjonerPage() {
       case "category":
         return (
           <select
+            id={id}
             value={newRowDraft.categoryId}
             onChange={(e) =>
               setNewRowDraft((prev) => ({ ...prev, categoryId: e.target.value }))
@@ -885,6 +842,7 @@ export default function TransaksjonerPage() {
       case "date":
         return (
           <input
+            id={id}
             type="date"
             value={newRowDraft.date}
             onChange={(e) =>
@@ -895,6 +853,7 @@ export default function TransaksjonerPage() {
       case "tag":
         return (
           <input
+            id={id}
             type="text"
             value={newRowDraft.tag}
             onChange={(e) =>
@@ -1087,9 +1046,12 @@ export default function TransaksjonerPage() {
           {columnOrder.map((key, index) => (
             <div className="field" key={key}>
               <div className="field-label-row">
-                <label>{COLUMN_LABELS[key]}</label>
+                <label htmlFor={`mobile-new-${key}`}>
+                  {COLUMN_LABELS[key]}
+                </label>
                 <div className="field-move">
                   <button
+                    className="icon-btn icon-btn-sm"
                     type="button"
                     onClick={() => moveColumn(key, -1)}
                     disabled={index === 0}
@@ -1099,6 +1061,7 @@ export default function TransaksjonerPage() {
                     <IconChevronUp />
                   </button>
                   <button
+                    className="icon-btn icon-btn-sm"
                     type="button"
                     onClick={() => moveColumn(key, 1)}
                     disabled={index === columnOrder.length - 1}
@@ -1140,12 +1103,12 @@ export default function TransaksjonerPage() {
       />
 
       <section className="card section-gap">
-        <div className="activity-head">
+        <div className="card-head">
           <h2 className="section-title">Aktivitet</h2>
           <span className="helper">Sortert på {activitySortLabel}</span>
         </div>
         {status ? <div className="status">{status}</div> : null}
-        <div className={styles["activity-controls"]}>
+        <div className="toolbar">
           <div className="field">
             <label htmlFor="activity-item-query">Beskrivelse</label>
             <input
@@ -1200,51 +1163,62 @@ export default function TransaksjonerPage() {
               ))}
             </select>
           </div>
-          <div className={`field ${styles["activity-toggle"]}`}>
-            <label htmlFor="activity-search-whole-window">
-              <input
-                id="activity-search-whole-window"
-                type="checkbox"
-                checked={searchWholeWindow}
-                onChange={(event) => setSearchWholeWindow(event.target.checked)}
-              />
-              Søk i hele perioden
-            </label>
+          <label className="toolbar-check" htmlFor="activity-search-whole-window">
+            <input
+              id="activity-search-whole-window"
+              type="checkbox"
+              checked={searchWholeWindow}
+              onChange={(event) => setSearchWholeWindow(event.target.checked)}
+            />
+            Søk i hele perioden
+          </label>
+          <div className="toolbar-actions">
+            <button
+              className="btn btn-ghost btn-small"
+              type="button"
+              onClick={clearActivityFilters}
+              disabled={!hasActivityFilters}
+            >
+              Nullstill filtre
+            </button>
+            <button
+              className="btn btn-ghost btn-small"
+              type="button"
+              onClick={handleExportCsv}
+              disabled={filteredAndSortedExpenses.length === 0}
+            >
+              Eksporter CSV
+            </button>
           </div>
-          <button
-            className={`btn btn-ghost btn-small ${styles["activity-clear"]}`}
-            type="button"
-            onClick={clearActivityFilters}
-            disabled={!hasActivityFilters}
-          >
-            Nullstill filtre
-          </button>
-          <button
-            className={`btn btn-ghost btn-small ${styles["activity-export"]}`}
-            type="button"
-            onClick={handleExportCsv}
-            disabled={filteredAndSortedExpenses.length === 0}
-          >
-            Eksporter CSV
-          </button>
         </div>
         {searchWholeWindow ? (
           <div className="helper">{searchWindowLabel}</div>
         ) : null}
-        <div className={styles["activity-total-row"]}>
-          <div className={styles["activity-total"]}>
-            <span className="helper">{activityTotalLabel}</span>
+        <div className={`stat-row ${styles["activity-total-row"]}`}>
+          <div className="stat">
+            <span className="stat-label">{activityTotalLabel}</span>
             <strong
-              className={activityTotals.net >= 0 ? "text-income" : "text-expense"}
+              className={`stat-value ${activityTotals.net >= 0 ? "is-good" : "is-bad"}`}
             >
               {activityTotals.net >= 0 ? "+" : "-"}
               {formatCurrency(Math.abs(activityTotals.net))}
             </strong>
           </div>
-          <div className={`${styles["activity-total-meta"]} helper`}>
-            Inntekter {formatCurrency(activityTotals.income)} | Utgifter{" "}
-            {formatCurrency(activityTotals.expense)} | {activityTotals.count}{" "}
-            transaksjoner
+          <div className="stat stat-small">
+            <span className="stat-label">Inntekter</span>
+            <strong className="stat-value">
+              {formatCurrency(activityTotals.income)}
+            </strong>
+          </div>
+          <div className="stat stat-small">
+            <span className="stat-label">Utgifter</span>
+            <strong className="stat-value">
+              {formatCurrency(activityTotals.expense)}
+            </strong>
+          </div>
+          <div className="stat stat-small">
+            <span className="stat-label">Transaksjoner</span>
+            <strong className="stat-value">{activityTotals.count}</strong>
           </div>
         </div>
         {loading ? <div className="helper">Laster transaksjoner...</div> : null}
@@ -1255,8 +1229,10 @@ export default function TransaksjonerPage() {
                 <button
                   key={key}
                   className={`${styles["list-sort"]} ${styles["draggable"]} ${
-                    activitySort.key === key ? styles["active"] : ""
-                  } ${dragColumn === key ? styles["dragging"] : ""} ${
+                    key === "amount" ? styles["align-end"] : ""
+                  } ${activitySort.key === key ? styles["active"] : ""} ${
+                    dragColumn === key ? styles["dragging"] : ""
+                  } ${
                     dropTarget === key && dragColumn && dragColumn !== key
                       ? styles["drop-target"]
                       : ""
@@ -1310,7 +1286,7 @@ export default function TransaksjonerPage() {
             >
               {columnOrder.map((key) => renderNewRowCell(key))}
               <button
-                className={styles["save-button"]}
+                className="icon-btn icon-btn-confirm"
                 type="button"
                 onClick={handleSaveNewRow}
                 disabled={newRowSaving || !newRowDraft.item.trim() || !newRowDraft.categoryId || !newRowDraft.price}
@@ -1347,7 +1323,7 @@ export default function TransaksjonerPage() {
                     {columnOrder.map((key) => renderEditCell(key))}
                     <div className={styles["row-actions"]}>
                       <button
-                        className={styles["save-button"]}
+                        className="icon-btn icon-btn-confirm"
                         type="button"
                         onClick={handleSaveEdit}
                         disabled={editSaving}
@@ -1357,7 +1333,7 @@ export default function TransaksjonerPage() {
                         {editSaving ? "..." : <IconCheck />}
                       </button>
                       <button
-                        className={styles["cancel-button"]}
+                        className="icon-btn icon-btn-dismiss"
                         type="button"
                         onClick={handleCancelEdit}
                         disabled={editSaving}
@@ -1401,7 +1377,7 @@ export default function TransaksjonerPage() {
                         return (
                           <strong
                             key={key}
-                            className={isIncome ? "text-income" : ""}
+                            className={`num ${isIncome ? "text-income" : ""}`}
                           >
                             {isIncome ? `+${amount}` : `-${amount}`}
                           </strong>
@@ -1427,7 +1403,7 @@ export default function TransaksjonerPage() {
                     Rediger
                   </button>
                   <button
-                    className={styles["delete-button"]}
+                    className={`icon-btn icon-btn-danger ${styles["row-delete"]}`}
                     type="button"
                     onClick={() => handleDelete(expense)}
                     disabled={deletingId === expense.id}

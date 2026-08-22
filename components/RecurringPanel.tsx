@@ -10,6 +10,7 @@ import {
   type BookedRef,
   type RecurringTemplate,
 } from "@/lib/recurring";
+import { IconChevronDown } from "@/components/icons";
 import styles from "./RecurringPanel.module.css";
 
 type RecurringPanelProps = {
@@ -138,25 +139,31 @@ export default function RecurringPanel({
 
   return (
     <section className="card section-gap recurring-card">
-      <div className="activity-head">
+      <div className="card-head">
         <button
           type="button"
           className="collapse-toggle"
           onClick={() => setCollapsed((value) => !value)}
           aria-expanded={!collapsed}
+          aria-controls="recurring-body"
         >
+          <span className={`collapse-chevron ${collapsed ? "collapsed" : ""}`}>
+            <IconChevronDown />
+          </span>
           <h2 className="section-title">Faste utgifter</h2>
         </button>
-        <span className="helper">
-          {activeCount} aktive
-          {month && !bookedLoading && pending.length ? ` · ${pending.length} mangler` : ""}
+        <span className="card-head-meta">
+          <span className="helper">{activeCount} aktive</span>
+          {month && !bookedLoading && pending.length ? (
+            <span className="badge badge-warn">{pending.length} mangler</span>
+          ) : null}
         </span>
       </div>
 
       {status ? <div className="status">{status}</div> : null}
 
       {!collapsed ? (
-        <>
+        <div id="recurring-body">
           {!month ? (
             <p className="helper">
               Velg én måned for å legge inn faste utgifter.
@@ -333,7 +340,7 @@ export default function RecurringPanel({
               Ny fast utgift
             </button>
           )}
-        </>
+        </div>
       ) : null}
     </section>
   );

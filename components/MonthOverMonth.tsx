@@ -62,10 +62,10 @@ function CompareStat({
     pct !== null ? formatSignedPct(pct) : formatSignedCurrency(delta);
 
   return (
-    <div className={styles["compare-stat"]}>
-      <span className={styles["compare-stat-label"]}>{label}</span>
-      <strong className={styles["compare-stat-value"]}>{formatCurrency(value)}</strong>
-      <span className={`${styles["compare-chip"]} ${styles[tone]}`}>
+    <div className="stat">
+      <span className="stat-label">{label}</span>
+      <strong className="stat-value">{formatCurrency(value)}</strong>
+      <span className={`stat-delta ${tone}`}>
         {deltaLabel} fra {prevLabel}
       </span>
     </div>
@@ -84,6 +84,12 @@ export default function MonthOverMonth({
 
   return (
     <section className="card section-gap mom-card">
+      <div className="card-head">
+        <h2 className="section-title">Sammenlignet med forrige måned</h2>
+        {single && prevLabel ? (
+          <span className="helper">mot {prevLabel}</span>
+        ) : null}
+      </div>
       {!single ? (
         <p className={`helper ${styles["mom-hint"]}`}>
           Flere måneder valgt. Velg én måned for å sammenligne med forrige
@@ -91,7 +97,7 @@ export default function MonthOverMonth({
         </p>
       ) : comparison && comparison.previous.count > 0 ? (
         <div className={styles["mom-compare"]}>
-          <div className={styles["mom-compare-grid"]}>
+          <div className="stat-row">
             <CompareStat
               label="Utgifter"
               value={comparison.current.expenses}

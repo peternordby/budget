@@ -14,8 +14,9 @@ import {
 import MonthOverMonth from "@/components/MonthOverMonth";
 import Anomalies from "@/components/Anomalies";
 import CategoryDrilldown from "@/components/CategoryDrilldown";
-import Goals from "@/components/Goals";
 import { usePeriod } from "@/lib/usePeriod";
+import { getCategoryHue } from "@/lib/categoryColor";
+import { IconChevronDown, IconPencil } from "@/components/icons";
 import { supabase } from "@/lib/supabaseClient";
 import { formatCurrency, toNumber } from "@/lib/format";
 import { monthKey, type MonthRef } from "@/lib/insights";
@@ -44,32 +45,6 @@ type BudgetEntry = {
   user_id?: string | null;
   category: Category | null;
 };
-
-function IconPencil() {
-  return (
-    <svg className="icon" viewBox="0 0 24 24">
-      <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-      <path d="m15 5 4 4" />
-    </svg>
-  );
-}
-
-function IconChevronDown() {
-  return (
-    <svg className="icon" viewBox="0 0 24 24">
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
-function getCategoryHue(name: string) {
-  const normalized = name.trim().toLowerCase() || "ukategorisert";
-  let hash = 0;
-  for (let i = 0; i < normalized.length; i += 1) {
-    hash = (hash * 31 + normalized.charCodeAt(i)) % 360;
-  }
-  return Math.abs(hash);
-}
 
 function getPreviousPeriod(year: number, month: number) {
   if (month === 1) {
@@ -494,6 +469,10 @@ export default function OversiktPage() {
           "--gauge-pct": Math.min(budgetSummary.percentUsed, 100),
           "--gauge-color": budgetSummary.percentUsed > 100 ? "var(--expense)" : budgetSummary.percentUsed > 75 ? "var(--gauge-warn)" : "var(--income)",
         } as CSSProperties}>
+          <div className="card-head">
+            <h2 className="section-title">Budsjett</h2>
+            <span className="helper">{periodLabel}</span>
+          </div>
           <div className={styles["gauge-layout"]}>
             <div className={styles["gauge-ring-wrap"]}>
               <div className={styles["gauge-ring"]} />
@@ -508,29 +487,51 @@ export default function OversiktPage() {
             </div>
             <div className={styles["gauge-details"]}>
               <div className={styles["gauge-main-figure"]}>
-                <span className="helper">Brukt av budsjett</span>
-                <strong>{formatCurrency(summary.expensesTotal)} <span className="helper" style={{ fontWeight: 400, fontSize: "16px" }}>/ {formatCurrency(budgetSummary.budgetTotal)}</span></strong>
+                <span className="stat-label">Brukt av budsjett</span>
+                <strong>
+                  {formatCurrency(summary.expensesTotal)}
+                  <span className={styles["gauge-main-total"]}>
+                    {" "}
+                    / {formatCurrency(budgetSummary.budgetTotal)}
+                  </span>
+                </strong>
               </div>
-              <div className={styles["gauge-stats"]}>
-                <div className={`${styles["gauge-stat"]} ${budgetSummary.remaining >= 0 ? "" : styles["gauge-stat-danger"]}`}>
-                  <span className={styles["gauge-stat-value"]}>{budgetSummary.remaining >= 0 ? formatCurrency(budgetSummary.remaining) : `-${formatCurrency(Math.abs(budgetSummary.remaining))}`}</span>
-                  <span className={styles["gauge-stat-label"]}>{budgetSummary.remaining >= 0 ? "Gjenstår" : "Over budsjett"}</span>
+              <div className="stat-row">
+                <div className="stat">
+                  <span className="stat-label">
+                    {budgetSummary.remaining >= 0 ? "Gjenstår" : "Over budsjett"}
+                  </span>
+                  <strong className={`stat-value ${budgetSummary.remaining >= 0 ? "is-good" : "is-bad"}`}>
+                    {budgetSummary.remaining >= 0
+                      ? formatCurrency(budgetSummary.remaining)
+                      : `-${formatCurrency(Math.abs(budgetSummary.remaining))}`}
+                  </strong>
                 </div>
                 {budgetSummary.daysLeft > 0 && budgetSummary.remaining > 0 ? (
-                  <div className={styles["gauge-stat"]}>
-                    <span className={styles["gauge-stat-value"]}>{formatCurrency(Math.round(budgetSummary.dailyBudget))}</span>
-                    <span className={styles["gauge-stat-label"]}>Per dag ({budgetSummary.daysLeft} dager igjen)</span>
+                  <div className="stat">
+                    <span className="stat-label">Per dag</span>
+                    <strong className="stat-value">
+                      {formatCurrency(Math.round(budgetSummary.dailyBudget))}
+                    </strong>
+                    <span className="helper">{budgetSummary.daysLeft} dager igjen</span>
                   </div>
                 ) : null}
                 {budgetSummary.projected > 0 ? (
-                  <div className={`${styles["gauge-stat"]} ${budgetSummary.budgetTotal > 0 && budgetSummary.projected > budgetSummary.budgetTotal ? styles["gauge-stat-danger"] : ""}`}>
-                    <span className={styles["gauge-stat-value"]}>{formatCurrency(budgetSummary.projected)}</span>
-                    <span className={styles["gauge-stat-label"]}>
-                      {budgetSummary.budgetTotal > 0
-                        ? budgetSummary.projected > budgetSummary.budgetTotal
-                          ? `Prognose - ${formatCurrency(budgetSummary.projected - budgetSummary.budgetTotal)} over budsjett`
-                          : `Prognose - ${formatCurrency(budgetSummary.budgetTotal - budgetSummary.projected)} under budsjett`
-                        : "Prognose ved månedsslutt"}
+                  <div className="stat">
+                    <span className="stat-label">Prognose</span>
+                    <strong
+                      className={`stat-value ${
+                        budgetSummary.projected > budgetSummary.budgetTotal
+                          ? "is-bad"
+                          : "is-good"
+                      }`}
+                    >
+                      {formatCurrency(budgetSummary.projected)}
+                    </strong>
+                    <span className="helper">
+                      {budgetSummary.projected > budgetSummary.budgetTotal
+                        ? `${formatCurrency(budgetSummary.projected - budgetSummary.budgetTotal)} over budsjett`
+                        : `${formatCurrency(budgetSummary.budgetTotal - budgetSummary.projected)} under budsjett`}
                     </span>
                   </div>
                 ) : null}
@@ -587,8 +588,6 @@ export default function OversiktPage() {
         </section>
       ) : null}
 
-      <Goals />
-
       <MonthOverMonth entries={historyEntries} single={single} />
 
       <Anomalies
@@ -601,7 +600,7 @@ export default function OversiktPage() {
       <section
         className={`card section-gap ${styles["category-card"]}${editingCategory ? ` ${styles["editing"]}` : ""}`}
       >
-        <div className={styles["category-head"]}>
+        <div className="card-head">
           <button
             type="button"
             className="collapse-toggle"
@@ -609,7 +608,7 @@ export default function OversiktPage() {
             aria-expanded={!categoriesCollapsed}
             aria-controls="category-list"
           >
-            <span className={`${styles["collapse-chevron"]} ${categoriesCollapsed ? styles["collapsed"] : ""}`}>
+            <span className={`collapse-chevron ${categoriesCollapsed ? "collapsed" : ""}`}>
               <IconChevronDown />
             </span>
             <h2 className="section-title">Kategorier</h2>
@@ -695,13 +694,15 @@ export default function OversiktPage() {
                           <span className={`${styles["category-value"]} helper`}>Budsjett ikke satt</span>
                         ) : null}
                       </div>
-                      {hasBudget && !isIncome ? (
-                        <span className={`${styles["cat-pct-badge"]} ${isOverBudget ? styles["cat-pct-over"] : percentUsed > 75 ? styles["cat-pct-warn"] : styles["cat-pct-ok"]}`}>
-                          {percentUsed.toFixed(0)}%
-                        </span>
-                      ) : null}
+                      <span className={styles["cat-pct-slot"]}>
+                        {hasBudget && !isIncome ? (
+                          <span className={`${styles["cat-pct-badge"]} ${isOverBudget ? styles["cat-pct-over"] : percentUsed > 75 ? styles["cat-pct-warn"] : styles["cat-pct-ok"]}`}>
+                            {percentUsed.toFixed(0)}%
+                          </span>
+                        ) : null}
+                      </span>
                       <button
-                        className={styles["icon-button"]}
+                        className="icon-btn"
                         type="button"
                         onClick={() => handleOpenBudgetEditor(category.name)}
                         disabled={!canEditBudget}
@@ -802,11 +803,6 @@ export default function OversiktPage() {
                             : "var(--income)"
                           : `hsl(${catHue} var(--bar-s) var(--bar-l))`,
                     } as CSSProperties}>
-                      {hasBudget && !isIncome ? (
-                        <div className={styles["category-chart-budget-mark"]} style={{
-                          left: `${Math.min((budgetValue / barScale) * 100, 100)}%`,
-                        }} />
-                      ) : null}
                       <div
                         className={`${styles["category-chart-bar"]} ${styles["spent"]} ${styles[spentBarStateClass] ?? ""}`}
                         style={{

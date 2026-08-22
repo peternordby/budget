@@ -13,6 +13,8 @@ type ItemAutocompleteProps = {
   className?: string;
   placeholder?: string;
   ariaLabel?: string;
+  /** Set when a visible <label htmlFor> points at this input. */
+  inputId?: string;
   autoFocus?: boolean;
   inputRef?: React.RefObject<HTMLInputElement | null>;
 };
@@ -25,6 +27,7 @@ export default function ItemAutocomplete({
   className,
   placeholder,
   ariaLabel,
+  inputId,
   autoFocus,
   inputRef,
 }: ItemAutocompleteProps) {
@@ -115,6 +118,7 @@ export default function ItemAutocomplete({
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
+        id={inputId}
         aria-label={ariaLabel}
         autoFocus={autoFocus}
         autoComplete="off"

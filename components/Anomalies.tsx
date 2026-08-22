@@ -97,7 +97,7 @@ export default function Anomalies({
 
   return (
     <section className="card section-gap">
-      <div className="activity-head">
+      <div className="card-head">
         <h2 className="section-title">Avvik</h2>
         <span className="helper">
           {selected ? periodLabel : "Velg en måned"}

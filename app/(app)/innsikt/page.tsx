@@ -99,6 +99,15 @@ export default function InnsiktPage() {
   // useAnalysisWindow in components/LedgerProvider.tsx.
   const months = useAnalysisWindow(anchor, ANALYSIS_MONTHS);
 
+  // Every figure on the page is computed over `months`, so each section's
+  // header states the real range rather than implying a fixed 24.
+  const windowLabel = useMemo(() => {
+    if (!months.length) return "";
+    const first = months[0];
+    const last = months[months.length - 1];
+    return `${months.length} måneder · ${monthKey(first.year, first.month)}–${monthKey(last.year, last.month)}`;
+  }, [months]);
+
   const entries = useMemo(
     () => toLedgerEntries(ledger.expenses),
     [ledger.expenses]
@@ -369,7 +378,10 @@ export default function InnsiktPage() {
   return (
     <>
       <section className="card section-gap">
-        <h2 className="section-title">Fast vs variabelt</h2>
+        <div className="card-head">
+          <h2 className="section-title">Fast vs variabelt</h2>
+          <span className="helper">{windowLabel}</span>
+        </div>
         {ledger.loading ? (
           <p className="helper">Laster transaksjoner...</p>
         ) : ledger.error ? (
@@ -434,7 +446,10 @@ export default function InnsiktPage() {
       </section>
 
       <section className="card section-gap">
-        <h2 className="section-title">Sparerate</h2>
+        <div className="card-head">
+          <h2 className="section-title">Sparerate</h2>
+          <span className="helper">{windowLabel}</span>
+        </div>
         {savingsSparkPoints.length ? (
           <div className={styles["savings-layout"]}>
             <div className={styles["savings-chart"]}>
@@ -443,18 +458,18 @@ export default function InnsiktPage() {
                 ariaLabel="Sparerate over tid"
               />
             </div>
-            <div className={styles["savings-stats"]}>
-              <div className={styles["savings-stat"]}>
-                <span className="helper">Siste måned</span>
-                <strong>
+            <div className={`stat-row ${styles["savings-stats"]}`}>
+              <div className="stat">
+                <span className="stat-label">Siste måned</span>
+                <strong className="stat-value">
                   {latestSavings && latestSavings.rate !== null
                     ? `${Math.round(latestSavings.rate * 100)} %`
                     : "Ingen inntekt"}
                 </strong>
               </div>
-              <div className={styles["savings-stat"]}>
-                <span className="helper">Snitt</span>
-                <strong>
+              <div className="stat">
+                <span className="stat-label">Snitt</span>
+                <strong className="stat-value">
                   {meanSavingsRate !== null
                     ? `${Math.round(meanSavingsRate * 100)} %`
                     : "—"}
@@ -475,7 +490,10 @@ export default function InnsiktPage() {
       </section>
 
       <section className="card section-gap">
-        <h2 className="section-title">Kategorier over tid</h2>
+        <div className="card-head">
+          <h2 className="section-title">Kategorier over tid</h2>
+          <span className="helper">{windowLabel}</span>
+        </div>
         {series.length ? (
           <div className={styles["category-grid"]}>
             {series.map((entry) => {
@@ -498,9 +516,22 @@ export default function InnsiktPage() {
                     ariaLabel={`Utvikling for ${entry.category}`}
                   />
                   <span className={styles["category-tile-stats"]}>
-                    <span>Totalt {formatCurrency(entry.total)}</span>
-                    <span>Snitt {formatCurrency(Math.round(entry.mean))}</span>
-                    <span>Median {formatCurrency(Math.round(entry.median))}</span>
+                    <span className={styles["tile-stat"]}>
+                      <span className="stat-label">Totalt</span>
+                      <span className="num">{formatCurrency(entry.total)}</span>
+                    </span>
+                    <span className={styles["tile-stat"]}>
+                      <span className="stat-label">Snitt</span>
+                      <span className="num">
+                        {formatCurrency(Math.round(entry.mean))}
+                      </span>
+                    </span>
+                    <span className={styles["tile-stat"]}>
+                      <span className="stat-label">Median</span>
+                      <span className="num">
+                        {formatCurrency(Math.round(entry.median))}
+                      </span>
+                    </span>
                   </span>
                 </button>
               );
@@ -519,9 +550,9 @@ export default function InnsiktPage() {
             <div className={styles["subscription-head"]}>
               <span>Vare</span>
               <span>Kategori</span>
-              <span>Måneder sett</span>
-              <span>Pr. måned</span>
-              <span>Pr. år</span>
+              <span className="num">Måneder sett</span>
+              <span className="num">Pr. måned</span>
+              <span className="num">Pr. år</span>
               <span>Handling</span>
             </div>
             {subscriptions.map((sub) => {
@@ -536,9 +567,9 @@ export default function InnsiktPage() {
                 <div key={key} className={styles["subscription-row"]}>
                   <span className={styles["subscription-item"]}>{sub.item}</span>
                   <span className="helper">{sub.category}</span>
-                  <span>{sub.monthsSeen}</span>
-                  <span>{formatCurrency(sub.monthlyCost)}</span>
-                  <span>{formatCurrency(sub.annualCost)}</span>
+                  <span className="num">{sub.monthsSeen}</span>
+                  <span className="num">{formatCurrency(sub.monthlyCost)}</span>
+                  <span className="num">{formatCurrency(sub.annualCost)}</span>
                   <span className={styles["subscription-action"]}>
                     <button
                       className="btn btn-ghost btn-small"

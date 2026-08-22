@@ -197,7 +197,9 @@ export default function PeriodPicker() {
             <button
               key={year}
               type="button"
-              className={`${styles["mom-year"]} ${isWholeYearSelected(year) ? styles["active"] : ""}`}
+              className={`btn btn-ghost btn-small ${styles["mom-year"]} ${
+                isWholeYearSelected(year) ? "is-on" : ""
+              }`}
               onClick={() => selectYear(year)}
               title={`Velg hele ${year}`}
             >

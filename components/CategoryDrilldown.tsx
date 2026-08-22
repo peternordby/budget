@@ -11,6 +11,7 @@ import { usePeriod } from "@/lib/usePeriod";
 import { categorySeries } from "@/lib/trends";
 import { monthKey, type MonthRef } from "@/lib/insights";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { IconX } from "@/components/icons";
 import styles from "./CategoryDrilldown.module.css";
 
 const SHORT_MONTHS = [
@@ -241,24 +242,28 @@ export default function CategoryDrilldown({
           <h2>{category}</h2>
         </div>
         <button
-          className={styles["close-button"]}
+          className="icon-btn"
           type="button"
           onClick={onClose}
           aria-label="Lukk"
         >
-          ×
+          <IconX />
         </button>
       </div>
 
       <div className={styles["body"]}>
-        <div className={styles["stats"]}>
-          <div className={styles["stat"]}>
-            <span className="helper">Snitt pr. måned</span>
-            <strong>{formatCurrency(Math.round(mean))}</strong>
+        <div className="stat-row">
+          <div className="stat stat-small">
+            <span className="stat-label">Snitt pr. måned</span>
+            <strong className="stat-value">
+              {formatCurrency(Math.round(mean))}
+            </strong>
           </div>
-          <div className={styles["stat"]}>
-            <span className="helper">Median pr. måned</span>
-            <strong>{formatCurrency(Math.round(median))}</strong>
+          <div className="stat stat-small">
+            <span className="stat-label">Median pr. måned</span>
+            <strong className="stat-value">
+              {formatCurrency(Math.round(median))}
+            </strong>
           </div>
         </div>
 
@@ -307,12 +312,16 @@ export default function CategoryDrilldown({
               {budgetedMonths.map((row) => (
                 <div key={row.key} className={styles["budget-row"]}>
                   <span>{row.label}</span>
-                  <span className="helper">{formatCurrency(row.budget)}</span>
-                  <span>{formatCurrency(row.actual)}</span>
-                  <span className={row.diff > 0 ? styles["over"] : styles["under"]}>
-                    {row.diff > 0
-                      ? `${formatCurrency(row.diff)} over`
-                      : `${formatCurrency(Math.abs(row.diff))} igjen`}
+                  <span className={styles["budget-figures"]}>
+                    <span>{formatCurrency(row.actual)}</span>
+                    <span className="helper">
+                      / {formatCurrency(row.budget)}
+                    </span>
+                    <span className={row.diff > 0 ? styles["over"] : styles["under"]}>
+                      {row.diff > 0
+                        ? `${formatCurrency(row.diff)} over`
+                        : `${formatCurrency(Math.abs(row.diff))} igjen`}
+                    </span>
                   </span>
                 </div>
               ))}
@@ -333,7 +342,9 @@ export default function CategoryDrilldown({
               {categoryTransactions.map((expense) => (
                 <div key={expense.id} className={styles["transaction-row"]}>
                   <span className="helper">{formatDate(expense.date)}</span>
-                  <span>{expense.item}</span>
+                  <span className={styles["transaction-item"]} title={expense.item}>
+                    {expense.item}
+                  </span>
                   <span className={styles["transaction-amount"]}>
                     {formatCurrency(expense.price)}
                   </span>

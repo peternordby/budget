@@ -1,63 +1,10 @@
 .mom-hint {
-  margin: 14px 0 0;
+  margin: 0;
 }
 
 .mom-compare {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-soft);
   display: grid;
-  gap: 16px;
-}
-
-.mom-compare-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
-}
-
-.compare-stat {
-  display: grid;
-  gap: 4px;
-  justify-items: start;
-}
-
-.compare-stat-label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  font-weight: 600;
-}
-
-.compare-stat-value {
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-}
-
-.compare-chip {
-  width: fit-content;
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.compare-chip.good {
-  background: var(--ok-bg);
-  color: var(--ok-ink);
-}
-
-.compare-chip.bad {
-  background: var(--bad-bg);
-  color: var(--bad-ink);
-}
-
-.compare-chip.neutral {
-  background: var(--bg-alt);
-  color: var(--muted);
+  gap: 18px;
 }
 
 .movers {

@@ -322,11 +322,21 @@ a {
   color: var(--muted);
 }
 
-.theme-toggle {
-  width: 34px;
-  height: 34px;
+/* --- Icon buttons ---
+   One square icon control, replacing seven near-identical private copies that
+   had drifted to four sizes (22/26/28/34px) and three disabled opacities
+   (0.3/0.35/0.4): .theme-toggle, .field-move button, oversikt's .icon-button,
+   transaksjoner's .delete-button/.save-button/.cancel-button, and sparing's
+   .delete-button. Size modifiers exist because the three sizes are real (a
+   form label row, a table row, the nav); the tones do because a confirm/
+   dismiss pair reads wrong in neutral grey. */
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
-  border-radius: 10px;
+  padding: 0;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--surface-solid);
   color: var(--muted);
@@ -336,18 +346,77 @@ a {
   transition: background 150ms ease, color 150ms ease, transform 120ms ease;
 }
 
-.theme-toggle:hover {
+.icon-btn:hover:not(:disabled) {
   background: var(--bg-alt);
   color: var(--ink);
 }
 
-.theme-toggle:active {
+.icon-btn:active:not(:disabled) {
   transform: scale(0.94);
 }
 
-.theme-toggle .icon {
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.icon-btn .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.icon-btn-sm {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+
+.icon-btn-sm .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.icon-btn-lg {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+
+.icon-btn-lg .icon {
   width: 16px;
   height: 16px;
+}
+
+/* Confirm/dismiss pair for inline editing: tinted, because a green tick and a
+   red cross beside each other is the whole affordance. */
+.icon-btn-confirm {
+  border-color: var(--save-border);
+  background: var(--save-bg);
+  color: var(--income);
+}
+
+.icon-btn-confirm:hover:not(:disabled) {
+  background: var(--save-bg-hover);
+  color: var(--income);
+}
+
+.icon-btn-dismiss {
+  border-color: var(--cancel-border);
+  background: var(--cancel-bg);
+  color: var(--expense);
+}
+
+.icon-btn-dismiss:hover:not(:disabled) {
+  background: var(--cancel-bg-hover);
+  color: var(--expense);
+}
+
+/* Destructive, but only on hover: a table of 40 rows with a permanently red
+   delete button on every one reads as 40 warnings. */
+.icon-btn-danger:hover:not(:disabled) {
+  background: var(--cancel-bg);
+  border-color: var(--cancel-border);
+  color: var(--expense);
 }
 
 .card {
@@ -396,34 +465,7 @@ a {
   gap: 2px;
 }
 
-.field-move button {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface-solid);
-  color: var(--muted);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
-}
 
-.field-move button:hover:not(:disabled) {
-  background: var(--bg-alt);
-  color: var(--ink);
-}
-
-.field-move button:disabled {
-  opacity: 0.3;
-  cursor: default;
-}
-
-.field-move .icon {
-  width: 12px;
-  height: 12px;
-}
 
 label {
   font-size: 12px;
@@ -515,9 +557,29 @@ select:focus {
 }
 
 .status {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--cancel-border);
+  background: var(--cancel-bg);
   font-size: 13px;
   font-weight: 600;
   color: var(--expense);
+}
+
+.status::before {
+  content: "!";
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--expense);
+  color: var(--surface-solid);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
 }
 
 .badge {
@@ -533,6 +595,19 @@ select:focus {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-weight: 700;
+}
+
+/* A header's meta side can hold more than one thing (a count plus a badge). */
+.card-head-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge-warn {
+  border-color: transparent;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
 }
 
 .breakdown-dot {
@@ -565,12 +640,158 @@ select:focus {
   margin: 0;
 }
 
-.activity-head {
+/* Was private to oversikt.module.css, which is why the other collapsible card
+   (RecurringPanel) had no chevron at all — it could not reach the class. Both
+   collapsible card headers now look and behave the same. */
+.collapse-chevron {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+  transition: transform 200ms ease;
+}
+
+.collapse-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+/* Every card opens with a title and, usually, a right-aligned bit of meta
+   (the period, a count, the sort order). One header primitive for all of
+   them; .section-title inside it keeps its own margin cleared. */
+.card-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.card-head .section-title {
+  margin-bottom: 0;
+}
+
+/* --- Stats: one "label + big number (+ delta chip)" primitive ---
+   Replaces five near-identical private copies (the budget gauge's, the
+   month-over-month comparison's, the savings-rate pair's, the category
+   tiles' plain-text lines, and the drill-down panel's). */
+
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+}
+
+.stat {
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value.is-good {
+  color: var(--income);
+}
+
+.stat-value.is-bad {
+  color: var(--expense);
+}
+
+/* A stat sized for a tile or a panel rather than a page-level figure. */
+.stat-small .stat-value {
+  font-size: 15px;
+}
+
+.stat-delta {
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-delta.good {
+  background: var(--ok-bg);
+  color: var(--ok-ink);
+}
+
+.stat-delta.bad {
+  background: var(--bad-bg);
+  color: var(--bad-ink);
+}
+
+.stat-delta.neutral {
+  background: var(--bg-alt);
+  color: var(--muted);
+}
+
+/* Money and counts: same digit width so a column can be compared by eye,
+   and flush right so the ones place lines up. Amounts were left-aligned in
+   both the activity table and the subscription table, which made a column of
+   kroner unscannable. */
+.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* --- Toolbar: filter fields on one baseline, actions pinned to the end ---
+   The activity filters were an auto-fit grid that put inputs, a checkbox and
+   two buttons in equal-width cells, so nothing shared a baseline and the
+   export button wrapped onto a row of its own. */
+.toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 4px 0 16px;
+}
+
+.toolbar .field {
+  flex: 1 1 170px;
+  min-width: 0;
+}
+
+.toolbar-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.toolbar-check input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .text-income {
@@ -679,7 +900,7 @@ select:focus {
     min-height: 84px;
   }
 
-  .activity-head {
+  .card-head {
     align-items: flex-start;
   }
 
@@ -690,6 +911,15 @@ select:focus {
   .form-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .toolbar-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .toolbar-check {
+    height: auto;
   }
 }
 
