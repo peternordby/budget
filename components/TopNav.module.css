@@ -59,3 +59,33 @@
     display: inline;
   }
 }
+
+/* .user-chip supplies the pill; these add the affordance it needs now that it
+   is a link rather than a label. */
+.user-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+
+.user-link:hover,
+.user-link.active {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.user-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The avatar alone identifies the account once the header gets tight. */
+@media (max-width: 860px) {
+  .user-name {
+    display: none;
+  }
+}

@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import Avatar from "@/components/Avatar";
 import ThemeToggle from "@/components/ThemeToggle";
+import { displayName, type ProfileUser } from "@/lib/profile";
 import styles from "./TopNav.module.css";
 
 type TopNavProps = {
-  email?: string | null;
+  user?: ProfileUser | null;
 };
 
 // `short` is what the phone's bottom tab bar shows. Four tabs fit their full
@@ -21,8 +22,8 @@ const ROUTES = [
   { href: "/sparing", label: "Sparing", short: "Sparing" },
 ];
 
-export default function TopNav({ email }: TopNavProps) {
-  const emailLabel = email ?? "Logget inn";
+export default function TopNav({ user }: TopNavProps) {
+  const name = displayName(user);
   const pathname = usePathname();
   const params = useSearchParams();
   const query = params.toString();
@@ -48,18 +49,19 @@ export default function TopNav({ email }: TopNavProps) {
       </div>
       <div className="nav-links">
         <div className="nav-meta">
-          <span className="user-chip" title={emailLabel}>
-            {emailLabel}
-          </span>
+          {/* The chip is the way into /profil, which is also where signing out
+              now lives — a sixth tab would not fit the phone's bottom bar, and
+              a profile is not a view of the ledger anyway. */}
+          <Link
+            className={`user-chip ${styles["user-link"]} ${pathname === "/profil" ? styles["active"] : ""}`}
+            href="/profil"
+            title={`${name} — profil og innstillinger`}
+          >
+            <Avatar name={name} />
+            <span className={styles["user-name"]}>{name}</span>
+          </Link>
           <ThemeToggle />
         </div>
-        <button
-          className="btn btn-ghost"
-          type="button"
-          onClick={() => supabase.auth.signOut()}
-        >
-          Logg ut
-        </button>
       </div>
     </nav>
   );

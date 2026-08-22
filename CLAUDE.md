@@ -40,7 +40,10 @@ app/
     innsikt/innsikt.module.css
     sparing/page.tsx           Savings balances: stacked chart of all categories, add/import snapshots, history
     sparing/sparing.module.css
+    profil/page.tsx            Account settings: name, email, password, sign out
+    profil/profil.module.css
 components/
+  Avatar.tsx          Initials on a name-derived hue (nav chip and /profil)
   AuthGate.tsx        Session check wrapper (renders children, or redirects to /logg-inn)
   AuthPanel.tsx       Login form (the body of /logg-inn)
   LedgerProvider.tsx  The one data fetch (expense/category/budget/recurring templates); useLedger, useLedgerHistory, useLedgerSelection, toLedgerEntries
@@ -67,6 +70,7 @@ lib/
   dismissals.ts       localStorage-backed "stop suggesting this": subscription suspects and per-month missing-fixed warnings
   savings.ts          Savings snapshots (for /sparing): holdings, carry-forward series, stacked bands, CSV import parsing
   categoryColor.ts    getCategoryHue (one category's colour) and categoryHues (a set spaced evenly apart)
+  profile.ts          displayName/fullName/initials/avatarHue over the session user; no profile table
   csv.ts              RFC 4180 CSV encoding (activity table export) and parsing (savings import), with delimiter sniffing
 ```
 
@@ -89,8 +93,11 @@ Five tables in Supabase: `category`, `expense`, `budget`, `recurring_expense`, `
 - Currency: NOK, formatted as "1 234 kr" via `lib/format.ts`
 - No backend API routes — all queries go directly from client to Supabase
 - Category colors are generated deterministically from the category name hash, via `lib/categoryColor.ts`. Use `getCategoryHue` for one category in isolation (pills, dots, single bars); use `categoryHues` wherever several are drawn touching each other (the /sparing stacked chart), since a hash gives no guarantee that two names are far enough apart to tell apart
-- Five routes under `app/(app)/` share one `AuthGate` -> `LedgerProvider` -> `TopNav`/`PeriodPicker` layout: `/oversikt` (dashboard, budget gauge), `/transaksjoner` (viewing, adding, editing, deleting transactions), `/budsjett` (setting budgets per category, and category CRUD), `/innsikt` (spending trends, the fixed/variable mix, subscriptions), and `/sparing` (savings balances). `TopNav`'s bottom tab bar shows a `short` label per route on phones — five full names do not fit a 375px screen. `/sparing` is listed in `ROUTES_WITHOUT_PERIOD` in `app/(app)/layout.tsx`, so it renders without `PeriodPicker` — its snapshots sit on arbitrary dates and are shown in full, so a month selection would have nothing to act on
+- Six routes under `app/(app)/` share one `AuthGate` -> `LedgerProvider` -> `TopNav`/`PeriodPicker` layout: `/oversikt` (dashboard, budget gauge), `/transaksjoner` (viewing, adding, editing, deleting transactions), `/budsjett` (setting budgets per category, and category CRUD), `/innsikt` (spending trends, the fixed/variable mix, subscriptions), `/sparing` (savings balances), and `/profil` (account settings). `/profil` is deliberately **not** a tab — it is reached from the user chip in the header, since a sixth tab does not fit the phone's bottom bar and a profile is not a view of the ledger. Signing out lives there, not in the nav. `TopNav`'s bottom tab bar shows a `short` label per route on phones — five full names do not fit a 375px screen. `/sparing` and `/profil` are listed in `ROUTES_WITHOUT_PERIOD` in `app/(app)/layout.tsx`, so they render without `PeriodPicker` — savings snapshots sit on arbitrary dates and are shown in full, and account settings are not ledger data at all, so a month selection would have nothing to act on in either
 - A new account is seeded with default categories by a trigger on `auth.users` (`0007_seed_default_categories.sql`); without it a signup lands in an app where no form can be submitted, since every entry needs a `category_id`
+- The user's name lives in `auth.users.user_metadata.full_name`, not in a table: the session already carries it and `auth.updateUser({ data })` already writes it, so a `profile` table would add a migration, a policy and a fetch to store one string. The avatar is initials on `getCategoryHue(name)` — no storage bucket, no upload, nothing that can 404
+- Changing a password on `/profil` re-authenticates first (`signInWithPassword` with the entered current password) because Supabase's `updateUser` does not check the old one; without it an unlocked laptop is enough to lock the owner out
+- Changing an email sends a confirmation to **both** the old and the new address (Supabase's default "Secure email change") and applies only when both are opened; `user.new_email` carries the pending address in the meantime
 - Auth is client-only (`@supabase/supabase-js`, implicit flow, no `@supabase/ssr`, no middleware, no route handlers). The four public auth routes sit outside the `(app)` group so `AuthGate` never wraps them. `/nytt-passord` accepts both link shapes — `?token_hash=&type=` via `verifyOtp`, or a session already parsed from the URL fragment by `detectSessionInUrl`
 - Migrations in `supabase/migrations/` are applied by hand. An already-applied migration is never edited; a later numbered one supersedes it
 - Inline spreadsheet-style editing: double-click a row to edit, new-row input at top of table

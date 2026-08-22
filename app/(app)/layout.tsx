@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, type ReactNode } from "react";
+import type { User } from "@supabase/supabase-js";
 import { usePathname } from "next/navigation";
 import AuthGate from "@/components/AuthGate";
 import LedgerProvider, { useLedger } from "@/components/LedgerProvider";
@@ -24,16 +25,17 @@ function LedgerErrorBanner() {
 }
 
 // Routes whose data is not scoped to the selected month. /sparing records a
-// balance observed on a given date and shows the whole history, so a period
-// selection has nothing to act on there — rendering the picker would imply a
-// filter that does not exist.
-const ROUTES_WITHOUT_PERIOD = new Set(["/sparing"]);
+// balance observed on a given date and shows the whole history, and /profil is
+// account settings rather than a view of the ledger at all — a period
+// selection has nothing to act on in either, and rendering the picker would
+// imply a filter that does not exist.
+const ROUTES_WITHOUT_PERIOD = new Set(["/sparing", "/profil"]);
 
-function AppChrome({ children, email }: { children: ReactNode; email?: string | null }) {
+function AppChrome({ children, user }: { children: ReactNode; user: User }) {
   const pathname = usePathname();
   return (
     <>
-      <TopNav email={email} />
+      <TopNav user={user} />
       <LedgerErrorBanner />
       {!ROUTES_WITHOUT_PERIOD.has(pathname) ? <PeriodPicker /> : null}
       {children}
@@ -51,7 +53,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 Suspense boundary in the App Router. One boundary covers both
                 TopNav and the page content. */}
             <Suspense fallback={null}>
-              <AppChrome email={session.user.email}>{children}</AppChrome>
+              <AppChrome user={session.user}>{children}</AppChrome>
             </Suspense>
           </main>
         </LedgerProvider>

@@ -1,0 +1,23 @@
+/* The identity header: avatar beside the name and address, so the page opens
+   by saying whose account this is before it offers to change it. */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.identity-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.identity-name {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
