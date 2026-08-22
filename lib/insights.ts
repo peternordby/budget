@@ -2,12 +2,19 @@
 // All functions operate on a normalized LedgerEntry list (typically a trailing
 // 12-month window) so the UI can derive insights without extra queries.
 
+import {
+  isIncomeKind,
+  isSavingsKind,
+  isSpendingKind,
+  type CategoryKind,
+} from "@/lib/categories";
+
 export type LedgerEntry = {
   id: number;
   item: string;
   amount: number;
   category: string;
-  isIncome: boolean;
+  kind: CategoryKind;
   date: string; // YYYY-MM-DD
   tag: string | null;
 };
@@ -18,6 +25,7 @@ export type MonthlyTotal = MonthRef & {
   key: string;
   income: number;
   expenses: number;
+  savings: number;
   net: number;
   count: number;
 };
@@ -65,6 +73,7 @@ export function aggregateByMonth(
       key,
       income: 0,
       expenses: 0,
+      savings: 0,
       net: 0,
       count: 0,
     });
@@ -73,8 +82,10 @@ export function aggregateByMonth(
   entries.forEach((entry) => {
     const bucket = byKey.get(entryMonthKey(entry));
     if (!bucket) return;
-    if (entry.isIncome) {
+    if (isIncomeKind(entry.kind)) {
       bucket.income += entry.amount;
+    } else if (isSavingsKind(entry.kind)) {
+      bucket.savings += entry.amount;
     } else {
       bucket.expenses += entry.amount;
     }
@@ -118,7 +129,7 @@ export function compareMonths(
   const previousByCategory = new Map<string, number>();
 
   entries.forEach((entry) => {
-    if (entry.isIncome) return;
+    if (!isSpendingKind(entry.kind)) return;
     const key = entryMonthKey(entry);
     if (key === currentKey) {
       currentByCategory.set(
@@ -214,6 +225,11 @@ export function anomalyKey(anomaly: Anomaly): string {
 
 const MIN_SAMPLES = 5;
 const MIN_TRANSACTION_AMOUNT = 300;
+// Serves two distinct roles that happen to share a threshold today: the
+// first-appearance reporting floor for "new-category", and the minimum
+// absolute krone gap above history required for "category-spike". Keep them
+// unified for now — splitting this into two constants is a behaviour-neutral
+// refactor for later, not something to do incidentally here.
 const MIN_SPIKE_DIFF = 500;
 
 function mean(values: number[]) {
@@ -240,7 +256,7 @@ export function detectAnomalies(
   selected: MonthRef
 ): Anomaly[] {
   const selectedKey = monthKey(selected.year, selected.month);
-  const allExpenses = entries.filter((entry) => !entry.isIncome);
+  const allExpenses = entries.filter((entry) => isSpendingKind(entry.kind));
   const selectedExpenses = allExpenses.filter(
     (entry) => entryMonthKey(entry) === selectedKey
   );

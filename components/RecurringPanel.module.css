@@ -1,0 +1,69 @@
+.recurring-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 12px 0;
+}
+
+.recurring-row {
+  display: grid;
+  grid-template-columns: 34px minmax(120px, 1.6fr) minmax(90px, 1fr) minmax(80px, 0.8fr) minmax(70px, 0.7fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: 8px;
+}
+
+.recurring-row:hover {
+  background: var(--bg-alt);
+}
+
+.recurring-row.inactive {
+  opacity: 0.55;
+}
+
+.recurring-day {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.recurring-item {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recurring-amount {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.recurring-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.recurring-form :global(.form-actions) {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .recurring-row {
+    grid-template-columns: 30px 1fr auto;
+    grid-template-areas:
+      "day item amount"
+      ". category state"
+      ". action action";
+    row-gap: 2px;
+  }
+
+  .recurring-day { grid-area: day; }
+  .recurring-item { grid-area: item; }
+  .recurring-category { grid-area: category; }
+  .recurring-amount { grid-area: amount; }
+  .recurring-state { grid-area: state; }
+  .recurring-row > button { grid-area: action; justify-self: start; }
+}

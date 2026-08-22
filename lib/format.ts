@@ -10,6 +10,11 @@ export function formatCurrency(value: number) {
   return `${formatted} kr`;
 }
 
+export function formatSignedCurrency(value: number) {
+  const formatted = formatCurrency(Math.abs(value));
+  return value >= 0 ? `+${formatted}` : `-${formatted}`;
+}
+
 export function formatDate(value: string | null) {
   if (!value) return "Ingen dato";
 
@@ -30,4 +35,10 @@ export function toNumber(value: number | string | null) {
     return Number.isFinite(parsed) ? parsed : 0;
   }
   return 0;
+}
+
+export function formatDateParts(year: number, month: number, day: number) {
+  const monthValue = String(month).padStart(2, "0");
+  const dayValue = String(day).padStart(2, "0");
+  return `${year}-${monthValue}-${dayValue}`;
 }

@@ -1,0 +1,485 @@
+/* --- Budget Gauge Card --- */
+
+.gauge-card {
+  overflow: visible;
+}
+
+.gauge-layout {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.gauge-ring-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 140px;
+  height: 140px;
+}
+
+.gauge-ring {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--gauge-color) calc(var(--gauge-pct) * 1%),
+    var(--ring-bg) 0
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent 66%, #000 67%);
+  mask: radial-gradient(farthest-side, transparent 66%, #000 67%);
+  transition: background 400ms ease;
+}
+
+.gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.gauge-pct {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.gauge-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.gauge-details {
+  flex: 1;
+  display: grid;
+  gap: 14px;
+}
+
+.gauge-main-figure {
+  display: grid;
+  gap: 4px;
+}
+
+.gauge-main-figure strong {
+  font-size: clamp(20px, 2.4vw, 26px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.gauge-stats {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.gauge-stat {
+  display: grid;
+  gap: 2px;
+}
+
+.gauge-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--income);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.gauge-stat-danger .gauge-stat-value {
+  color: var(--expense);
+}
+
+.gauge-stat-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.gauge-insights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* --- Spending Breakdown Bar --- */
+
+.breakdown-bar {
+  display: flex;
+  height: 24px;
+  border-radius: 12px;
+  overflow: hidden;
+  gap: 2px;
+  margin-bottom: 14px;
+}
+
+.breakdown-segment {
+  height: 100%;
+  min-width: 4px;
+  transition: opacity 150ms ease, width 400ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  cursor: default;
+}
+
+.breakdown-segment:first-child {
+  border-radius: 12px 0 0 12px;
+}
+
+.breakdown-segment:last-child {
+  border-radius: 0 12px 12px 0;
+}
+
+.breakdown-segment:only-child {
+  border-radius: 12px;
+}
+
+.breakdown-segment:hover {
+  opacity: 0.7;
+}
+
+.breakdown-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 4px;
+}
+
+.breakdown-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.breakdown-legend-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.breakdown-legend-value {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.breakdown-legend-pct {
+  min-width: 32px;
+  text-align: right;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.cat-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 40px;
+}
+
+.cat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cat-remaining {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cat-pct-badge {
+  position: absolute;
+  top: 0;
+  right: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cat-pct-ok {
+  color: var(--ok-ink);
+  background: var(--ok-bg);
+}
+
+.cat-pct-warn {
+  color: var(--warn-ink);
+  background: var(--warn-bg);
+}
+
+.cat-pct-over {
+  color: var(--bad-ink);
+  background: var(--bad-bg);
+}
+
+.category-chart-list {
+  display: grid;
+  gap: 16px;
+  overflow: visible;
+}
+
+.category-chart-row {
+  display: grid;
+  gap: 8px;
+  position: relative;
+}
+
+.category-chart-row.is-editing {
+  z-index: 6;
+}
+
+.category-chart-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+  align-items: start;
+  position: relative;
+}
+
+.category-chart-header > strong {
+  padding-right: 40px;
+}
+
+.category-chart-values {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.category-chart-track {
+  position: relative;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--track-bg);
+  overflow: visible;
+}
+
+.category-chart-budget-mark {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--budget-mark);
+  border-radius: 1px;
+  z-index: 3;
+  transform: translateX(-1px);
+}
+
+.category-chart-budget-mark::after {
+  content: "Budsjett";
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.category-chart-row:hover .category-chart-budget-mark::after {
+  opacity: 1;
+}
+
+.category-chart-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  transition: width 400ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.category-chart-bar.spent {
+  border-radius: 7px;
+  background: var(--bar-color, #78716c);
+  z-index: 2;
+}
+
+.category-chart-bar.spent.income {
+  background: var(--income);
+}
+
+.category-chart-bar.spent.under-budget {
+  background: var(--income);
+}
+
+.category-chart-bar.spent.over {
+  background: var(--expense);
+  border-radius: 7px 3px 3px 7px;
+}
+
+.category-chart-row.under-budget .category-chart-track {
+  background: var(--track-under);
+}
+
+.category-chart-row.over-budget .category-chart-track {
+  background: var(--track-over);
+}
+
+/* --- Budget insight chips --- */
+
+.insight-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.insight-good {
+  color: var(--ok-ink);
+  background: var(--ok-bg);
+}
+
+.insight-warn {
+  color: var(--warn-ink);
+  background: var(--warn-bg);
+}
+
+.insight-bad {
+  color: var(--bad-ink);
+  background: var(--bad-bg);
+}
+
+/* --- Category card --- */
+
+/* Lift the whole card (a stacking context via backdrop-filter) above later
+   sibling cards so the budget popover paints over the Aktivitet section. */
+.category-card.editing {
+  z-index: 30;
+}
+
+.category-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.collapse-chevron {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+  transition: transform 200ms ease;
+}
+
+.collapse-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.category-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.icon-button {
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  display: grid;
+  place-items: center;
+  position: absolute;
+  top: 0;
+  right: 0;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--bg-alt);
+  color: var(--ink);
+}
+
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.budget-popover {
+  position: absolute;
+  right: 0;
+  top: 36px;
+  min-width: 236px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-popover);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  z-index: 24;
+  animation: card-rise 200ms ease both;
+}
+
+html[data-theme="dark"] .budget-popover {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+.budget-popover-row {
+  display: grid;
+  gap: 6px;
+}
+
+.budget-popover-actions {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .gauge-layout {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .gauge-stats {
+    justify-content: center;
+  }
+
+  .gauge-insights {
+    justify-content: center;
+  }
+
+  .gauge-main-figure {
+    align-items: center;
+  }
+
+  .breakdown-legend {
+    grid-template-columns: 1fr;
+  }
+
+  .budget-popover {
+    position: static;
+    min-width: 100%;
+  }
+
+  .budget-popover-actions {
+    flex-direction: column;
+  }
+}

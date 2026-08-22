@@ -9,6 +9,7 @@ import {
   type LedgerEntry,
   type MonthRef,
 } from "@/lib/insights";
+import styles from "./Anomalies.module.css";
 
 type AnomaliesProps = {
   entries: LedgerEntry[];
@@ -82,20 +83,20 @@ export default function Anomalies({
           pleier.
         </div>
       ) : (
-        <div className="anomaly-list">
+        <div className={styles["anomaly-list"]}>
           {anomalies.map((anomaly) => {
             const { title, detail, amount } = describeAnomaly(anomaly);
             return (
               <div
                 key={anomalyKey(anomaly)}
-                className={`anomaly-row anomaly-${anomaly.severity}`}
+                className={`${styles["anomaly-row"]} ${styles[`anomaly-${anomaly.severity}`]}`}
               >
-                <span className="anomaly-dot" aria-hidden="true" />
-                <div className="anomaly-body">
-                  <span className="anomaly-title">{title}</span>
-                  <span className="anomaly-detail">{detail}</span>
+                <span className={styles["anomaly-dot"]} aria-hidden="true" />
+                <div className={styles["anomaly-body"]}>
+                  <span className={styles["anomaly-title"]}>{title}</span>
+                  <span className={styles["anomaly-detail"]}>{detail}</span>
                 </div>
-                <span className="anomaly-amount">
+                <span className={styles["anomaly-amount"]}>
                   {formatCurrency(amount)}
                 </span>
               </div>

@@ -1,1 +1,5 @@
-export { default } from "./visualize/page";
+import { redirect } from "next/navigation";
+
+export default function Home() {
+  redirect("/oversikt");
+}

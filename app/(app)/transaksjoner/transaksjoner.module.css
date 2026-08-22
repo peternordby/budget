@@ -1,0 +1,441 @@
+.list {
+  display: grid;
+  gap: 8px;
+  --list-cols: minmax(88px, 0.82fr) minmax(72px, 0.68fr) minmax(140px, 1.55fr)
+    minmax(96px, 0.95fr) minmax(106px, 1fr);
+}
+
+.list-header {
+  display: grid;
+  grid-template-columns: var(--list-cols) 32px;
+  gap: 12px;
+  align-items: center;
+  padding: 0 14px;
+}
+
+.list-sort {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  transition: color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+
+.list-sort.draggable {
+  cursor: grab;
+}
+
+.list-sort.dragging {
+  opacity: 0.35;
+}
+
+.list-sort.drop-target {
+  box-shadow: inset 2px 0 0 var(--accent);
+  color: var(--ink);
+}
+
+.list-sort:hover {
+  color: var(--ink);
+}
+
+.list-sort.active {
+  color: var(--ink);
+}
+
+.list-sort-indicator {
+  min-width: 14px;
+  color: var(--accent);
+}
+
+.list-sort.empty {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.list-row {
+  display: grid;
+  grid-template-columns: var(--list-cols) 32px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  position: relative;
+  transition: box-shadow 200ms ease, background 200ms ease,
+    border-color 200ms ease;
+}
+
+.list-row.income-row {
+  background: var(--income-row-bg);
+  border-color: var(--income-row-border);
+}
+
+.list-row:hover {
+  box-shadow: var(--shadow-soft);
+}
+
+.list-row span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.list-row strong {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.list-row[title] {
+  cursor: default;
+}
+
+.list-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.activity-controls {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.activity-clear {
+  justify-self: end;
+  width: auto;
+}
+
+.activity-export {
+  justify-self: end;
+  width: auto;
+}
+
+.activity-toggle {
+  align-self: end;
+}
+
+.activity-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.activity-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.activity-total-row {
+  margin: 12px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.activity-total {
+  display: grid;
+  gap: 2px;
+}
+
+.activity-total strong {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-total-meta {
+  font-size: 13px;
+}
+
+.category-pill {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: hsl(var(--cat-hue) var(--pill-bg-s) var(--pill-bg-l));
+  color: hsl(var(--cat-hue) var(--pill-ink-s) var(--pill-ink-l));
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.delete-button {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.delete-button:hover:not(:disabled) {
+  background: var(--cancel-bg);
+  color: var(--expense);
+}
+
+.delete-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mobile-new-row-card {
+  display: none;
+  margin-bottom: 20px;
+}
+
+.mobile-new-row-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.mobile-new-row-grid .field:first-child {
+  grid-column: 1 / -1;
+}
+
+.new-row {
+  border-color: var(--border);
+  border-style: dashed;
+  background: var(--bg-alt);
+  padding-right: 14px;
+}
+
+.new-row:hover {
+  box-shadow: none;
+}
+
+.editing-row {
+  grid-template-columns: var(--list-cols) 64px;
+  border-color: var(--accent);
+  background: var(--editing-bg);
+  padding-right: 14px;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.editing-row:hover {
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.cell-input {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  box-shadow: none;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.cell-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.cell-input::placeholder {
+  color: var(--placeholder);
+  font-size: 12px;
+}
+
+.cell-input-number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+select.cell-input {
+  padding: 6px 6px;
+  font-size: 12px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.save-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--save-border);
+  background: var(--save-bg);
+  color: var(--income);
+  font-size: 14px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.save-button:hover:not(:disabled) {
+  background: var(--save-bg-hover);
+}
+
+.save-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.cancel-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--cancel-border);
+  background: var(--cancel-bg);
+  color: var(--expense);
+  font-size: 14px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.cancel-button:hover:not(:disabled) {
+  background: var(--cancel-bg-hover);
+}
+
+.cancel-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Keyboard-accessible edit trigger; visually hidden, revealed on focus. */
+.edit-button {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.edit-button:focus-visible {
+  position: absolute;
+  top: 4px;
+  right: 40px;
+  width: auto;
+  height: auto;
+  padding: 3px 10px;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 5;
+}
+
+@media (max-width: 860px) {
+  .list-header {
+    display: none;
+  }
+
+  .list-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding-top: 36px;
+    padding-right: 14px;
+  }
+
+  .list-row.new-row,
+  .list-row.editing-row {
+    grid-template-columns: 1fr 1fr;
+    padding-top: 14px;
+    gap: 8px;
+  }
+
+  .list-row.new-row .cell-input,
+  .list-row.editing-row .cell-input {
+    grid-column: span 1;
+  }
+
+  .list-row.new-row > .save-button,
+  .list-row.editing-row > .row-actions {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
+  .list-row.new-row > .save-button {
+    width: 100%;
+    border-radius: 8px;
+    height: 36px;
+  }
+
+  .activity-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-clear {
+    justify-self: stretch;
+  }
+
+  .activity-export {
+    justify-self: stretch;
+  }
+
+  .mobile-new-row-card {
+    display: block;
+  }
+
+  .new-row {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .activity-total-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

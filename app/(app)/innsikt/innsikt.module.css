@@ -1,0 +1,232 @@
+/* --- Section 1: Fast vs variabelt --- */
+
+.split-chart {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  height: 170px;
+  margin-top: 4px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.split-col {
+  flex: 0 0 auto;
+  min-width: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  height: 100%;
+  padding: 6px 2px 4px;
+  border-radius: 8px;
+  transition: background 150ms ease;
+}
+
+.split-col.active {
+  background: var(--accent-soft);
+}
+
+.split-track {
+  position: relative;
+  width: 14px;
+  flex: 1;
+  border-radius: 4px 4px 2px 2px;
+  overflow: hidden;
+  background: var(--track-bg);
+}
+
+.split-seg-fixed,
+.split-seg-variable {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: 0;
+  transition: height 450ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.split-seg-fixed {
+  background: var(--accent);
+  opacity: 0.85;
+}
+
+.split-seg-variable {
+  background: var(--expense);
+  opacity: 0.75;
+}
+
+.split-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.split-col.active .split-label {
+  color: var(--ink);
+}
+
+.split-label-year {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.split-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.split-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* --- Section 2: Sparerate --- */
+
+.savings-layout {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.savings-chart {
+  flex: 1;
+  min-width: 0;
+}
+
+.savings-stats {
+  display: flex;
+  gap: 20px;
+  flex-shrink: 0;
+}
+
+.savings-stat {
+  display: grid;
+  gap: 2px;
+}
+
+.savings-stat strong {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Section 3: Kategorier over tid --- */
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.category-tile {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.category-tile:hover {
+  box-shadow: var(--shadow-soft);
+}
+
+.category-tile.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.category-tile-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.category-tile-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* --- Section 4: Abonnementer --- */
+
+.subscription-table {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.subscription-head,
+.subscription-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.6fr) minmax(100px, 1fr) minmax(70px, 0.7fr) minmax(90px, 0.8fr) minmax(90px, 0.8fr) minmax(150px, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+}
+
+.subscription-head {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding-top: 0;
+  padding-bottom: 4px;
+}
+
+.subscription-row {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-solid);
+}
+
+.subscription-item {
+  font-weight: 600;
+}
+
+.subscription-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+@media (max-width: 860px) {
+  .savings-layout {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .savings-stats {
+    gap: 24px;
+  }
+
+  .subscription-head {
+    display: none;
+  }
+
+  .subscription-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

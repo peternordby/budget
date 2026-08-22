@@ -1,0 +1,35 @@
+.nav-routes {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-route {
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.nav-route:hover {
+  background: var(--bg-alt);
+  color: var(--ink);
+}
+
+.nav-route.active {
+  background: var(--bg-alt);
+  color: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .nav-routes {
+    order: 3;
+    width: 100%;
+  }
+
+  .nav-route {
+    flex: 1;
+    text-align: center;
+  }
+}
