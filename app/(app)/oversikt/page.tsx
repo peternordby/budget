@@ -19,6 +19,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { formatCurrency, toNumber } from "@/lib/format";
 import { monthKey, type MonthRef } from "@/lib/insights";
 import {
+  CATEGORY_KINDS,
+  KIND_LABELS,
   isIncomeKind,
   isSavingsKind,
   isSpendingKind,
@@ -244,7 +246,7 @@ export default function OversiktPage() {
 
   const budgetSummary = useMemo(() => {
     if (!hasPeriod) {
-      return { budgetTotal: 0, percentUsed: 0, remaining: 0, daysLeft: 0, dailyBudget: 0 };
+      return { budgetTotal: 0, percentUsed: 0, remaining: 0, daysLeft: 0, dailyBudget: 0, projected: 0 };
     }
 
     let budgetTotal = 0;
@@ -263,6 +265,10 @@ export default function OversiktPage() {
     // Daily-budget pacing only makes sense for a single concrete month.
     let daysLeft = 0;
     let dailyBudget = 0;
+    // Month-end forecast at the current burn rate. Only for the month in
+    // progress: a past month is already its own total, and a future month has
+    // no elapsed days to extrapolate from.
+    let projected = 0;
     if (single) {
       const y = single.year;
       const m = single.month;
@@ -270,13 +276,14 @@ export default function OversiktPage() {
       const now = new Date();
       if (y === now.getFullYear() && m === now.getMonth() + 1) {
         daysLeft = Math.max(totalDays - now.getDate(), 0);
+        projected = Math.round((summary.expensesTotal / now.getDate()) * totalDays);
       } else if (y > now.getFullYear() || (y === now.getFullYear() && m > now.getMonth() + 1)) {
         daysLeft = totalDays;
       }
       dailyBudget = daysLeft > 0 && remaining > 0 ? remaining / daysLeft : 0;
     }
 
-    return { budgetTotal, percentUsed, remaining, daysLeft, dailyBudget };
+    return { budgetTotal, percentUsed, remaining, daysLeft, dailyBudget, projected };
   }, [ledger.budgets, hasPeriod, kindOfCategory, selectedKeys, single, summary.expensesTotal]);
 
   const budgetInsights = useMemo(() => {
@@ -408,6 +415,28 @@ export default function OversiktPage() {
     setPreviousBudgetLoading(false);
   }
 
+  // The kind drives every split in the app (spending vs income vs savings), so
+  // it needs an editor somewhere. The budget popover is where a category is
+  // already being configured, which is cheaper than a settings route nobody
+  // would visit twice.
+  async function handleChangeKind(categoryName: string, kind: CategoryKind) {
+    const category = categoryByName.get(categoryName);
+    if (!category) return;
+
+    setBudgetStatus(null);
+    const { error } = await supabase
+      .from("category")
+      .update({ kind })
+      .eq("id", category.id)
+      .eq("user_id", ledger.userId);
+
+    if (error) {
+      setBudgetStatus(error.message);
+      return;
+    }
+    await ledger.refetch();
+  }
+
   async function handleSaveBudget() {
     if (!editingCategory || !single) return;
 
@@ -492,6 +521,18 @@ export default function OversiktPage() {
                     <span className={styles["gauge-stat-label"]}>Per dag ({budgetSummary.daysLeft} dager igjen)</span>
                   </div>
                 ) : null}
+                {budgetSummary.projected > 0 ? (
+                  <div className={`${styles["gauge-stat"]} ${budgetSummary.budgetTotal > 0 && budgetSummary.projected > budgetSummary.budgetTotal ? styles["gauge-stat-danger"] : ""}`}>
+                    <span className={styles["gauge-stat-value"]}>{formatCurrency(budgetSummary.projected)}</span>
+                    <span className={styles["gauge-stat-label"]}>
+                      {budgetSummary.budgetTotal > 0
+                        ? budgetSummary.projected > budgetSummary.budgetTotal
+                          ? `Prognose - ${formatCurrency(budgetSummary.projected - budgetSummary.budgetTotal)} over budsjett`
+                          : `Prognose - ${formatCurrency(budgetSummary.budgetTotal - budgetSummary.projected)} under budsjett`
+                        : "Prognose ved månedsslutt"}
+                    </span>
+                  </div>
+                ) : null}
               </div>
               {budgetInsights ? (
                 <div className={styles["gauge-insights"]}>
@@ -551,6 +592,7 @@ export default function OversiktPage() {
         entries={historyEntries}
         selected={single}
         periodLabel={periodLabel}
+        templates={ledger.templates}
       />
 
       <section
@@ -710,6 +752,25 @@ export default function OversiktPage() {
                             )}
                           </div>
                         ) : null}
+                        <div className={styles["budget-popover-row"]}>
+                          <span className="helper">Type</span>
+                          <select
+                            value={category.kind}
+                            onChange={(event) =>
+                              handleChangeKind(
+                                category.name,
+                                event.target.value as CategoryKind
+                              )
+                            }
+                            aria-label={`Type for ${category.name}`}
+                          >
+                            {CATEGORY_KINDS.map((kind) => (
+                              <option key={kind} value={kind}>
+                                {KIND_LABELS[kind]}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         <div className={styles["budget-popover-actions"]}>
                           <button
                             className="btn btn-ghost"

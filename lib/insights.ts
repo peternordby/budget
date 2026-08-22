@@ -208,7 +208,18 @@ export type Anomaly =
       amount: number;
       date: string;
       count: number;
+    }
+  | {
+      kind: "missing-fixed";
+      severity: "warn";
+      item: string;
+      amount: number;
     };
+
+// A fixed expense the caller expects to see booked in the selected month.
+// Deliberately not RecurringTemplate: which templates are due is a calendar
+// question the caller already answers, and this module stays free of it.
+export type ExpectedFixed = { item: string; amount: number };
 
 export function anomalyKey(anomaly: Anomaly): string {
   switch (anomaly.kind) {
@@ -220,6 +231,8 @@ export function anomalyKey(anomaly: Anomaly): string {
       return `new-${anomaly.category}`;
     case "duplicate":
       return `dup-${anomaly.date}-${anomaly.item}-${anomaly.amount}`;
+    case "missing-fixed":
+      return `missing-${anomaly.item}`;
   }
 }
 
@@ -253,7 +266,8 @@ function stdDev(values: number[], valueMean: number) {
 
 export function detectAnomalies(
   entries: LedgerEntry[],
-  selected: MonthRef
+  selected: MonthRef,
+  expectedFixed: ExpectedFixed[] = []
 ): Anomaly[] {
   const selectedKey = monthKey(selected.year, selected.month);
   const allExpenses = entries.filter((entry) => isSpendingKind(entry.kind));
@@ -357,6 +371,22 @@ export function detectAnomalies(
       amount: first.amount,
       date: first.date,
       count: group.length,
+    });
+  });
+
+  // 4. Fixed expenses the caller expected this month that never showed up.
+  // Matched on the normalised item name, the same key autocomplete and
+  // subscription detection group by.
+  const bookedItems = new Set(
+    selectedExpenses.map((entry) => entry.item.trim().toLowerCase())
+  );
+  expectedFixed.forEach((expected) => {
+    if (bookedItems.has(expected.item.trim().toLowerCase())) return;
+    anomalies.push({
+      kind: "missing-fixed",
+      severity: "warn",
+      item: expected.item,
+      amount: expected.amount,
     });
   });
 

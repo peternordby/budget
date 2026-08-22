@@ -9,12 +9,14 @@ import {
   type LedgerEntry,
   type MonthRef,
 } from "@/lib/insights";
+import type { RecurringTemplate } from "@/lib/recurring";
 import styles from "./Anomalies.module.css";
 
 type AnomaliesProps = {
   entries: LedgerEntry[];
   selected: MonthRef | null;
   periodLabel: string;
+  templates: RecurringTemplate[];
 };
 
 function formatRatio(ratio: number) {
@@ -52,6 +54,13 @@ function describeAnomaly(anomaly: Anomaly): {
         detail: `${anomaly.count} identiske transaksjoner registrert ${formatDate(anomaly.date)}. Sjekk om noe er ført dobbelt.`,
         amount: anomaly.amount,
       };
+    case "missing-fixed":
+      return {
+        title: `Mangler fast utgift: ${anomaly.item}`,
+        detail:
+          "Forfallsdagen er passert, men utgiften er ikke ført denne måneden.",
+        amount: anomaly.amount,
+      };
   }
 }
 
@@ -59,10 +68,31 @@ export default function Anomalies({
   entries,
   selected,
   periodLabel,
+  templates,
 }: AnomaliesProps) {
+  // Which fixed expenses are *due* is a calendar question, answered here so
+  // detectAnomalies stays pure. A template counts as due only once its day of
+  // the month has passed, and only for a month that is not still ahead of us —
+  // otherwise every active template would be reported as missing on the 1st.
+  const expectedFixed = useMemo(() => {
+    if (!selected) return [];
+    const now = new Date();
+    const isCurrentMonth =
+      selected.year === now.getFullYear() && selected.month === now.getMonth() + 1;
+    const isPastMonth =
+      selected.year < now.getFullYear() ||
+      (selected.year === now.getFullYear() && selected.month < now.getMonth() + 1);
+    if (!isCurrentMonth && !isPastMonth) return [];
+
+    return templates
+      .filter((template) => template.active)
+      .filter((template) => !isCurrentMonth || template.day_of_month <= now.getDate())
+      .map((template) => ({ item: template.item, amount: template.price }));
+  }, [selected, templates]);
+
   const anomalies = useMemo(
-    () => (selected ? detectAnomalies(entries, selected) : []),
-    [entries, selected]
+    () => (selected ? detectAnomalies(entries, selected, expectedFixed) : []),
+    [entries, selected, expectedFixed]
   );
 
   return (

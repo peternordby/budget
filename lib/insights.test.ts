@@ -182,6 +182,24 @@ describe("detectAnomalies", () => {
     expect(detectAnomalies([], selected)).toEqual([]);
   });
 
+  it("flags an expected fixed expense that was never booked", () => {
+    const anomalies = detectAnomalies([], selected, [
+      { item: "Netflix", amount: 199 },
+    ]);
+    expect(anomalies).toEqual([
+      { kind: "missing-fixed", severity: "warn", item: "Netflix", amount: 199 },
+    ]);
+  });
+
+  it("does not flag an expected fixed expense that was booked, ignoring case and padding", () => {
+    const anomalies = detectAnomalies(
+      [entry({ item: "  netflix ", amount: 199, date: "2026-08-04" })],
+      selected,
+      [{ item: "Netflix", amount: 199 }]
+    );
+    expect(anomalies.filter((a) => a.kind === "missing-fixed")).toEqual([]);
+  });
+
   it("flags identical item, amount and date as a possible duplicate", () => {
     const anomalies = detectAnomalies(
       [
