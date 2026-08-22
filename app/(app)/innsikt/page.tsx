@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import {
   useAnalysisWindow,
   useLedger,
@@ -10,19 +10,22 @@ import { usePeriod } from "@/lib/usePeriod";
 import Sparkline from "@/components/Sparkline";
 import CategoryDrilldown from "@/components/CategoryDrilldown";
 import { supabase } from "@/lib/supabaseClient";
-import { formatCurrency, formatDateParts } from "@/lib/format";
-import { monthKey, type MonthRef } from "@/lib/insights";
-import { lastDayOfMonth } from "@/lib/recurring";
 import {
-  categorySeries,
-  fixedVariableSplit,
-  savingsRate,
-} from "@/lib/trends";
+  MONTH_NAMES,
+  formatCurrency,
+  formatSignedCurrency,
+  formatDateParts,
+} from "@/lib/format";
+import { aggregateByMonth, monthKey, type MonthRef } from "@/lib/insights";
+import { lastDayOfMonth } from "@/lib/recurring";
+import { categorySeries, mixSummary, spendingMix } from "@/lib/trends";
 import {
   detectSubscriptions,
   normaliseItem,
   type SuspectedSubscription,
 } from "@/lib/subscriptions";
+import { IconX } from "@/components/icons";
+import { useDismissals } from "@/lib/dismissals";
 import styles from "./innsikt.module.css";
 
 const SHORT_MONTHS = [
@@ -43,21 +46,6 @@ const SHORT_MONTHS = [
 // Two years of history: long enough for a seasonal pattern to be visible in a
 // sparkline, short enough that a month still reads as a distinct bar.
 const ANALYSIS_MONTHS = 24;
-
-const FULL_MONTHS = [
-  "januar",
-  "februar",
-  "mars",
-  "april",
-  "mai",
-  "juni",
-  "juli",
-  "august",
-  "september",
-  "oktober",
-  "november",
-  "desember",
-];
 
 // The detection window. Mirrors the phrasing on the /transaksjoner search
 // scope line: the copy states the real month count and range rather than a
@@ -92,6 +80,7 @@ export default function InnsiktPage() {
   // page does not add a picker or a widening effect of its own; both already
   // live in the layout.
   const { selectedKeys, anchor } = usePeriod(fallback);
+  const { isDismissed, dismiss, restoreAll } = useDismissals();
 
   // Trailing two years ending at the selected month, clamped to the fetched
   // range — deliberately *not* ledger.windowStart/windowEnd, which are a fetch
@@ -113,53 +102,90 @@ export default function InnsiktPage() {
     [ledger.expenses]
   );
 
-  // --- Section 1: Fast vs variabelt ---
+  // --- Section 1: Inntekt mot utgift ---
 
-  const split = useMemo(
-    () => fixedVariableSplit(entries, months),
+  // The delta itself is the subject, so each month is one bar measured from a
+  // zero line rather than a pair of bars whose gap has to be eyeballed —
+  // PeriodPicker already draws that pair at the top of every page.
+  const monthly = useMemo(
+    () => aggregateByMonth(entries, months),
     [entries, months]
   );
-  const maxSplitTotal = useMemo(
-    () => Math.max(1, ...split.map((point) => point.fixed + point.variable)),
-    [split]
-  );
+  // The zero line sits where the largest surplus and the largest deficit meet,
+  // so both directions keep their true proportions. All-surplus and
+  // all-deficit windows still get a full-height plot.
+  const netScale = useMemo(() => {
+    let up = 0;
+    let down = 0;
+    monthly.forEach((point) => {
+      up = Math.max(up, point.net);
+      down = Math.max(down, -point.net);
+    });
+    const span = up + down;
+    if (span <= 0) return { up: 1, down: 0, zeroPct: 100 };
+    return { up, down, zeroPct: (down / span) * 100 };
+  }, [monthly]);
+  const netTotals = useMemo(() => {
+    const surplus = monthly.filter((point) => point.net > 0).length;
+    const sum = monthly.reduce((total, point) => total + point.net, 0);
+    return { surplus, deficit: monthly.length - surplus, sum };
+  }, [monthly]);
 
-  // --- Section 2: Sparerate ---
+  // --- Section 2: Faste og variable utgifter ---
 
-  const savings = useMemo(() => savingsRate(entries, months), [entries, months]);
-  // rate is null, not 0, for a month with no income (see lib/trends.ts). A
-  // null plotted as zero would say "you saved nothing" about a month where
-  // the true statement is "we cannot say" — so those months are filtered out
-  // of the sparkline entirely (Sparkline's points are a plain number[], it
-  // cannot render a break), and the caption below states how many were
-  // dropped rather than leaving the gap unexplained.
-  const savingsWithRate = useMemo(
-    () =>
-      savings
-        .map((point, index) => ({ point, ref: months[index] }))
-        .filter(
-          (
-            entry
-          ): entry is { point: typeof entry.point & { rate: number }; ref: MonthRef } =>
-            entry.point.rate !== null
-        ),
-    [savings, months]
-  );
-  const savingsSparkPoints = useMemo(
-    () => savingsWithRate.map((entry) => entry.point.rate * 100),
-    [savingsWithRate]
-  );
-  const savingsExcludedCount = savings.length - savingsWithRate.length;
-  const latestSavings = savings.length ? savings[savings.length - 1] : null;
-  const meanSavingsRate = savingsWithRate.length
-    ? savingsWithRate.reduce((sum, entry) => sum + entry.point.rate, 0) /
-      savingsWithRate.length
-    : null;
+  const mix = useMemo(() => spendingMix(entries, months), [entries, months]);
+  const mixTotals = useMemo(() => mixSummary(mix), [mix]);
+  // Four segments of one average month, in the order money actually leaves:
+  // what is already committed, what was chosen, what was put aside, what was
+  // never spent. `base` is the denominator mixSummary picked, so these always
+  // total 100 %.
+  const mixSegments = useMemo(() => {
+    if (mixTotals.base <= 0) return [];
+    return [
+      { key: "fixed", label: "Fast", amount: mixTotals.fixed, color: "var(--accent)" },
+      { key: "variable", label: "Variabelt", amount: mixTotals.variable, color: "var(--expense)" },
+      { key: "savings", label: "Sparing", amount: mixTotals.savings, color: "var(--income)" },
+      { key: "leftover", label: "Ubrukt", amount: mixTotals.leftover, color: "var(--muted)" },
+    ]
+      .filter((segment) => segment.amount > 0)
+      .map((segment) => ({
+        ...segment,
+        percent: (segment.amount / mixTotals.base) * 100,
+      }));
+  }, [mixTotals]);
+  const fixedPoints = useMemo(() => mix.map((point) => point.fixed), [mix]);
 
   // --- Section 3: Kategorier over tid ---
 
   const series = useMemo(() => categorySeries(entries, months), [entries, months]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  // Which point of which tile's sparkline the pointer is over. One piece of
+  // state for the whole grid: only one tile can be hovered at a time, and
+  // per-tile state would re-render every tile on every move anyway.
+  const [hover, setHover] = useState<{ category: string; index: number } | null>(
+    null
+  );
+
+  const hoveredPoint = useMemo(() => {
+    if (!hover) return null;
+    const entry = series.find((item) => item.category === hover.category);
+    const ref = months[hover.index];
+    if (!entry || !ref) return null;
+    // A single-point series has no width to divide, so it sits centred.
+    const leftPct =
+      entry.points.length > 1
+        ? (hover.index / (entry.points.length - 1)) * 100
+        : 50;
+    return {
+      category: hover.category,
+      amount: entry.points[hover.index] ?? 0,
+      label: `${MONTH_NAMES[ref.month - 1]} ${ref.year}`,
+      leftPct,
+      // Anchor to its own edge in the outer fifths, or the tooltip hangs
+      // outside a 220px tile.
+      side: leftPct > 80 ? "end" : leftPct < 20 ? "start" : "center",
+    };
+  }, [hover, series, months]);
 
   // --- Section 4: Abonnementer vi ikke har registrert ---
 
@@ -172,10 +198,21 @@ export default function InnsiktPage() {
     const last = lastSixMonths[lastSixMonths.length - 1];
     return `${monthKey(first.year, first.month)}–${monthKey(last.year, last.month)}`;
   }, [lastSixMonths]);
-  const subscriptions = useMemo(
+  const allSubscriptions = useMemo(
     () => detectSubscriptions(entries, ledger.templates, lastSixMonths),
     [entries, ledger.templates, lastSixMonths]
   );
+  // Detection is pure and recomputed every render, so "I know about this one
+  // and it is deliberate" has to be filtered in at the call site. Keyed by the
+  // normalised item name, which is what detectSubscriptions groups on.
+  const subscriptions = useMemo(
+    () =>
+      allSubscriptions.filter(
+        (sub) => !isDismissed("subscription", normaliseItem(sub.item))
+      ),
+    [allSubscriptions, isDismissed]
+  );
+  const hiddenSubscriptions = allSubscriptions.length - subscriptions.length;
   const categoryByName = useMemo(() => {
     const map = new Map<string, { id: number }>();
     ledger.categories.forEach((category) => map.set(category.category, category));
@@ -379,67 +416,89 @@ export default function InnsiktPage() {
     <>
       <section className="card section-gap">
         <div className="card-head">
-          <h2 className="section-title">Fast vs variabelt</h2>
+          <h2 className="section-title">Inntekt mot utgift</h2>
           <span className="helper">{windowLabel}</span>
         </div>
         {ledger.loading ? (
           <p className="helper">Laster transaksjoner...</p>
         ) : ledger.error ? (
           <p className="helper">
-            Transaksjoner kunne ikke lastes, så fordelingen kan være feil.
+            Transaksjoner kunne ikke lastes, så tallene kan være feil.
           </p>
         ) : (
           <>
-            <div className={styles["split-chart"]}>
-              {split.map((point, index) => {
+            <div
+              className={styles["net-chart"]}
+              style={{ "--zero-pct": `${netScale.zeroPct}%` } as CSSProperties}
+            >
+              {monthly.map((point, index) => {
                 const ref = months[index];
-                const total = point.fixed + point.variable;
-                const fixedPct = (point.fixed / maxSplitTotal) * 100;
-                const variablePct = (point.variable / maxSplitTotal) * 100;
                 const isSelected = selectedKeys.has(point.key);
-                const monthLabel = FULL_MONTHS[ref.month - 1];
+                const surplus = point.net >= 0;
+                // Each half of the plot is scaled by its own extreme, so the
+                // two sides meet at the zero line without either being
+                // squashed by the other's magnitude.
+                const heightPct = surplus
+                  ? netScale.up > 0
+                    ? (point.net / netScale.up) * (100 - netScale.zeroPct)
+                    : 0
+                  : netScale.down > 0
+                    ? (-point.net / netScale.down) * netScale.zeroPct
+                    : 0;
+                const label = `${MONTH_NAMES[ref.month - 1]} ${ref.year}: inntekter ${formatCurrency(point.income)}, utgifter ${formatCurrency(point.expenses)}, netto ${formatSignedCurrency(point.net)}`;
                 return (
                   <div
                     key={point.key}
-                    className={`${styles["split-col"]} ${isSelected ? styles["active"] : ""}`}
-                    // The column is a readout, not a control — nothing here is
-                    // clickable, so this stays a div rather than becoming a
-                    // button that does nothing. role/aria-label is what makes
-                    // the same figures a `title` shows available to a screen
-                    // reader, which a bare title attribute is not.
+                    className={`${styles["net-col"]} ${isSelected ? styles["active"] : ""} ${point.count === 0 ? styles["empty"] : ""}`}
+                    // A readout, not a control: the period picker above owns
+                    // month selection, so nothing here is clickable. role/
+                    // aria-label is what makes the title's figures reachable
+                    // by a screen reader, which a bare title is not.
                     role="img"
-                    title={`${monthLabel} ${ref.year}: fast ${formatCurrency(point.fixed)}, variabelt ${formatCurrency(point.variable)}, totalt ${formatCurrency(total)}`}
-                    aria-label={`${monthLabel} ${ref.year}: fast ${formatCurrency(point.fixed)}, variabelt ${formatCurrency(point.variable)}, totalt ${formatCurrency(total)}`}
+                    title={label}
+                    aria-label={label}
                   >
-                    <div className={styles["split-track"]}>
+                    <div className={styles["net-track"]}>
+                      <div className={styles["net-zero"]} />
                       <div
-                        className={styles["split-seg-variable"]}
-                        style={{ height: `${variablePct}%`, bottom: `${fixedPct}%` }}
-                      />
-                      <div
-                        className={styles["split-seg-fixed"]}
-                        style={{ height: `${fixedPct}%` }}
+                        className={`${styles["net-bar"]} ${surplus ? styles["surplus"] : styles["deficit"]}`}
+                        style={
+                          surplus
+                            ? { bottom: `${netScale.zeroPct}%`, height: `${heightPct}%` }
+                            : {
+                                top: `${100 - netScale.zeroPct}%`,
+                                height: `${heightPct}%`,
+                              }
+                        }
                       />
                     </div>
-                    <span className={styles["split-label"]}>
+                    <span className={styles["net-label"]}>
                       {SHORT_MONTHS[ref.month - 1]}
                       {ref.month === 1 || index === 0 ? (
-                        <span className={styles["split-label-year"]}>{ref.year}</span>
+                        <span className={styles["net-label-year"]}>{ref.year}</span>
                       ) : null}
                     </span>
                   </div>
                 );
               })}
             </div>
-            <div className={styles["split-legend"]}>
-              <span className={styles["split-legend-item"]}>
-                <span className="breakdown-dot" style={{ background: "var(--accent)" }} />
-                Fast
-              </span>
-              <span className={styles["split-legend-item"]}>
-                <span className="breakdown-dot" style={{ background: "var(--expense)" }} />
-                Variabelt
-              </span>
+            <div className="stat-row">
+              <div className="stat stat-small">
+                <span className="stat-label">Sum netto</span>
+                <strong
+                  className={`stat-value ${netTotals.sum >= 0 ? "is-good" : "is-bad"}`}
+                >
+                  {formatSignedCurrency(netTotals.sum)}
+                </strong>
+              </div>
+              <div className="stat stat-small">
+                <span className="stat-label">Måneder i pluss</span>
+                <strong className="stat-value">{netTotals.surplus}</strong>
+              </div>
+              <div className="stat stat-small">
+                <span className="stat-label">Måneder i minus</span>
+                <strong className="stat-value">{netTotals.deficit}</strong>
+              </div>
             </div>
           </>
         )}
@@ -447,46 +506,97 @@ export default function InnsiktPage() {
 
       <section className="card section-gap">
         <div className="card-head">
-          <h2 className="section-title">Sparerate</h2>
-          <span className="helper">{windowLabel}</span>
+          <h2 className="section-title">Faste og variable utgifter</h2>
+          <span className="helper">Snitt pr. måned · {windowLabel}</span>
         </div>
-        {savingsSparkPoints.length ? (
-          <div className={styles["savings-layout"]}>
-            <div className={styles["savings-chart"]}>
-              <Sparkline
-                points={savingsSparkPoints}
-                ariaLabel="Sparerate over tid"
-              />
+        {mixSegments.length ? (
+          <>
+            <div className={styles["mix-bar"]}>
+              {mixSegments.map((segment) => (
+                <span
+                  key={segment.key}
+                  className={styles["mix-segment"]}
+                  style={{ width: `${segment.percent}%`, background: segment.color }}
+                  title={`${segment.label}: ${formatCurrency(Math.round(segment.amount))} (${Math.round(segment.percent)} %)`}
+                />
+              ))}
             </div>
-            <div className={`stat-row ${styles["savings-stats"]}`}>
+            <div className={styles["mix-legend"]}>
+              {mixSegments.map((segment) => (
+                <span key={segment.key} className={styles["mix-legend-item"]}>
+                  <span className="breakdown-dot" style={{ background: segment.color }} />
+                  <span className={styles["mix-legend-name"]}>{segment.label}</span>
+                  <span className="num">{formatCurrency(Math.round(segment.amount))}</span>
+                  <span className="helper">{Math.round(segment.percent)} %</span>
+                </span>
+              ))}
+            </div>
+
+            <div className="stat-row">
               <div className="stat">
-                <span className="stat-label">Siste måned</span>
+                <span className="stat-label">Bundet hver måned</span>
                 <strong className="stat-value">
-                  {latestSavings && latestSavings.rate !== null
-                    ? `${Math.round(latestSavings.rate * 100)} %`
-                    : "Ingen inntekt"}
+                  {formatCurrency(Math.round(mixTotals.fixed))}
                 </strong>
+                <span className="helper">
+                  {mixTotals.fixedShareOfIncome !== null
+                    ? `${Math.round(mixTotals.fixedShareOfIncome * 100)} % av inntekten`
+                    : "Ingen inntekt registrert"}
+                </span>
               </div>
               <div className="stat">
-                <span className="stat-label">Snitt</span>
+                <span className="stat-label">Igjen etter faste</span>
                 <strong className="stat-value">
-                  {meanSavingsRate !== null
-                    ? `${Math.round(meanSavingsRate * 100)} %`
+                  {mixTotals.headroom !== null
+                    ? formatCurrency(Math.round(mixTotals.headroom))
                     : "—"}
                 </strong>
+                <span className="helper">Til variabelt og sparing</span>
+              </div>
+              <div className="stat">
+                <span className="stat-label">Endring i faste</span>
+                {mixTotals.trend ? (
+                  <>
+                    <strong
+                      className={`stat-value ${
+                        mixTotals.trend.delta > 0
+                          ? "is-bad"
+                          : mixTotals.trend.delta < 0
+                            ? "is-good"
+                            : ""
+                      }`}
+                    >
+                      {formatSignedCurrency(Math.round(mixTotals.trend.delta))}
+                    </strong>
+                    <span className="helper">
+                      {`Siste ${mixTotals.trend.months} mnd mot forrige ${mixTotals.trend.months}`}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <strong className="stat-value">—</strong>
+                    <span className="helper">Trenger minst 4 måneder</span>
+                  </>
+                )}
               </div>
             </div>
-          </div>
+
+            {/* The stat above says whether the committed cost moved; this says
+                how it moved. A fixed cost creeping up a step at a time is the
+                thing a monthly column chart made you eyeball and miss. */}
+            <div className={styles["mix-trend"]}>
+              <span className="stat-label">Faste utgifter pr. måned</span>
+              <Sparkline
+                points={fixedPoints}
+                ariaLabel="Faste utgifter per måned"
+              />
+            </div>
+          </>
         ) : (
-          <div className="empty">Ingen måneder med registrert inntekt i perioden.</div>
+          <div className="empty">
+            Ingen inntekt eller utgifter registrert i perioden.
+          </div>
         )}
-        {savingsExcludedCount > 0 ? (
-          <p className="helper">
-            {savingsExcludedCount === 1
-              ? "1 måned uten registrert inntekt er utelatt fra grafen."
-              : `${savingsExcludedCount} måneder uten registrert inntekt er utelatt fra grafen.`}
-          </p>
-        ) : null}
       </section>
 
       <section className="card section-gap">
@@ -511,10 +621,47 @@ export default function InnsiktPage() {
                   }
                 >
                   <span className={styles["category-tile-name"]}>{entry.category}</span>
-                  <Sparkline
-                    points={entry.points}
-                    ariaLabel={`Utvikling for ${entry.category}`}
-                  />
+                  <span
+                    className={styles["tile-chart"]}
+                    onMouseLeave={() => setHover(null)}
+                  >
+                    <Sparkline
+                      points={entry.points}
+                      ariaLabel={`Utvikling for ${entry.category}`}
+                    />
+                    {/* One hit area per month, laid over the sparkline, so
+                        pointing anywhere in the tile snaps to the nearest
+                        point. The tooltip is HTML positioned in percentages
+                        over the same box rather than text inside the stretched
+                        viewBox — the same reason StackedAreaChart keeps its
+                        labels outside the SVG. */}
+                    <span className={styles["tile-hits"]} aria-hidden="true">
+                      {entry.points.map((_, pointIndex) => (
+                        <span
+                          key={months[pointIndex] ? monthKey(months[pointIndex].year, months[pointIndex].month) : pointIndex}
+                          className={styles["tile-hit"]}
+                          onMouseEnter={() =>
+                            setHover({ category: entry.category, index: pointIndex })
+                          }
+                        />
+                      ))}
+                    </span>
+                    {hoveredPoint && hoveredPoint.category === entry.category ? (
+                      <span
+                        className={styles["tile-tooltip"]}
+                        style={{ left: `${hoveredPoint.leftPct}%` }}
+                        data-side={hoveredPoint.side}
+                        aria-hidden="true"
+                      >
+                        <span className={styles["tile-tooltip-month"]}>
+                          {hoveredPoint.label}
+                        </span>
+                        <span className="num">
+                          {formatCurrency(hoveredPoint.amount)}
+                        </span>
+                      </span>
+                    ) : null}
+                  </span>
                   <span className={styles["category-tile-stats"]}>
                     <span className={styles["tile-stat"]}>
                       <span className="stat-label">Totalt</span>
@@ -543,7 +690,18 @@ export default function InnsiktPage() {
       </section>
 
       <section className="card section-gap">
-        <h2 className="section-title">Abonnementer vi ikke har registrert</h2>
+        <div className="card-head">
+          <h2 className="section-title">Abonnementer vi ikke har registrert</h2>
+          {hiddenSubscriptions ? (
+            <button
+              className="btn btn-ghost btn-small"
+              type="button"
+              onClick={() => restoreAll("subscription")}
+            >
+              Vis {hiddenSubscriptions} skjulte
+            </button>
+          ) : null}
+        </div>
         {subscriptionStatus ? <div className="status">{subscriptionStatus}</div> : null}
         {subscriptions.length ? (
           <div className={styles["subscription-table"]}>
@@ -587,6 +745,15 @@ export default function InnsiktPage() {
                     {!canRegister ? (
                       <span className="helper">Kategori mangler</span>
                     ) : null}
+                    <button
+                      className="icon-btn icon-btn-sm"
+                      type="button"
+                      onClick={() => dismiss("subscription", normaliseItem(sub.item))}
+                      aria-label={`Skjul ${sub.item}`}
+                      title="Skjul: dette er ikke et abonnement vi vil registrere"
+                    >
+                      <IconX />
+                    </button>
                   </span>
                 </div>
               );

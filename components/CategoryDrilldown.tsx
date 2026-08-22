@@ -114,9 +114,14 @@ export default function CategoryDrilldown({
   useEffect(() => {
     if (!isOpen) return;
     function handlePointerDown(event: MouseEvent) {
-      if (!panelRef.current?.contains(event.target as Node)) {
-        onCloseRef.current();
-      }
+      const target = event.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      // The trigger is not "outside" for this purpose. Without this guard a
+      // second click on the same category tile closed the panel here on
+      // mousedown and the tile's own click handler — which toggles — then saw
+      // a null category and reopened it, so the panel never closed.
+      if (restoreFocusRef.current?.contains(target)) return;
+      onCloseRef.current();
     }
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);

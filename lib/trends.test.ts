@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categorySeries, fixedVariableSplit, savingsRate } from "@/lib/trends";
+import { categorySeries, mixSummary, spendingMix } from "@/lib/trends";
 import { type LedgerEntry, type MonthRef } from "@/lib/insights";
 import { type CategoryKind } from "@/lib/categories";
 
@@ -163,90 +163,156 @@ describe("categorySeries", () => {
   });
 });
 
-describe("fixedVariableSplit", () => {
-  it("returns one point per month, zero-filled", () => {
-    const split = fixedVariableSplit([], MONTHS);
-    expect(split.map((p) => p.key)).toEqual(["2026-06", "2026-07", "2026-08"]);
-    expect(split.every((p) => p.fixed === 0 && p.variable === 0)).toBe(true);
-  });
+const SIX_MONTHS: MonthRef[] = [
+  { year: 2026, month: 3 },
+  { year: 2026, month: 4 },
+  { year: 2026, month: 5 },
+  { year: 2026, month: 6 },
+  { year: 2026, month: 7 },
+  { year: 2026, month: 8 },
+];
 
-  it("separates fixed from variable", () => {
-    const split = fixedVariableSplit(
-      [
-        entry({ kind: "fixed", amount: 12000, date: "2026-07-01" }),
-        entry({ kind: "variable", amount: 3000, date: "2026-07-02" }),
-      ],
-      MONTHS
-    );
-    expect(split[1]).toEqual({ key: "2026-07", fixed: 12000, variable: 3000 });
-  });
-
-  it("counts neither income nor savings", () => {
-    const split = fixedVariableSplit(
-      [
-        entry({ kind: "income", amount: 30000, date: "2026-07-01" }),
-        entry({ kind: "savings", amount: 5000, date: "2026-07-01" }),
-      ],
-      MONTHS
-    );
-    expect(split[1]).toEqual({ key: "2026-07", fixed: 0, variable: 0 });
-  });
-});
-
-describe("savingsRate", () => {
-  it("returns one point per month", () => {
-    expect(savingsRate([], MONTHS).map((p) => p.key)).toEqual([
-      "2026-06",
-      "2026-07",
-      "2026-08",
+describe("spendingMix", () => {
+  it("zero-fills every month in the window", () => {
+    expect(spendingMix([], MONTHS)).toEqual([
+      { key: "2026-06", income: 0, fixed: 0, variable: 0, savings: 0 },
+      { key: "2026-07", income: 0, fixed: 0, variable: 0, savings: 0 },
+      { key: "2026-08", income: 0, fixed: 0, variable: 0, savings: 0 },
     ]);
   });
 
-  it("reports null rather than zero when there is no income", () => {
-    // "We cannot say" is a different claim from "you saved nothing".
-    const points = savingsRate(
-      [entry({ amount: 1000, date: "2026-07-01" })],
-      MONTHS
-    );
-    expect(points[1].rate).toBeNull();
-  });
-
-  it("computes net over income", () => {
-    const points = savingsRate(
+  it("splits each kind into its own bucket", () => {
+    const points = spendingMix(
       [
-        entry({ kind: "income", category: "Inntekter", amount: 40000, date: "2026-07-01" }),
-        entry({ amount: 10000, date: "2026-07-02" }),
+        entry({ kind: "income", amount: 40000, date: "2026-08-01" }),
+        entry({ kind: "fixed", amount: 12000, date: "2026-08-02" }),
+        entry({ kind: "variable", amount: 5000, date: "2026-08-03" }),
+        entry({ kind: "savings", amount: 3000, date: "2026-08-04" }),
       ],
       MONTHS
     );
-    expect(points[1].income).toBe(40000);
-    expect(points[1].net).toBe(30000);
-    expect(points[1].rate).toBeCloseTo(0.75);
+    expect(points[2]).toEqual({
+      key: "2026-08",
+      income: 40000,
+      fixed: 12000,
+      variable: 5000,
+      savings: 3000,
+    });
   });
 
-  it("does not let a savings transfer reduce the rate", () => {
-    // Moving money to savings is not spending it — the whole point of the
-    // savings kind. A month where everything left over went to savings is a
-    // 100% rate, not a 0% one.
-    const points = savingsRate(
+  it("ignores entries outside the window", () => {
+    const points = spendingMix(
+      [entry({ kind: "fixed", amount: 999, date: "2025-01-05" })],
+      MONTHS
+    );
+    expect(points.every((point) => point.fixed === 0)).toBe(true);
+  });
+});
+
+describe("mixSummary", () => {
+  it("has nothing to average over an empty window", () => {
+    const summary = mixSummary([]);
+    expect(summary.months).toBe(0);
+    expect(summary.base).toBe(0);
+    expect(summary.trend).toBeNull();
+    expect(summary.headroom).toBeNull();
+  });
+
+  it("averages per month and leaves the unspent income as leftover", () => {
+    const points = spendingMix(
       [
-        entry({ kind: "income", category: "Inntekter", amount: 10000, date: "2026-07-01" }),
-        entry({ kind: "savings", category: "Buffer", amount: 10000, date: "2026-07-02" }),
+        entry({ kind: "income", amount: 30000, date: "2026-07-01" }),
+        entry({ kind: "income", amount: 30000, date: "2026-08-01" }),
+        entry({ kind: "fixed", amount: 10000, date: "2026-07-02" }),
+        entry({ kind: "fixed", amount: 10000, date: "2026-08-02" }),
+        entry({ kind: "variable", amount: 4000, date: "2026-08-03" }),
       ],
       MONTHS
     );
-    expect(points[1].rate).toBe(1);
-    expect(points[1].savings).toBe(10000);
+    const summary = mixSummary(points);
+    // Three months in the window, two of them with income.
+    expect(summary.income).toBe(20000);
+    expect(summary.fixed).toBeCloseTo(6666.67, 1);
+    expect(summary.base).toBe(20000);
+    expect(summary.leftover).toBeCloseTo(20000 - 6666.67 - 1333.33, 1);
   });
 
-  it("goes negative when spending exceeds income", () => {
-    const points = savingsRate(
+  it("draws against outgoings when spending exceeds income, so leftover is never negative", () => {
+    const points = spendingMix(
       [
-        entry({ kind: "income", category: "Inntekter", amount: 10000, date: "2026-07-01" }),
-        entry({ amount: 15000, date: "2026-07-02" }),
+        entry({ kind: "income", amount: 1000, date: "2026-08-01" }),
+        entry({ kind: "fixed", amount: 5000, date: "2026-08-02" }),
       ],
+      [{ year: 2026, month: 8 }]
+    );
+    const summary = mixSummary(points);
+    expect(summary.base).toBe(5000);
+    expect(summary.leftover).toBe(0);
+  });
+
+  it("reports no income as null rather than as zero percent locked in", () => {
+    const points = spendingMix(
+      [entry({ kind: "fixed", amount: 5000, date: "2026-08-02" })],
       MONTHS
     );
-    expect(points[1].rate).toBeCloseTo(-0.5);
+    const summary = mixSummary(points);
+    expect(summary.fixedShareOfIncome).toBeNull();
+    expect(summary.headroom).toBeNull();
+  });
+
+  it("computes the share of income and the headroom left after it", () => {
+    const points = spendingMix(
+      [
+        entry({ kind: "income", amount: 20000, date: "2026-08-01" }),
+        entry({ kind: "fixed", amount: 5000, date: "2026-08-02" }),
+      ],
+      [{ year: 2026, month: 8 }]
+    );
+    const summary = mixSummary(points);
+    expect(summary.fixedShareOfIncome).toBe(0.25);
+    expect(summary.headroom).toBe(15000);
+  });
+
+  it("catches a fixed cost creeping upward across the window", () => {
+    const points = spendingMix(
+      [
+        entry({ kind: "fixed", amount: 1000, date: "2026-03-01" }),
+        entry({ kind: "fixed", amount: 1000, date: "2026-04-01" }),
+        entry({ kind: "fixed", amount: 1000, date: "2026-05-01" }),
+        entry({ kind: "fixed", amount: 1400, date: "2026-06-01" }),
+        entry({ kind: "fixed", amount: 1400, date: "2026-07-01" }),
+        entry({ kind: "fixed", amount: 1400, date: "2026-08-01" }),
+      ],
+      SIX_MONTHS
+    );
+    const summary = mixSummary(points);
+    expect(summary.trend).toEqual({
+      previous: 1000,
+      recent: 1400,
+      delta: 400,
+      months: 3,
+    });
+  });
+
+  it("drops the middle month of an odd window rather than letting it tilt one side", () => {
+    const points = spendingMix(
+      [
+        entry({ kind: "fixed", amount: 100, date: "2026-04-01" }),
+        entry({ kind: "fixed", amount: 9999, date: "2026-05-01" }),
+        entry({ kind: "fixed", amount: 300, date: "2026-06-01" }),
+        entry({ kind: "fixed", amount: 400, date: "2026-07-01" }),
+        entry({ kind: "fixed", amount: 500, date: "2026-08-01" }),
+      ],
+      SIX_MONTHS.slice(1)
+    );
+    const summary = mixSummary(points);
+    expect(summary.trend?.months).toBe(2);
+    expect(summary.trend?.previous).toBe((100 + 9999) / 2);
+    expect(summary.trend?.recent).toBe((400 + 500) / 2);
+  });
+
+  it("refuses a trend on a window too short to have two halves", () => {
+    const points = spendingMix([], MONTHS);
+    expect(mixSummary(points).trend).toBeNull();
   });
 });
