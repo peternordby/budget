@@ -5,11 +5,13 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import {
   anomalyKey,
   detectAnomalies,
+  monthKey,
   type Anomaly,
   type LedgerEntry,
   type MonthRef,
 } from "@/lib/insights";
 import type { RecurringTemplate } from "@/lib/recurring";
+import { missingFixedRef, useDismissals } from "@/lib/dismissals";
 import styles from "./Anomalies.module.css";
 
 type AnomaliesProps = {
@@ -70,6 +72,8 @@ export default function Anomalies({
   periodLabel,
   templates,
 }: AnomaliesProps) {
+  const { isDismissed } = useDismissals();
+
   // Which fixed expenses are *due* is a calendar question, answered here so
   // detectAnomalies stays pure. A template counts as due only once its day of
   // the month has passed, and only for a month that is not still ahead of us —
@@ -84,11 +88,17 @@ export default function Anomalies({
       (selected.year === now.getFullYear() && selected.month < now.getMonth() + 1);
     if (!isCurrentMonth && !isPastMonth) return [];
 
+    const periodKey = monthKey(selected.year, selected.month);
     return templates
       .filter((template) => template.active)
       .filter((template) => !isCurrentMonth || template.day_of_month <= now.getDate())
+      // Templates the user has said do not belong to this month drop out here,
+      // so this card and RecurringPanel's "N mangler" badge always agree.
+      .filter(
+        (template) => !isDismissed("missing-fixed", missingFixedRef(template.id, periodKey))
+      )
       .map((template) => ({ item: template.item, amount: template.price }));
-  }, [selected, templates]);
+  }, [selected, templates, isDismissed]);
 
   const anomalies = useMemo(
     () => (selected ? detectAnomalies(entries, selected, expectedFixed) : []),

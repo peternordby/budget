@@ -10,7 +10,9 @@ import {
   type BookedRef,
   type RecurringTemplate,
 } from "@/lib/recurring";
-import { IconChevronDown } from "@/components/icons";
+import { IconCheck, IconChevronDown, IconTrash, IconX } from "@/components/icons";
+import { missingFixedRef, useDismissals } from "@/lib/dismissals";
+import { monthKey } from "@/lib/insights";
 import styles from "./RecurringPanel.module.css";
 
 type RecurringPanelProps = {
@@ -49,8 +51,13 @@ export default function RecurringPanel({
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState(emptyDraft);
   const [collapsed, setCollapsed] = useState(true);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const { isDismissed, dismiss, restoreAll } = useDismissals();
 
-  const pending = month
+  // Filtering dismissals out here rather than inside pendingTemplates keeps
+  // lib/recurring.ts pure: it answers "what has not been booked", which is a
+  // fact, while "what should I be nagged about" is a preference.
+  const allPending = month
     ? pendingTemplates(
         templates,
         bookedExpenses,
@@ -59,6 +66,18 @@ export default function RecurringPanel({
         bookedKnown
       )
     : [];
+  const periodKey = month ? monthKey(month.year, month.month) : "";
+  // Not memoized: allPending is rebuilt from props every render anyway, and a
+  // filter over a handful of templates is cheaper than a dependency list that
+  // could go stale (two templates swapping pending/booked keeps the count the
+  // same while changing which rows are in the list).
+  const pending = periodKey
+    ? allPending.filter(
+        (template) =>
+          !isDismissed("missing-fixed", missingFixedRef(template.id, periodKey))
+      )
+    : allPending;
+  const dismissedCount = allPending.length - pending.length;
   const activeCount = templates.filter((template) => template.active).length;
 
   async function handleGenerate() {
@@ -137,6 +156,29 @@ export default function RecurringPanel({
     setBusy(false);
   }
 
+  // `expense.recurring_id` is declared `on delete set null` (0001), so months
+  // already booked from this template keep their transactions — deleting the
+  // template stops future generation, it does not rewrite history.
+  async function handleDelete(template: RecurringTemplate) {
+    setBusy(true);
+    setStatus(null);
+
+    const { error } = await supabase
+      .from("recurring_expense")
+      .delete()
+      .eq("id", template.id)
+      .eq("user_id", userId);
+
+    if (error) {
+      setStatus(error.message);
+    } else {
+      setConfirmDeleteId(null);
+      await ledger.refetch();
+    }
+
+    setBusy(false);
+  }
+
   return (
     <section className="card section-gap recurring-card">
       <div className="card-head">
@@ -156,6 +198,16 @@ export default function RecurringPanel({
           <span className="helper">{activeCount} aktive</span>
           {month && !bookedLoading && pending.length ? (
             <span className="badge badge-warn">{pending.length} mangler</span>
+          ) : null}
+          {dismissedCount ? (
+            <button
+              className="btn btn-ghost btn-small"
+              type="button"
+              onClick={() => restoreAll("missing-fixed")}
+              title="Vis skjulte varsler igjen"
+            >
+              {dismissedCount} skjult
+            </button>
           ) : null}
         </span>
       </div>
@@ -197,6 +249,7 @@ export default function RecurringPanel({
                 categories.find((entry) => entry.id === template.category_id)
                   ?.category ?? "Ukategorisert";
               const isPending = pending.some((entry) => entry.id === template.id);
+              const isConfirmingDelete = confirmDeleteId === template.id;
               return (
                 <div
                   key={template.id}
@@ -208,25 +261,79 @@ export default function RecurringPanel({
                   <span className={styles["recurring-amount"]}>
                     {formatCurrency(template.price)}
                   </span>
-                  <span className={`${styles["recurring-state"]} helper`}>
-                    {!template.active
-                      ? "Pauset"
-                      : bookedLoading || !bookedKnown
-                        ? ""
-                        : isPending
-                          ? "Ikke ført"
-                          : month
-                            ? "Ført"
-                            : ""}
+                  <span className={styles["recurring-state"]}>
+                    {!template.active ? (
+                      <span className="helper">Pauset</span>
+                    ) : bookedLoading || !bookedKnown ? null : isPending ? (
+                      // A badge rather than grey text: this is the same fact
+                      // the "N mangler" badge in the header reports, and the
+                      // two should look like one warning, not two states.
+                      <span className="badge badge-warn">Ikke ført</span>
+                    ) : month ? (
+                      <span className="helper">Ført</span>
+                    ) : null}
                   </span>
-                  <button
-                    className="btn btn-ghost btn-small"
-                    type="button"
-                    onClick={() => handleToggleActive(template)}
-                    disabled={busy}
-                  >
-                    {template.active ? "Pause" : "Aktiver"}
-                  </button>
+                  <span className={styles["recurring-actions"]}>
+                    {isConfirmingDelete ? (
+                      <>
+                        <button
+                          className="icon-btn icon-btn-confirm"
+                          type="button"
+                          onClick={() => handleDelete(template)}
+                          disabled={busy}
+                          aria-label={`Bekreft sletting av ${template.item}`}
+                          title="Slett malen. Allerede førte utgifter beholdes."
+                        >
+                          <IconCheck />
+                        </button>
+                        <button
+                          className="icon-btn icon-btn-dismiss"
+                          type="button"
+                          onClick={() => setConfirmDeleteId(null)}
+                          aria-label="Avbryt"
+                        >
+                          <IconX />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          className="btn btn-ghost btn-small"
+                          type="button"
+                          onClick={() => handleToggleActive(template)}
+                          disabled={busy}
+                        >
+                          {template.active ? "Pause" : "Aktiver"}
+                        </button>
+                        {isPending && periodKey ? (
+                          <button
+                            className="icon-btn"
+                            type="button"
+                            onClick={() =>
+                              dismiss(
+                                "missing-fixed",
+                                missingFixedRef(template.id, periodKey)
+                              )
+                            }
+                            aria-label={`${template.item} gjelder ikke ${monthLabel}`}
+                            title={`Gjelder ikke ${monthLabel}`}
+                          >
+                            <IconX />
+                          </button>
+                        ) : null}
+                        <button
+                          className="icon-btn icon-btn-danger"
+                          type="button"
+                          onClick={() => setConfirmDeleteId(template.id)}
+                          disabled={busy}
+                          aria-label={`Slett ${template.item}`}
+                          title="Slett fast utgift"
+                        >
+                          <IconTrash />
+                        </button>
+                      </>
+                    )}
+                  </span>
                 </div>
               );
             })}

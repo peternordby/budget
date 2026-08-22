@@ -65,5 +65,13 @@
   .recurring-category { grid-area: category; }
   .recurring-amount { grid-area: amount; }
   .recurring-state { grid-area: state; }
-  .recurring-row > button { grid-area: action; justify-self: start; }
+  .recurring-actions { grid-area: action; justify-self: start; }
+}
+
+/* Pause, "gjelder ikke denne måneden" and delete share the row's last cell. */
+.recurring-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
 }
