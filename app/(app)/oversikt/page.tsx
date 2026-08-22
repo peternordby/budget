@@ -14,6 +14,7 @@ import {
 import MonthOverMonth from "@/components/MonthOverMonth";
 import Anomalies from "@/components/Anomalies";
 import CategoryDrilldown from "@/components/CategoryDrilldown";
+import Goals from "@/components/Goals";
 import { usePeriod } from "@/lib/usePeriod";
 import { supabase } from "@/lib/supabaseClient";
 import { formatCurrency, toNumber } from "@/lib/format";
@@ -585,6 +586,8 @@ export default function OversiktPage() {
           </div>
         </section>
       ) : null}
+
+      <Goals />
 
       <MonthOverMonth entries={historyEntries} single={single} />
 
