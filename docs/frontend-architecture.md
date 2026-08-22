@@ -2,78 +2,63 @@
 
 ## Tech Stack
 
-- Next.js routing via `app/`
-- React client components for authenticated pages
+- Next.js 16 App Router (`app/`), React 19, TypeScript
 - Supabase client for authentication and data access
-- One global stylesheet (`app/globals.css`) with design variables and utility classes
+- One global stylesheet (`app/globals.css`) plus co-located CSS Modules for component-specific styling — see `docs/design-system.md`
 
 ## Route Map
 
-- `app/page.tsx` -> re-exports the visualize page as the root.
-- `app/visualize/page.tsx` -> single-page dashboard: metrics, budgets, category charts, inline transaction editing, and activity list.
-- `app/layout.tsx` -> global structure, font setup, and atmospheric background layer.
+- `app/page.tsx` -> redirects to `/oversikt`.
+- `app/visualize/page.tsx` -> redirects to `/oversikt`. Kept only so old links and bookmarks still land somewhere.
+- `app/(app)/layout.tsx` -> the layout for all three real routes. Mounts, in order: `AuthGate` (session check) -> `LedgerProvider` (the one data fetch, keyed by the signed-in session) -> a `Suspense` boundary wrapping `TopNav` + a ledger-error banner + `PeriodPicker` + the page (`children`). The `Suspense` boundary exists because `TopNav` and `PeriodPicker` both call `useSearchParams`, which the App Router requires to sit under a boundary; one boundary here covers both components and every route, so neither page has to add its own.
+- `app/(app)/oversikt/page.tsx` -> the dashboard: budget gauge, expense breakdown bar, `MonthOverMonth`, `Anomalies`, and the collapsible category list with inline budget editing. Clicking a category row (outside its budget-edit controls) opens `CategoryDrilldown` for that category.
+- `app/(app)/transaksjoner/page.tsx` -> the ledger: the new-transaction row, `RecurringPanel`, and the activity table (filtering, sorting, inline edit, drag-to-reorder columns, keyboard shortcuts `n` and `/`). A `Søk i hele perioden` toggle swaps the table's source array (and its filter options, empty-state check, and edit-lookup) from the selected months to `ledger.expenses` — the provider's fetched window described below, not all of history, since `ledger.availableMonths` can reach further back; while the toggle is on the UI states the actual month count and range rather than implying completeness. An `Eksporter CSV` button (`lib/csv.ts`) downloads whatever the table currently shows, as raw ISO dates and signed plain integers rather than display-formatted values so a spreadsheet can sort and sum them; being comma-delimited per RFC 4180, Norwegian-locale Excel will prompt for a delimiter on import. `RecurringPanel`'s booked-expenses check deliberately does *not* follow the toggle — it always scopes to the selected month's own expenses, because it answers "has this month's fixed expenses been booked yet", not "what does the table show right now".
+- `app/(app)/innsikt/page.tsx` -> where the money goes: the fixed/variable spending split over time, the savings rate (via `Sparkline`), per-category trend tiles (`lib/trends.ts`, also via `Sparkline`), and subscriptions that recur monthly but were never registered as a fixed expense (`lib/subscriptions.ts`). Every statistic on the page is computed over `useAnalysisWindow(anchor, 24)` (the subscription table over its last six months), so the numbers follow the selected period rather than the fetch bounds. "Gjør til fast utgift" reactivates an existing template for the same item when there is one — a *paused* template deliberately keeps its item in the suspect list, so inserting there would create a second template — and stamps the expense rows the detection matched with the template's `recurring_id`, so `RecurringPanel` sees the months already entered by hand as booked instead of offering to generate them again. Clicking a category tile opens `CategoryDrilldown` for that category.
+- `app/layout.tsx` -> root layout: font (Schibsted Grotesk) setup, the dark/light theme init script, and the ambient background layer. Applies to every route, including the auth screen.
 
-## Core Components
+All three routes under `(app)/` are client components (`"use client"`) and render only after `AuthGate` resolves a session, so nothing under `(app)/layout.tsx` runs during static generation.
 
-- `components/AuthGate.tsx`
-  - Protects pages with a session check.
-  - Renders login, loading state, or missing-config message.
+## LedgerProvider: the single fetch
 
-- `components/AuthPanel.tsx`
-  - Handles the sign-in form.
-  - Renders Supabase auth errors inline in the form.
+`components/LedgerProvider.tsx` is the only place that queries `expense`, `category`, `budget`, and `recurring_expense` (exposed as `templates`) for the data all three routes render from. All three routes and `PeriodPicker` read from it via `useLedger()`, `useLedgerHistory()`, `useLedgerSelection()`, and `useAnalysisWindow()` instead of querying Supabase themselves (mutations — insert/update/delete on `expense`, `budget`, and `recurring_expense` — still go straight from the page to Supabase, then push the result back into the provider via `upsertExpense`/`removeExpense`/`refetch`; `RecurringPanel` and `/innsikt`'s "make it a fixed expense" action both write `recurring_expense` this way rather than through a provider mutator, since there is no `upsertTemplate`). A fifth export, `toLedgerEntries(expenses)`, is a plain function rather than a hook — it maps any slice of `ledger.expenses` into the `LedgerEntry` shape `lib/insights.ts` expects, which lets `CategoryDrilldown` and `/innsikt` reshape the provider's whole window instead of being limited to `useLedgerHistory`'s fixed trailing 12 months. The one other legitimate direct `select` is `app/(app)/oversikt/page.tsx`'s previous-period budget lookup: it reads a month that can fall outside the provider's fetched `budget` window (the prior December when editing January), so it stays a one-off query rather than a ledger lookup — the code comments explain why.
 
-- `components/TopNav.tsx`
-  - Branding and sign-out action.
-  - Displays signed-in user identity with truncation for long values.
+- **Window.** The provider fetches a `MonthRef` range (`windowStart`..`windowEnd`), initialized to the trailing 24 months ending on the current month (`WINDOW_MONTHS = 24`). `expense` and `budget` are queried scoped to that range and to `user_id`; `category` is fetched in full; and a separate all-time, date-only query against `expense` populates `availableMonths` (every `YYYY-MM` with at least one transaction) — deliberately unscoped to the window, since `PeriodPicker` needs to offer months older than whatever is currently fetched.
+- **`ensureMonthCovered(ref)`** widens `windowStart` backward or `windowEnd` forward to include `ref`, whichever direction is needed (both setters return the same object when no widening is required, so calling it every render settles rather than loops). `PeriodPicker` calls it for every selected month and for the oldest month its 12-month chart is drawing, because the chart's anchor moves independently of the selection.
+- **`useLedgerSelection(selectedKeys)`** filters `ledger.expenses` down to the `YYYY-MM` keys in `selectedKeys` — the exact figures `/oversikt` and `/transaksjoner` scope everything to (`CategoryDrilldown`'s transaction list uses it too, whichever route opened the panel).
+- **`useLedgerHistory(anchor)`** returns the trailing 12 months of `ledger.expenses` ending at `anchor`, reshaped into the `LedgerEntry` shape `lib/insights.ts` expects. It has no awareness of the provider's wider window; it slices back to 12 months itself, because `detectAnomalies` treats whatever it's given as the complete history for its averages, and `Anomalies` tells the user it's looking at the last 12 months.
+- **`useAnalysisWindow(anchor, length)`** returns the trailing `length` months **ending at the selected month**, clamped at both ends to what has actually been fetched. `/innsikt` and `CategoryDrilldown` bucket every statistic over it (both pass 24). It exists because `windowStart`/`windowEnd` are a fetch detail rather than a user-chosen range: `ensureMonthCovered` widens them in both directions and never narrows them, so deriving the analysis window from them let one click on `PeriodPicker`'s always-present next-year button change every average on two routes, and let the subscription detection examine six months that cannot hold a transaction. **Both clamps are load-bearing.** The end clamp covers the render right after a month outside the window is picked, while `ensureMonthCovered` widens asynchronously (the same transient `bookedKnown`/`covered` handles on `/transaksjoner`). The start clamp stops an anchor deep in the past from reaching back past the fetch, where months that were never queried would render as zeroes indistinguishable from real ones — the same "the window the UI computes over is not the window the data covers" bug the hook exists to fix.
+- **`userId`** is exposed so every route's writes and one-off reads filter or set `user_id` from one place rather than re-deriving it from the session.
+- **The `error`-vs-empty contract.** `error` is set when the most recent fetch failed and is `null` otherwise; `loading` is a separate flag. On failure the provider sets `error`, sets `loading` false, and returns without touching `expenses`/`categories`/`budgets` — so a failed refetch leaves whatever was previously loaded in place. Only the very first fetch (before anything has ever loaded) can leave them as empty arrays on failure, which is indistinguishable from a month with genuinely no data unless a consumer checks `error` first. `AppLayout`'s `LedgerErrorBanner` surfaces `ledger.error` as a status message above every route for exactly this reason, and `transaksjoner/page.tsx` additionally combines `!ledger.error && covered` (see `bookedKnown` below) before letting `RecurringPanel` treat "nothing booked" as fact.
 
-- `components/BudgetSummary.tsx`
-  - Aggregated budget progress bar and percentage indicator.
+## `usePeriod` and the URL
 
-## Data Flow Summary
+The selected period lives in the URL as `?p=<comma-separated YYYY-MM list>&w=<anchor YYYY-MM>` rather than in local state, so every view is linkable, survives a reload, and gives the browser's back/forward buttons their expected meaning.
 
-`visualize/page.tsx`:
+- `lib/period.ts` is the pure parse/serialize layer: `parsePeriod(p, w, fallback)` and `serializePeriod(state)`. Because the URL is user-editable input, parsing never throws — garbage or missing values fall back to `fallback` (today) for the selection and to the newest selected month for the anchor.
+- `lib/usePeriod.ts` wraps that in a hook (`usePeriod(fallback)`) that reads `useSearchParams()` and writes with `router.replace` (never `push` — period changes are view adjustments, and pushing would bury the previous page under history entries). It exposes `selectedKeys`, `selectedList`, `single` (the one selected month, or `null` when zero or many are selected), `anchor`, `ready` (false until the URL carries an explicit selection), and the mutators `selectMonth`, `selectYear`, `shiftAnchor`, `resetAnchor`, `bootstrap`. `bootstrap` is a no-op once `p` is present, so `PeriodPicker`'s "default to the current or most recent month with data" effect can never overwrite a period a user actually linked to.
+- All three route pages and `PeriodPicker` call `usePeriod` independently (it derives all state from the URL, not from shared component state), so they always agree on the current period without prop drilling. `/innsikt` calls it to read `selectedKeys` (for highlighting the selected months in its fixed/variable chart) and `anchor` (which it feeds to `useAnalysisWindow` and passes down to `CategoryDrilldown`) — it adds no picker or widening effect of its own; both already live in the shared layout.
 
-- Loads available periods from `expense.date`.
-- Loads categories from `category`.
-- Loads budgets from `budget` for the selected year.
-- Loads expenses from `expense`, filtered by year/month.
-- Supports inline creation of new transactions (spreadsheet-style input row).
-- Supports inline editing of existing transactions (double-click to edit).
-- Supports activity-table filtering by tag, category, and description.
-- Supports per-column sorting in the activity table.
-- Shows totals for the filtered activity set (including selected tag totals).
-- Computes memoized totals for:
-  - income
-  - expenses
-  - net
-  - per-category totals
-  - budget usage percentages
+## `lib/` — pure modules
 
-## Styling Rules
+- `lib/insights.ts` — month-key arithmetic (`monthKey`, `addMonths`, `previousMonth`, `listWindowMonths`), `aggregateByMonth` (buckets a `LedgerEntry[]` into per-month income/expenses/savings/net), `compareMonths` (current vs. previous month, including top category movers), and `detectAnomalies` (large single transactions, category spikes, first-seen categories, same-day/same-item/same-amount duplicates).
+- `lib/categories.ts` — the `CategoryKind` type (`income` | `fixed` | `variable` | `savings`) and the `isIncomeKind`/`isSpendingKind`/`isSavingsKind` predicates. This is what replaced the old `category.category === "inntekter"` string check; every kind comparison in the app should go through these predicates, never a category name.
+- `lib/period.ts` / `lib/usePeriod.ts` — see above.
+- `lib/format.ts` — `formatCurrency`, `formatSignedCurrency`, `formatDate` (parses `YYYY-MM-DD` directly to avoid a UTC-shift bug), `formatDateParts`, `toNumber`.
+- `lib/autocomplete.ts` — `buildItemIndex` groups a user's past transactions by description into `ItemSuggestion`s (median price, most frequent tag, most recent category); `suggestItems` ranks by prefix match, then substring match.
+- `lib/recurring.ts` — pure helpers for fixed monthly expense templates: `materializationDate` (clamps a template's day-of-month to the target month's length) and `pendingTemplates` (which templates haven't been booked yet for a given month; takes a `bookedKnown` flag so a failed or not-yet-fetched read is never mistaken for "nothing pending").
+- `lib/trends.ts` — the `/innsikt` calculations: `categorySeries` (zero-filled per-category monthly totals; spending kinds only by default, `includeAllKinds: true` opts every kind in — the flag `CategoryDrilldown` uses since it also opens for income and savings categories), `fixedVariableSplit` (month-by-month fixed-vs-variable spending), and `savingsRate` (income, net, and savings per month, plus a rate that is `null` rather than `0` for a month with no income, since `0` would claim "saved nothing" about a month that truly cannot say).
+- `lib/subscriptions.ts` — `detectSubscriptions`: groups an entry window by normalized item name and flags any group seen in 3 or more of those months at a stable amount (within 15%) that isn't already an active `recurring_expense` template — the "subscriptions nobody registered" list on `/innsikt`.
+- `lib/csv.ts` — `escapeCsvField`/`toCsv`: RFC 4180 CSV encoding (CRLF row separators, comma delimiter, quote-doubling) behind the activity table's `Eksporter CSV` button.
+- `lib/supabaseClient.ts` — the Supabase client singleton and `hasSupabaseEnv`.
+- `lib/useToast.ts` — `useToast()`, a small hook for a single dismissible/auto-expiring toast (used by `transaksjoner` for undo-delete).
 
-1. Add new visual variables in `:root` inside `app/globals.css`.
-2. Reuse existing class families before adding one-off classes:
-   - layout: `.shell`, `.grid`, `.section-gap`
-   - cards: `.card`, `.stat`
-   - forms: `.field`, `.form-grid`, `.form-actions`
-   - buttons: `.btn`, `.btn-primary`, `.btn-ghost`, `.btn-small`
-   - inline editing: `.cell-input`, `.new-row`, `.editing-row`
-3. Prefer CSS classes over inline `style` attributes for maintainability.
-4. Add new animations only when they improve orientation or feedback.
+`insights.ts`, `categories.ts`, `period.ts`, `autocomplete.ts`, `recurring.ts`, `trends.ts`, `subscriptions.ts`, and `csv.ts` each have a co-located `*.test.ts` file exercised by `pnpm test` (vitest, 165 assertions across the 8 files); `format.ts`, `supabaseClient.ts`, `usePeriod.ts`, and `useToast.ts` do not currently have tests.
 
-## Extension Guide
+## Shared components: `Sparkline` and `CategoryDrilldown`
 
-When adding a new page:
+- **`components/Sparkline.tsx`** — a minimal, presentation-only SVG line chart taking `points: number[]`, `labels: string[]`, and `ariaLabel`. It renders nothing for an empty series and a single dot (not a flat line) for a one-point series. `labels` is part of the props type and both callers pass it, but the component's own destructuring only reads `points` and `ariaLabel` — `labels` currently has no effect. Its only consumer is `/innsikt`: the savings-rate sparkline and one per category tile in "Kategorier over tid".
+- **`components/CategoryDrilldown.tsx`** — a labelled **non-modal** side panel: `role="dialog"` plus `aria-label`, and deliberately **no** `aria-modal`. There is no focus trap and nothing inerts the page behind it (the CSS has no scrim either, by design), so claiming modality would remove the rest of the page from the accessibility tree while it stayed reachable by Tab. What it does do: move focus to the panel on open, close on Escape or an outside click, and restore focus to whatever triggered it. It shows one category's mean/median per month, a bar chart over `useAnalysisWindow(anchor, 24)` — the trailing 24 months ending at the host route's selected month, clamped to the fetched range, with the heading stating the real month count and bounds rather than a hard-coded "Siste 24 måneder" — a budget-vs-actual table, and the matching transactions for the currently selected period. It takes `category: string | null`, `onClose`, and `anchor` (the host route's own `usePeriod` anchor, threaded in so the panel analyses exactly the months its route does), and is mounted once by each of its two callers — `app/(app)/oversikt/page.tsx` (opened from a category row via `setDrilldownCategory`) and `app/(app)/innsikt/page.tsx` (opened from a category tile via `setSelectedCategory`) — each owning its own state, so the two routes don't share which category is open.
 
-1. Wrap content in `.shell`.
-2. Place `TopNav` first on authenticated pages.
-3. Build sections with `.card` and `.section-gap`.
-4. Use semantic color classes (`.text-income`, `.text-expense`) instead of raw color values.
-5. Verify behavior at `1024px`, `860px`, `640px`, and `480px`.
+## The AuthGate blind spot
 
-When adding new status/message states:
-
-1. Use `.helper` for neutral information.
-2. Use `.status` for warning/error/high-importance feedback.
-3. Keep text concise for compact card layouts.
+**A client component rendered inside `AuthGate`'s `children(session)` callback never executes during `pnpm build`.** `next build` only renders what it can reach without a session — the loading and logged-out states — so `LedgerProvider`, all three routes, `PeriodPicker`, `TopNav`, and everything they render are invisible to the build. `pnpm test` doesn't cover this either unless a test explicitly renders that component tree. This project has shipped one temporal-dead-zone `ReferenceError` for exactly this reason: a bug in declaration order inside a component that only runs post-login, caught by neither the build nor the test suite, only by using the app. When touching anything under `AppLayout`'s `children(session)` branch, scrutinize declaration order and actually exercise the page (`pnpm dev`) rather than trusting a green build.
