@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createKeys, resumeFromSession, lock } from "@/lib/crypto";
+import { createKeys, resumeStoredKey, lock } from "@/lib/crypto";
 
-// Simple in-memory sessionStorage mock for Node tests
-function makeSessionStorage() {
+const KEY = "budget.dek.v2";
+
+// Simple in-memory localStorage mock for Node tests
+function makeStorage() {
   const store: Record<string, string> = {};
   return {
     getItem(key: string) {
@@ -17,11 +19,16 @@ function makeSessionStorage() {
   } as Storage;
 }
 
-describe("crypto integration: session-scoped DEK", () => {
+/** The stored entry with its expiry rewritten, for the cases that turn on it. */
+function restamp(expiry: number) {
+  const [owner, , ...rest] = localStorage.getItem(KEY)!.split(":");
+  localStorage.setItem(KEY, `${owner}:${expiry}:${rest.join(":")}`);
+}
+
+describe("crypto integration: the stored DEK", () => {
   beforeEach(() => {
     // Ensure module scope is cleared between tests
-    // @ts-expect-error set global sessionStorage
-    global.sessionStorage = makeSessionStorage();
+    global.localStorage = makeStorage();
     lock();
   });
 
@@ -29,25 +36,68 @@ describe("crypto integration: session-scoped DEK", () => {
     // Set up keys for user-a
     await createKeys("password-a", "user-a");
 
-    // resumeFromSession for the same user should succeed
-    expect(await resumeFromSession("user-a")).toBe(true);
-
-    // Clearing the in-memory key then resuming again still works because
-    // the sessionStorage entry is tied to that user id.
+    // A reload — or a new tab, or a browser restart — drops module scope but
+    // keeps localStorage, which is the whole point of storing it there. lock()
+    // clears both, so the reload is simulated by putting the stored entry back:
+    // resumeStoredKey would otherwise short-circuit on the key still in scope
+    // and test nothing.
+    const stored = localStorage.getItem(KEY);
+    expect(stored).not.toBeNull();
     lock();
-    expect(await resumeFromSession("user-a")).toBe(true);
+    localStorage.setItem(KEY, stored!);
+    expect(await resumeStoredKey("user-a")).toBe(true);
 
-    // If sessionStorage contains a key stamped for another user, resume must
-    // fail for this user and the stored item should be removed.
-    // Craft a fake base64 blob (32 zero bytes)
+    // A reload finding an entry stamped for another user must not resume it,
+    // and must not leave it lying around either.
+    lock();
     const fakeBase64 = Buffer.from(new Uint8Array(32)).toString("base64");
-    // @ts-expect-error access sessionStorage
-    sessionStorage.setItem("budget.dek.v1", `other-user:${fakeBase64}`);
+    localStorage.setItem(KEY, `other-user:${Date.now() + 60_000}:${fakeBase64}`);
 
-    // Attempt to resume as user-a should fail and clear the item
-    const resumed = await resumeFromSession("user-a");
-    expect(resumed).toBe(false);
-    // @ts-expect-error access sessionStorage
-    expect(sessionStorage.getItem("budget.dek.v1")).toBeNull();
+    expect(await resumeStoredKey("user-a")).toBe(false);
+    expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("does not hand a second account the key still in scope", async () => {
+    await createKeys("password-a", "user-a");
+
+    // No SIGNED_OUT event, so lock() never ran and user-a's key is still in
+    // module scope. Resuming as someone else must drop it rather than reuse it.
+    expect(await resumeStoredKey("user-b")).toBe(false);
+    expect(await resumeStoredKey("user-a")).toBe(false);
+  });
+
+  it("refuses a key past its window and clears it", async () => {
+    await createKeys("password-a", "user-a");
+    const stored = localStorage.getItem(KEY)!;
+    lock();
+    localStorage.setItem(KEY, stored);
+
+    restamp(Date.now() - 1);
+
+    expect(await resumeStoredKey("user-a")).toBe(false);
+    expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("slides the window forward on every resume", async () => {
+    await createKeys("password-a", "user-a");
+    const stored = localStorage.getItem(KEY)!;
+    lock();
+    localStorage.setItem(KEY, stored);
+
+    // A day left. Opening the app must push it back out to the full window,
+    // or a week of daily use would still end in a password prompt.
+    const nearly = Date.now() + 24 * 60 * 60 * 1000;
+    restamp(nearly);
+
+    expect(await resumeStoredKey("user-a")).toBe(true);
+    expect(Number(localStorage.getItem(KEY)!.split(":")[1])).toBeGreaterThan(nearly);
+  });
+
+  it("ignores a v1 entry rather than reading it as a v2 one", async () => {
+    const fakeBase64 = Buffer.from(new Uint8Array(32)).toString("base64");
+    // v1 had no expiry field, so its key bytes sit where the expiry now goes.
+    localStorage.setItem("budget.dek.v1", `user-a:${fakeBase64}`);
+
+    expect(await resumeStoredKey("user-a")).toBe(false);
   });
 });

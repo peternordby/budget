@@ -28,7 +28,13 @@
 const PREFIX = "gc:";
 const ITERATIONS = 300_000;
 const IV_BYTES = 12;
-const SESSION_KEY = "budget.dek.v1";
+// v2 because the stored value gained an expiry field. A v1 entry is simply not
+// read, which locks the tab once and costs one password.
+const STORAGE_KEY = "budget.dek.v2";
+// How long an unlocked key survives without the app being opened. Slid forward
+// on every resume, so daily use never asks and a laptop left in a drawer stops
+// being a way in.
+const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** The key material this module keeps in `user_metadata`. */
 export type EncMeta = {
@@ -115,29 +121,48 @@ async function openBytes(key: CryptoKey, blob: string) {
   return new Uint8Array(plain);
 }
 
-// The unlocked data key, for as long as this tab lives. Deliberately not in
-// localStorage: the Supabase session persists across browser restarts and the
-// key must not, or "encrypted at rest" would mean "until someone opens the
-// laptop".
+// The unlocked data key.
+//
+// It is kept in localStorage with a 7-day expiry rather than in sessionStorage,
+// which is a deliberate loosening: sessionStorage meant a password on every
+// browser restart and on every new tab, and cost enough friction to be worth
+// trading. What it buys back is bounded — the key now survives a restart, so a
+// stolen laptop with a live Supabase session reads the ledger until the window
+// lapses, where before it read ciphertext. The window is what limits that, and
+// it slides on use rather than from first unlock, so the machine that stops
+// being used is the machine that locks.
+//
+// Unchanged either way: the server never sees the key, and anything running
+// inside the page (XSS, a hostile extension) could always read it.
 let dek: CryptoKey | null = null;
+// Stamped with the same account as the stored copy, so the short-circuit in
+// resumeStoredKey cannot hand a second account the first one's key.
+let dekUser: string | null = null;
 
-function session() {
+function store() {
   try {
-    return typeof sessionStorage === "undefined" ? null : sessionStorage;
+    return typeof localStorage === "undefined" ? null : localStorage;
   } catch {
     // Safari in private mode throws on access rather than returning null.
     return null;
   }
 }
 
+// `<user id>:<expiry ms>:<base64 key>`. A uuid holds no colon and base64 holds
+// none either, so the first two are unambiguous separators.
+function write(userId: string, raw: Uint8Array) {
+  store()?.setItem(STORAGE_KEY, `${userId}:${Date.now() + TTL_MS}:${toBase64(raw)}`);
+}
+
 // Stamped with the account the key belongs to. Without that, a second account
-// signing in on the same tab (a shared laptop, or a refresh token that failed
-// without a SIGNED_OUT event) would resume the first one's key and decrypt its
-// own rows to zeroes — wrong numbers, quietly, which is worse than a locked
-// screen.
+// signing in on the same browser (a shared laptop, or a refresh token that
+// failed without a SIGNED_OUT event) would resume the first one's key and
+// decrypt its own rows to zeroes — wrong numbers, quietly, which is worse than
+// a locked screen.
 async function remember(raw: Uint8Array, userId: string) {
   dek = await importDek(raw);
-  session()?.setItem(SESSION_KEY, `${userId}:${toBase64(raw)}`);
+  dekUser = userId;
+  write(userId, raw);
   return dek;
 }
 
@@ -146,31 +171,52 @@ export function isUnlocked() {
   return dek !== null;
 }
 
-/** Restores the key a page reload dropped from module scope, but only for the
- *  account it was stored for. */
-export async function resumeFromSession(userId: string) {
-  if (dek) return true;
-  const stored = session()?.getItem(SESSION_KEY);
+/**
+ * Restores the stored key — after a reload, a new tab, or a browser restart
+ * inside the 7-day window — but only for the account it was stored for, and
+ * only while it is still valid. Slides the expiry forward on success.
+ */
+export async function resumeStoredKey(userId: string) {
+  if (dek) {
+    if (dekUser === userId) return true;
+    // A different account arrived without a SIGNED_OUT event — a failed token
+    // refresh, or a second user on a shared laptop. Resuming the key in scope
+    // would decrypt their rows to zeroes, quietly, which is worse than asking
+    // for a password.
+    lock();
+  }
+
+  const stored = store()?.getItem(STORAGE_KEY);
   if (!stored) return false;
-  const separator = stored.indexOf(":");
-  if (separator < 0 || stored.slice(0, separator) !== userId) {
-    session()?.removeItem(SESSION_KEY);
+
+  const [owner, expiry, ...rest] = stored.split(":");
+  const raw = rest.join(":");
+  // Anything that fails here is either someone else's key, an expired one or a
+  // v1 entry, and all three end the same way: gone, and a password prompt.
+  if (owner !== userId || !raw || !(Number(expiry) > Date.now())) {
+    store()?.removeItem(STORAGE_KEY);
     return false;
   }
+
   try {
-    dek = await importDek(fromBase64(stored.slice(separator + 1)));
+    const bytes = fromBase64(raw);
+    dek = await importDek(bytes);
+    dekUser = userId;
+    write(userId, bytes);
     return true;
   } catch {
-    session()?.removeItem(SESSION_KEY);
+    store()?.removeItem(STORAGE_KEY);
     return false;
   }
 }
 
-/** Drop the key. Called on sign-out — a second user in the same tab must not
- *  inherit the first one's key. */
+/** Drop the key. Called on sign-out, which is now the only way to end the
+ *  7-day window early — and the only thing standing between a second user of
+ *  the same browser and the first one's ledger. */
 export function lock() {
   dek = null;
-  session()?.removeItem(SESSION_KEY);
+  dekUser = null;
+  store()?.removeItem(STORAGE_KEY);
 }
 
 /** True when this account has key material at all. False for accounts that

@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createKeys, resumeFromSession, lock } from "@/lib/crypto";
+import { createKeys, resumeStoredKey, lock } from "@/lib/crypto";
 
 // E2E-style test exercising the sign-out -> lock -> resume flow.
 // This is kept as a vitest test since no external e2e runner is present.
 
-function makeSessionStorage() {
+function makeStorage() {
   const store: Record<string, string> = {};
   return {
     getItem(key: string) {
@@ -21,8 +21,7 @@ function makeSessionStorage() {
 
 describe("e2e: sign-out clears DEK and prevents resume", () => {
   beforeEach(() => {
-    // @ts-expect-error set global sessionStorage
-    global.sessionStorage = makeSessionStorage();
+    global.localStorage = makeStorage();
     lock();
   });
 
@@ -31,16 +30,16 @@ describe("e2e: sign-out clears DEK and prevents resume", () => {
     await createKeys("pw-e2e", "e2e-user");
 
     // The key can be resumed after a page reload
-    expect(await resumeFromSession("e2e-user")).toBe(true);
+    expect(await resumeStoredKey("e2e-user")).toBe(true);
 
     // Simulate sign-out event clearing the key
     lock();
 
     // After sign-out, resuming must fail
-    expect(await resumeFromSession("e2e-user")).toBe(false);
+    expect(await resumeStoredKey("e2e-user")).toBe(false);
 
-    // And any existing sessionStorage entry (if present) must be gone
-    // @ts-expect-error access sessionStorage
-    expect(sessionStorage.getItem("budget.dek.v1")).toBeNull();
+    // And the stored entry must be gone with it — sign-out is the only way
+    // to end the 7-day window early.
+    expect(localStorage.getItem("budget.dek.v2")).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ Personal budget tracking app built with Next.js and Supabase.
 - `pnpm dev` - Start dev server
 - `pnpm build` - Production build (use to verify changes compile)
 - `pnpm start` - Start production server
+- `pnpm test` - vitest (`lib/**/*.test.ts` and `test/**/*.test.ts`)
 
 ## Stack
 
@@ -29,7 +30,7 @@ app/
   nytt-passord/page.tsx       Sets a new password; also the invite landing page — public
   globals.css                 Shared styles: theme variables, layout/nav/button/form primitives
   (app)/
-    layout.tsx                AuthGate -> LedgerProvider -> TopNav + PeriodPicker -> route
+    layout.tsx                AuthGate -> EncryptionGate -> LedgerProvider -> TopNav + PeriodPicker -> route
     oversikt/page.tsx          Dashboard: budget gauge, category breakdown, MonthOverMonth, Anomalies
     oversikt/oversikt.module.css
     transaksjoner/page.tsx     Ledger: new-transaction row, RecurringPanel, activity table (search, CSV export)
@@ -45,7 +46,8 @@ app/
 components/
   Avatar.tsx          Initials on a name-derived hue (nav chip and /profil)
   AuthGate.tsx        Session check wrapper (renders children, or redirects to /logg-inn)
-  AuthPanel.tsx       Login form (the body of /logg-inn)
+  AuthPanel.tsx       Login form (the body of /logg-inn); unlocks the data key while the password is in hand
+  EncryptionGate.tsx  The data key: set up / unlock / recover, above LedgerProvider
   LedgerProvider.tsx  The one data fetch (expense/category/budget/recurring templates); useLedger, useLedgerHistory, useLedgerSelection, toLedgerEntries
   PeriodPicker.tsx    12-month chart + month/year picker; writes the URL period, widens the ledger window
   TopNav.tsx          Header with branding, route tabs, theme toggle and sign-out
@@ -71,6 +73,8 @@ lib/
   savings.ts          Savings snapshots (for /sparing): holdings, carry-forward series, stacked bands, CSV import parsing
   categoryColor.ts    getCategoryHue (one category's colour) and categoryHues (a set spaced evenly apart)
   profile.ts          displayName/fullName/initials/avatarHue over the session user; no profile table
+  crypto.ts           Client-side AES-GCM field encryption, the wrapped data key, the recovery phrase
+  reencrypt.ts        The one-time pass (button on /profil) that encrypts pre-encryption rows
   csv.ts              RFC 4180 CSV encoding (activity table export) and parsing (savings import), with delimiter sniffing
 ```
 
@@ -80,7 +84,7 @@ See `docs/frontend-architecture.md` for how these fit together.
 
 Five tables in Supabase: `category`, `expense`, `budget`, `recurring_expense`, `savings_snapshot`.
 
-- `expense.price` is stored as integer (whole kroner, `bigint`)
+- `expense.price` is whole kroner, stored as **encrypted decimal text**: `0009_encrypted_fields.sql` widened `expense.price`, `recurring_expense.price`, `budget.budget` and `savings_snapshot.amount` from `bigint` to `text` (and dropped `savings_snapshot`'s `amount >= 0` check, which cannot be expressed about a value the database cannot read — the client enforces it now). `expense.item`/`tag` and `recurring_expense.item`/`tag` are encrypted too
 - `expense.user_id` scopes data per user via RLS
 - `budget` entries are per category/month/year, unique on (`user_id`, `category_id`, `year`, `month`) since `0006_budget_owner.sql`, so writes are a single upsert. That migration also replaced three `using (true)` policies (every authenticated user could read and overwrite every other user's budgets) with the owner-scoped `budget_owner`
 - Income is identified by `category.kind === "income"`, via the predicates in `lib/categories.ts`; the four kinds are `income`/`fixed`/`variable`/`savings`
@@ -89,6 +93,7 @@ Five tables in Supabase: `category`, `expense`, `budget`, `recurring_expense`, `
 
 ## Key Conventions
 
+- **Amounts and descriptions are end-to-end encrypted in the browser** (`lib/crypto.ts`), under a key the server never sees. Three rules follow and none of them are negotiable without undoing the migration: **nothing may aggregate or filter these columns in SQL** (no `sum(price)`, no `order by price`, no `ilike` on `item`) — every query orders by date/id/category and filters by date/user_id, and all arithmetic happens client-side on decrypted rows; **the ledger is decrypted once, in `LedgerProvider`**, so every consumer downstream (`useMemo`s, search, CSV export, `lib/insights.ts`) sees plain numbers and strings and never touches `lib/crypto.ts` — only the routes with their own one-off reads decrypt themselves (`/budsjett`'s drafts, `/sparing`'s snapshots, `/innsikt`'s subscription lookup); and **every write calls `encField` at the call site** on its way to Supabase. The key material (`enc_salt`, `enc_dek`, `enc_dek_recovery`) lives in `auth.users.user_metadata`, the unlocked key in `localStorage` (`budget.dek.v2`) stamped with its user id and a 7-day expiry that slides on every resume, and `EncryptionGate` handles setup, unlock and recovery-phrase recovery. `decField` passes anything without the `gc:` prefix through untouched, so pre-encryption rows keep working until the pass on `/profil` reaches them. See `docs/frontend-architecture.md` -> Encryption
 - UI language is Norwegian (bokmål)
 - Currency: NOK, formatted as "1 234 kr" via `lib/format.ts`
 - No backend API routes — all queries go directly from client to Supabase

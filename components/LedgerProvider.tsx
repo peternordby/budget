@@ -393,7 +393,16 @@ export default function LedgerProvider({
       setLoading(false);
     }
 
-    load();
+    // Nothing inside load() is wrapped, and decField throws on a row it cannot
+    // open — one corrupt ciphertext would otherwise leave `loading` true
+    // forever: a spinner, no banner, no way to tell it apart from a slow
+    // network. decNumber already survives a bad row on purpose; this makes the
+    // text columns fail loudly instead of silently.
+    load().catch((cause) => {
+      if (!active) return;
+      setError(cause instanceof Error ? cause.message : "Ukjent feil");
+      setLoading(false);
+    });
 
     return () => {
       active = false;

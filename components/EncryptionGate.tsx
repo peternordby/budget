@@ -7,8 +7,9 @@ import {
   createKeys,
   hasEncryption,
   isUnlocked,
+  lock,
   recoverWithPhrase,
-  resumeFromSession,
+  resumeStoredKey,
   unlockWithPassword,
   type EncMeta,
 } from "@/lib/crypto";
@@ -17,11 +18,10 @@ import {
 //
 // A session is not enough to read this ledger: the amounts and descriptions are
 // encrypted under a key derived from the password, and the password is not part
-// of the session. Supabase keeps the session in localStorage across browser
-// restarts; the key deliberately lives in sessionStorage only, or "the database
-// cannot read this" would quietly mean "until someone opens the laptop". So a
-// new tab-session asks for the password once. That prompt is the whole UX cost
-// of the scheme and there is no way around it.
+// of the session. So this screen exists, and asking for the password is the
+// whole UX cost of the scheme — there is no way around it, only around how
+// often. The key is stored for 7 days of use (lib/crypto.ts), so in practice
+// this appears after a week away, after a sign-out, and on a new device.
 //
 // One component covers every way an account can arrive here, because they all
 // end in the same two questions — do you have a key, and can you open it:
@@ -53,8 +53,9 @@ export default function EncryptionGate({ session, children }: EncryptionGateProp
 
   useEffect(() => {
     let active = true;
-    // The key may already be in this tab's sessionStorage from before a reload.
-    resumeFromSession(session.user.id).then((resumed) => {
+    // The key may already be stored from a previous visit, this browser's other
+    // tab, or before a reload.
+    resumeStoredKey(session.user.id).then((resumed) => {
       if (!active) return;
       if (resumed) setMode("open");
       else setMode(hasEncryption(meta) ? "unlock" : "setup");
@@ -95,6 +96,11 @@ export default function EncryptionGate({ session, children }: EncryptionGateProp
       setPassword("");
       setMode("phrase");
     } catch (error) {
+      // createKeys already unlocked this tab with a key that, if saveMeta was
+      // what failed, is wrapped nowhere. Left in place, a reload would resume
+      // it, the app would open, and everything written before the tab closed
+      // would be unreadable forever. Drop it and let setup start over.
+      lock();
       setMessage(error instanceof Error ? error.message : "Kunne ikke sette opp kryptering.");
     }
     setPending(false);
@@ -120,6 +126,17 @@ export default function EncryptionGate({ session, children }: EncryptionGateProp
     event.preventDefault();
     setMessage(null);
     setPending(true);
+
+    // Same reason as setup: the key is about to be rewrapped under whatever is
+    // typed here, and a typo would wrap it under a password nobody knows. The
+    // phrase would still open it, but only into this same screen, every time.
+    const check = await supabase.auth.signInWithPassword({ email, password });
+    if (check.error) {
+      setMessage("Feil passord.");
+      setPending(false);
+      return;
+    }
+
     try {
     const next = await recoverWithPhrase(phraseInput, password, meta ?? {}, session.user.id);
       await saveMeta(next);

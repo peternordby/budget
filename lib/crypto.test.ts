@@ -16,8 +16,9 @@ import {
 } from "./crypto";
 
 // btoa/atob are globals in the browser; in node they exist too, but
-// sessionStorage does not — crypto.ts guards for that, and these tests
-// exercise the no-storage path.
+// localStorage does not — crypto.ts guards for that, and these tests exercise
+// the no-storage path. The storage and expiry behaviour is covered in
+// test/integration/crypto_session.test.ts.
 
 describe("crypto", () => {
   beforeEach(() => {
