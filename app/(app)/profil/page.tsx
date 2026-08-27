@@ -274,7 +274,7 @@ export default function ProfilPage() {
               id="profile-name"
               value={nameDraft}
               onChange={(event) => setNameDraft(event.target.value)}
-              placeholder="Peter Nordby"
+              placeholder="Erling Haaland"
               autoComplete="name"
             />
           </div>
@@ -307,6 +307,7 @@ export default function ProfilPage() {
               type="email"
               value={emailDraft}
               onChange={(event) => setEmailDraft(event.target.value)}
+              placeholder="erling@landslaget.no"
               autoComplete="email"
               required
             />

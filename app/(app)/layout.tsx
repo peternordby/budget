@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, type ReactNode } from "react";
+import { MotionConfig } from "motion/react";
 import type { User } from "@supabase/supabase-js";
 import { usePathname } from "next/navigation";
 import AuthGate from "@/components/AuthGate";
@@ -53,6 +54,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         // in the app would render as 0.
         <EncryptionGate session={session}>
           <LedgerProvider session={session}>
+            {/* One place decides how motion behaves. reducedMotion="user" makes
+                every `motion` animation in the app respect the OS setting, so no
+                component checks the media query itself — the mirror of the
+                blanket prefers-reduced-motion override in globals.css that
+                neutralises the CSS keyframes. */}
+            <MotionConfig reducedMotion="user">
             <main className="shell">
               {/* useSearchParams (in TopNav, and later PeriodPicker) requires a
                   Suspense boundary in the App Router. One boundary covers both
@@ -61,6 +68,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 <AppChrome user={session.user}>{children}</AppChrome>
               </Suspense>
             </main>
+            </MotionConfig>
           </LedgerProvider>
         </EncryptionGate>
       )}

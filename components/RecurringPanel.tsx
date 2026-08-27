@@ -14,6 +14,7 @@ import { IconCheck, IconChevronDown, IconTrash, IconX } from "@/components/icons
 import { missingFixedRef, useDismissals } from "@/lib/dismissals";
 import { monthKey } from "@/lib/insights";
 import { encField } from "@/lib/crypto";
+import { Collapse } from "@/components/charts";
 import styles from "./RecurringPanel.module.css";
 
 type RecurringPanelProps = {
@@ -217,7 +218,7 @@ export default function RecurringPanel({
 
       {status ? <div className="status">{status}</div> : null}
 
-      {!collapsed ? (
+      <Collapse open={!collapsed}>
         <div id="recurring-body">
           {!month ? (
             <p className="helper">
@@ -451,7 +452,7 @@ export default function RecurringPanel({
             </button>
           )}
         </div>
-      ) : null}
+      </Collapse>
     </section>
   );
 }

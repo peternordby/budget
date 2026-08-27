@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   useAnalysisWindow,
   useLedger,
@@ -12,6 +13,8 @@ import { categorySeries } from "@/lib/trends";
 import { monthKey, type MonthRef } from "@/lib/insights";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { IconX } from "@/components/icons";
+import MonthColumns, { type MonthPoint } from "@/components/MonthColumns";
+import { T_BASE } from "@/lib/motion";
 import styles from "./CategoryDrilldown.module.css";
 
 const SHORT_MONTHS = [
@@ -184,17 +187,39 @@ export default function CategoryDrilldown({
     return map;
   }, [ledger.budgets, category]);
 
-  const maxValue = useMemo(() => {
-    let max = 1;
-    months.forEach((ref, index) => {
-      max = Math.max(
-        max,
-        points[index] ?? 0,
-        budgetByMonth.get(monthKey(ref.year, ref.month)) ?? 0
-      );
-    });
-    return max;
-  }, [months, points, budgetByMonth]);
+  // Spend per month, with the month's budget as the reference marker. The
+  // chart owns the scale (and so covers a marker that exceeds every bar).
+  const chartPoints = useMemo<MonthPoint[]>(
+    () =>
+      months.map((ref, index) => {
+        const key = monthKey(ref.year, ref.month);
+        const budget = budgetByMonth.get(key);
+        const value = points[index] ?? 0;
+        return {
+          key,
+          label: SHORT_MONTHS[ref.month - 1],
+          yearLabel: ref.month === 1 || index === 0 ? String(ref.year) : undefined,
+          values: [value],
+          marker: budget,
+          tooltip: {
+            title: `${SHORT_MONTHS[ref.month - 1]} ${ref.year}`,
+            rows:
+              budget === undefined
+                ? [{ value: formatCurrency(value) }]
+                : [
+                    { label: "Brukt", value: formatCurrency(value) },
+                    { label: "Budsjett", value: formatCurrency(budget), tone: "muted" as const },
+                    {
+                      label: value > budget ? "Over" : "Igjen",
+                      value: formatCurrency(Math.abs(budget - value)),
+                      tone: value > budget ? ("bad" as const) : ("good" as const),
+                    },
+                  ],
+          },
+        };
+      }),
+    [months, points, budgetByMonth]
+  );
 
   const budgetedMonths = useMemo(() => {
     return months
@@ -225,12 +250,16 @@ export default function CategoryDrilldown({
       });
   }, [selectionExpenses, category]);
 
-  if (!category) return null;
-
   return (
-    <div
+    <AnimatePresence>
+      {category ? (
+    <motion.div
       ref={panelRef}
       className={styles["panel"]}
+      initial={{ opacity: 0, x: 24 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 24 }}
+      transition={T_BASE}
       role="dialog"
       // Deliberately no aria-modal: this is a side panel, not a modal — the
       // CSS has no scrim, nothing traps Tab and nothing inerts the page
@@ -274,40 +303,12 @@ export default function CategoryDrilldown({
 
         <div>
           <h3 className={styles["section-heading"]}>{windowLabel}</h3>
-          <div className={styles["bars"]}>
-            {months.map((ref, index) => {
-              const value = points[index] ?? 0;
-              const key = monthKey(ref.year, ref.month);
-              const budget = budgetByMonth.get(key);
-              const heightPct = (value / maxValue) * 100;
-              const budgetPct =
-                budget !== undefined ? Math.min((budget / maxValue) * 100, 100) : null;
-              const label = `${SHORT_MONTHS[ref.month - 1]} ${ref.year}`;
-              const title =
-                budget !== undefined
-                  ? `${label}: ${formatCurrency(value)} (budsjett ${formatCurrency(budget)})`
-                  : `${label}: ${formatCurrency(value)}`;
-              return (
-                <div key={key} className={styles["bar-col"]} title={title}>
-                  <div className={styles["bar-track"]}>
-                    {budgetPct !== null ? (
-                      <div
-                        className={styles["bar-budget-mark"]}
-                        style={{ bottom: `${budgetPct}%` }}
-                      />
-                    ) : null}
-                    <div
-                      className={styles["bar-fill"]}
-                      style={{ height: `${heightPct}%` }}
-                    />
-                  </div>
-                  <span className={styles["bar-label"]}>
-                    {ref.month === 1 || index === 0 ? ref.year : SHORT_MONTHS[ref.month - 1]}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <MonthColumns
+            points={chartPoints}
+            series={[{ key: "spend", color: "var(--accent)" }]}
+            height={130}
+            ariaLabel={`${category} per måned. ${windowLabel}`}
+          />
         </div>
 
         <div>
@@ -361,6 +362,8 @@ export default function CategoryDrilldown({
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }

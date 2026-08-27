@@ -15,11 +15,7 @@ import {
   totalSeries,
   type Snapshot,
 } from "./savings";
-import {
-  axisTicks,
-  labelledDates,
-  shortAmount,
-} from "@/components/StackedAreaChart";
+import { axisTicks, labelledDates, shortAmount } from "./chart";
 
 let nextId = 1;
 function snap(category: string, date: string, amount: number): Snapshot {

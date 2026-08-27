@@ -1,25 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-
-import {
-  useCallback,
-  useMemo,
-  useState,
-  type CSSProperties,
-} from "react";
-import {
-  useLedger,
-  useLedgerHistory,
-  useLedgerSelection,
-} from "@/components/LedgerProvider";
-import MonthOverMonth from "@/components/MonthOverMonth";
-import Anomalies from "@/components/Anomalies";
-import CategoryDrilldown from "@/components/CategoryDrilldown";
+import { useCallback, useMemo, useState } from "react";
+import { useLedger, useLedgerSelection } from "@/components/LedgerProvider";
 import { usePeriod } from "@/lib/usePeriod";
-import { getCategoryHue } from "@/lib/categoryColor";
-import { IconChevronDown } from "@/components/icons";
+import { periodLabel } from "@/lib/period";
+import { categoryColor, getCategorySlot } from "@/lib/categoryColor";
+import { GaugeArc, ShareBar, type ShareSegment } from "@/components/charts";
 import { formatCurrency, toNumber } from "@/lib/format";
 import { monthKey, type MonthRef } from "@/lib/insights";
 import {
@@ -52,52 +38,15 @@ export default function OversiktPage() {
     () => ({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }),
     []
   );
-  const { selectedKeys, selectedList, single, anchor } = usePeriod(fallback);
-  // Carry the selected period across to the budget page, the same way TopNav
-  // does for every route.
-  const periodQuery = useSearchParams().toString();
-  const historyEntries = useLedgerHistory(anchor);
+  const { selectedKeys, selectedList, single } = usePeriod(fallback);
   const expenses = useLedgerSelection(selectedKeys);
 
-  const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
-  const [drilldownCategory, setDrilldownCategory] = useState<string | null>(null);
+  const [activeShare, setActiveShare] = useState<string | null>(null);
 
   const hasPeriod = selectedList.length > 0;
 
-  const allMonthOptions = useMemo(
-    () => [
-      { value: "1", label: "januar" },
-      { value: "2", label: "februar" },
-      { value: "3", label: "mars" },
-      { value: "4", label: "april" },
-      { value: "5", label: "mai" },
-      { value: "6", label: "juni" },
-      { value: "7", label: "juli" },
-      { value: "8", label: "august" },
-      { value: "9", label: "september" },
-      { value: "10", label: "oktober" },
-      { value: "11", label: "november" },
-      { value: "12", label: "desember" },
-    ],
-    []
-  );
-  const periodLabel = useMemo(() => {
-    if (!selectedList.length) return "Ingen periode";
-    if (selectedList.length === 1) {
-      const ref = selectedList[0];
-      const label =
-        allMonthOptions.find((month) => Number(month.value) === ref.month)
-          ?.label ?? String(ref.month);
-      return `${label} ${ref.year}`;
-    }
-    const years = new Set(selectedList.map((ref) => ref.year));
-    if (years.size === 1) {
-      const year = selectedList[0].year;
-      if (selectedList.length === 12) return String(year);
-      return `${selectedList.length} måneder ${year}`;
-    }
-    return `${selectedList.length} måneder valgt`;
-  }, [allMonthOptions, selectedList]);
+  // The label for the selected period, shared with /innsikt via lib/period.ts.
+  const label = periodLabel(selectedList);
 
   const categoryByName = useMemo(() => {
     const map = new Map<string, Category>();
@@ -183,22 +132,6 @@ export default function OversiktPage() {
 
     return map;
   }, [ledger.budgets, ledger.categories, hasPeriod, selectedKeys]);
-  const maxCategoryAmount = useMemo(() => {
-    let maxValue = 0;
-
-    categoryTotals.forEach((category) => {
-      maxValue = Math.max(maxValue, category.total);
-      if (hasPeriod) {
-        maxValue = Math.max(
-          maxValue,
-          budgetByCategoryName.get(category.name) ?? 0
-        );
-      }
-    });
-
-    return Math.max(maxValue, 1);
-  }, [budgetByCategoryName, categoryTotals, hasPeriod]);
-
   const budgetSummary = useMemo(() => {
     if (!hasPeriod) {
       return { budgetTotal: 0, percentUsed: 0, remaining: 0, daysLeft: 0, dailyBudget: 0, projected: 0 };
@@ -264,64 +197,56 @@ export default function OversiktPage() {
   }, [budgetByCategoryName, categoryTotals, hasPeriod]);
 
   const expenseBreakdown = useMemo(() => {
-    const items: { name: string; total: number; hue: number }[] = [];
+    const items: ShareSegment[] = [];
     let expenseSum = 0;
     categoryTotals.forEach((cat) => {
       if (!isSpendingKind(cat.kind) || cat.total <= 0) return;
-      items.push({ name: cat.name, total: cat.total, hue: getCategoryHue(cat.name) });
+      items.push({
+        key: cat.name,
+        label: cat.name,
+        value: cat.total,
+        color: categoryColor(getCategorySlot(cat.name)),
+      });
       expenseSum += cat.total;
     });
     return { items, total: expenseSum };
   }, [categoryTotals]);
 
-  function handleCategoryRowClick(
-    event: React.MouseEvent<HTMLDivElement>,
-    categoryName: string
-  ) {
-    // The row still contains the kind/pencil-free chart only, but a click on
-    // any future control inside it should not also open the drill-down.
-    if ((event.target as HTMLElement).closest("button, input")) return;
-    setDrilldownCategory((current) =>
-      current === categoryName ? null : categoryName
-    );
-  }
-
-  function handleCategoryRowKeyDown(
-    event: React.KeyboardEvent<HTMLDivElement>,
-    categoryName: string
-  ) {
-    if (event.target !== event.currentTarget) return;
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      setDrilldownCategory((current) =>
-        current === categoryName ? null : categoryName
-      );
-    }
-  }
-
   return (
     <>
       {budgetSummary.budgetTotal > 0 ? (
-        <section className={`card section-gap ${styles["gauge-card"]}`} style={{
-          "--gauge-pct": Math.min(budgetSummary.percentUsed, 100),
-          "--gauge-color": budgetSummary.percentUsed > 100 ? "var(--expense)" : budgetSummary.percentUsed > 75 ? "var(--gauge-warn)" : "var(--income)",
-        } as CSSProperties}>
+        <section className={`card section-gap ${styles["gauge-card"]}`}>
           <div className="card-head">
             <h2 className="section-title">Budsjett</h2>
-            <span className="helper">{periodLabel}</span>
+            <span className="helper">{label}</span>
           </div>
           <div className={styles["gauge-layout"]}>
-            <div className={styles["gauge-ring-wrap"]}>
-              <div className={styles["gauge-ring"]} />
-              <div className={styles["gauge-center"]}>
-                <span className={styles["gauge-pct"]} style={{
-                  color: budgetSummary.percentUsed > 100 ? "var(--expense)" : budgetSummary.percentUsed > 75 ? "var(--gauge-warn-ink)" : "var(--income)",
-                }}>
-                  {budgetSummary.percentUsed.toFixed(0)}%
-                </span>
-                <span className={styles["gauge-label"]}>brukt</span>
-              </div>
-            </div>
+            {/* Two states, not three. The amber 75–100 % band said "careful"
+                about a month that is still inside its budget, in a third colour
+                on the loudest element on the page; being at 80 % on the 25th is
+                simply fine. Over budget is the one thing worth a colour change,
+                and it gets the second lap inside the ring as well as the red. */}
+            <GaugeArc
+              fraction={budgetSummary.percentUsed / 100}
+              color={
+                budgetSummary.percentUsed > 100
+                  ? "var(--expense)"
+                  : "var(--income)"
+              }
+            >
+              <span
+                className={styles["gauge-pct"]}
+                style={{
+                  color:
+                    budgetSummary.percentUsed > 100
+                      ? "var(--expense)"
+                      : "var(--income)",
+                }}
+              >
+                {budgetSummary.percentUsed.toFixed(0)}%
+              </span>
+              <span className={styles["gauge-label"]}>brukt</span>
+            </GaugeArc>
             <div className={styles["gauge-details"]}>
               <div className={styles["gauge-main-figure"]}>
                 <span className="stat-label">Brukt av budsjett</span>
@@ -392,31 +317,36 @@ export default function OversiktPage() {
 
       {expenseBreakdown.items.length > 0 ? (
         <section className="card section-gap">
-          <h2 className="section-title">Fordeling</h2>
-          <div className={styles["breakdown-bar"]}>
-            {expenseBreakdown.items.map((item) => {
-              const pct = (item.total / expenseBreakdown.total) * 100;
-              return (
-                <div
-                  key={item.name}
-                  className={styles["breakdown-segment"]}
-                  style={{
-                    width: `${Math.max(pct, 1.5)}%`,
-                    background: `hsl(${item.hue} var(--seg-s) var(--seg-l))`,
-                  } as CSSProperties}
-                  title={`${item.name}: ${formatCurrency(item.total)} (${pct.toFixed(0)}%)`}
-                />
-              );
-            })}
+          <div className="card-head">
+            <h2 className="section-title">Fordeling</h2>
+            <span className="helper">{formatCurrency(expenseBreakdown.total)}</span>
           </div>
+          {/* Bar and legend share one hover state, so pointing at either
+              highlights both — the legend used to be the only place a category
+              was named, and the bar the only place its size was visible. */}
+          <ShareBar
+            segments={expenseBreakdown.items}
+            formatValue={formatCurrency}
+            activeKey={activeShare}
+            onActiveKey={setActiveShare}
+            ariaLabel={`Utgifter fordelt på ${expenseBreakdown.items.length} kategorier`}
+          />
           <div className={styles["breakdown-legend"]}>
             {expenseBreakdown.items.map((item) => {
-              const pct = (item.total / expenseBreakdown.total) * 100;
+              const pct = (item.value / expenseBreakdown.total) * 100;
               return (
-                <div key={item.name} className={styles["breakdown-legend-item"]}>
-                  <span className="breakdown-dot" style={{ background: `hsl(${item.hue} var(--seg-s) var(--seg-l))` }} />
-                  <span className={styles["breakdown-legend-name"]}>{item.name}</span>
-                  <span className={styles["breakdown-legend-value"]}>{formatCurrency(item.total)}</span>
+                <div
+                  key={item.key}
+                  className={styles["breakdown-legend-item"]}
+                  data-dim={
+                    activeShare && activeShare !== item.key ? "true" : undefined
+                  }
+                  onMouseEnter={() => setActiveShare(item.key)}
+                  onMouseLeave={() => setActiveShare(null)}
+                >
+                  <span className="breakdown-dot" style={{ background: item.color }} />
+                  <span className={styles["breakdown-legend-name"]}>{item.label}</span>
+                  <span className={styles["breakdown-legend-value"]}>{formatCurrency(item.value)}</span>
                   <span className={styles["breakdown-legend-pct"]}>{pct.toFixed(0)}%</span>
                 </div>
               );
@@ -425,152 +355,23 @@ export default function OversiktPage() {
         </section>
       ) : null}
 
-      <MonthOverMonth entries={historyEntries} single={single} />
-
-      <Anomalies
-        entries={historyEntries}
-        selected={single}
-        periodLabel={periodLabel}
-        templates={ledger.templates}
-      />
-
-      <section
-        className={`card section-gap ${styles["category-card"]}`}
-      >
-        <div className="card-head">
-          <button
-            type="button"
-            className="collapse-toggle"
-            onClick={() => setCategoriesCollapsed((value) => !value)}
-            aria-expanded={!categoriesCollapsed}
-            aria-controls="category-list"
-          >
-            <span className={`collapse-chevron ${categoriesCollapsed ? "collapsed" : ""}`}>
-              <IconChevronDown />
-            </span>
-            <h2 className="section-title">Kategorier</h2>
-          </button>
-          <div className="card-head-meta">
-            <span className="helper">{periodLabel}</span>
-            <Link className="btn btn-ghost btn-small" href={`/budsjett${periodQuery ? `?${periodQuery}` : ""}`}>
-              Rediger budsjett
-            </Link>
+      {/* Both sections above are conditional, and the category list that used to
+          render unconditionally now lives on /budsjett — so without this a month
+          with no budget and no spending is a blank page, which reads as a
+          failure rather than as an empty month. */}
+      {budgetSummary.budgetTotal <= 0 && expenseBreakdown.items.length === 0 ? (
+        <section className="card section-gap">
+          <div className="card-head">
+            <h2 className="section-title">Ingenting å vise</h2>
+            <span className="helper">{label}</span>
           </div>
-        </div>
-        {!categoriesCollapsed ? (
-          <>
-            {categoryTotals.length ? (
-              <div className={styles["category-chart-list"]} id="category-list">
-              {categoryTotals.map((category) => {
-                const isIncome = isIncomeKind(category.kind);
-                const budgetValue =
-                  budgetByCategoryName.get(category.name) ?? 0;
-                const hasBudget = budgetValue > 0;
-                const percentUsed =
-                  budgetValue > 0 ? (category.total / budgetValue) * 100 : 0;
-                const isOverBudget = hasBudget && percentUsed > 100;
-                const remaining = budgetValue - category.total;
-
-                const barScale = hasBudget ? budgetValue : maxCategoryAmount;
-                const spentWidth =
-                  category.total > 0
-                    ? Math.max(Math.min((category.total / barScale) * 100, 100), 1.8)
-                    : 0;
-
-                const categoryBudgetStateClass =
-                  !isIncome && hasBudget
-                    ? isOverBudget
-                      ? "over-budget"
-                      : "under-budget"
-                    : "";
-                const spentBarStateClass = isIncome
-                  ? "income"
-                  : hasBudget
-                    ? isOverBudget
-                      ? "over"
-                      : "under-budget"
-                    : "no-budget";
-                const catHue = getCategoryHue(category.name);
-                return (
-                  <div
-                    key={category.name}
-                    className={`${styles["category-chart-row"]} ${styles[categoryBudgetStateClass] ?? ""}`}
-                    tabIndex={0}
-                    onClick={(event) => handleCategoryRowClick(event, category.name)}
-                    onKeyDown={(event) => handleCategoryRowKeyDown(event, category.name)}
-                    title={`Vis historikk for ${category.name}`}
-                    aria-label={`Vis historikk for ${category.name}`}
-                  >
-                    <div className={styles["category-chart-header"]}>
-                      <div className={styles["cat-name-row"]}>
-                        <span className={styles["cat-dot"]} style={{
-                          background: isIncome
-                            ? "var(--income)"
-                            : `hsl(${catHue} var(--dot-s) var(--dot-l))`,
-                        }} />
-                        <strong className={isIncome ? "text-income" : ""}>
-                          {category.name}
-                        </strong>
-                      </div>
-                      <div className={styles["category-chart-values"]}>
-                        <span className={styles["category-value"]}>
-                          {formatCurrency(category.total)}
-                        </span>
-                        {hasPeriod && hasBudget && !isIncome ? (
-                          <>
-                            <span className={`${styles["category-value"]} helper`}>
-                              / {formatCurrency(budgetValue)}
-                            </span>
-                            <span className={`${styles["cat-remaining"]} ${isOverBudget ? "text-expense" : "text-income"}`}>
-                              {isOverBudget
-                                ? `${formatCurrency(Math.abs(remaining))} over`
-                                : `${formatCurrency(remaining)} igjen`}
-                            </span>
-                          </>
-                        ) : hasPeriod && !isIncome ? (
-                          <span className={`${styles["category-value"]} helper`}>Budsjett ikke satt</span>
-                        ) : null}
-                      </div>
-                      <span className={styles["cat-pct-slot"]}>
-                        {hasBudget && !isIncome ? (
-                          <span className={`${styles["cat-pct-badge"]} ${isOverBudget ? styles["cat-pct-over"] : percentUsed > 75 ? styles["cat-pct-warn"] : styles["cat-pct-ok"]}`}>
-                            {percentUsed.toFixed(0)}%
-                          </span>
-                        ) : null}
-                      </span>
-                    </div>
-                    <div className={styles["category-chart-track"]} style={{
-                      "--bar-color": isIncome
-                        ? "var(--income)"
-                        : hasBudget
-                          ? isOverBudget
-                            ? "var(--expense)"
-                            : "var(--income)"
-                          : `hsl(${catHue} var(--bar-s) var(--bar-l))`,
-                    } as CSSProperties}>
-                      <div
-                        className={`${styles["category-chart-bar"]} ${styles["spent"]} ${styles[spentBarStateClass] ?? ""}`}
-                        style={{
-                          width: `${spentWidth}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-              </div>
-            ) : (
-              <div className="empty">Ingen kategorier</div>
-            )}
-          </>
-        ) : null}
-      </section>
-
-      <CategoryDrilldown
-        category={drilldownCategory}
-        onClose={() => setDrilldownCategory(null)}
-        anchor={anchor}
-      />
+          <p className="helper">
+            {ledger.loading
+              ? "Laster..."
+              : "Ingen føringer eller budsjett for denne perioden. Legg inn transaksjoner under Transaksjoner, eller sett et budsjett under Budsjett."}
+          </p>
+        </section>
+      ) : null}
     </>
   );
 }

@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, type MouseEvent } from "react";
+import MonthColumns, { type MonthPoint } from "@/components/MonthColumns";
 import { useLedger, useLedgerHistory } from "@/components/LedgerProvider";
 import { usePeriod } from "@/lib/usePeriod";
 import { MONTH_NAMES, formatCurrency, formatSignedCurrency } from "@/lib/format";
 import {
   addMonths,
   aggregateByMonth,
-  listWindowMonths,
   monthKey,
   type MonthRef,
 } from "@/lib/insights";
+import { WINDOW_AFTER, chartWindow } from "@/lib/period";
 import styles from "./PeriodPicker.module.css";
 
 const SHORT_MONTHS = [
@@ -39,14 +40,18 @@ export default function PeriodPicker() {
     anchor,
     selectMonth,
     selectYear,
-    shiftAnchor,
-    resetAnchor,
+    shiftPeriod,
+    goToToday,
     bootstrap,
   } = usePeriod(fallback);
 
   const { availableMonths, ensureMonthCovered } = useLedger();
-  const entries = useLedgerHistory(anchor);
-  const [multiSelect, setMultiSelect] = useState(false);
+  // The window overhangs the anchor by WINDOW_AFTER months, and
+  // useLedgerHistory returns the twelve months *ending* at what it is given —
+  // so it has to be asked for the window's last month, not the anchor. Asking
+  // for the anchor left the three future columns permanently empty, even for a
+  // month that had a future-dated transaction in it.
+  const entries = useLedgerHistory(addMonths(anchor, WINDOW_AFTER));
 
   const availableYears = useMemo(
     () =>
@@ -88,22 +93,55 @@ export default function PeriodPicker() {
   // months that genuinely had no transactions.
   useEffect(() => {
     selectedList.forEach((ref) => ensureMonthCovered(ref));
-    ensureMonthCovered(addMonths(anchor, -11));
-    ensureMonthCovered(anchor);
+    ensureMonthCovered(months[0]);
+    ensureMonthCovered(months[months.length - 1]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedKeys, anchor.year, anchor.month]);
 
   const months = useMemo(
-    () => listWindowMonths(anchor, 12),
+    () => chartWindow(anchor),
     [anchor.year, anchor.month]
   );
   const monthly = useMemo(
     () => aggregateByMonth(entries, months),
     [entries, months]
   );
-  const maxValue = useMemo(
+  // One point per month for the chart. The figures live in the tooltip rows
+  // rather than in a `title` attribute, so they are readable at a glance and
+  // reachable by a screen reader (MonthColumns builds each column button's
+  // accessible name from the same rows).
+  const chartPoints = useMemo<MonthPoint[]>(
     () =>
-      Math.max(1, ...monthly.map((m) => Math.max(m.income, m.expenses))),
+      monthly.map((month, index) => ({
+        key: month.key,
+        label: SHORT_MONTHS[month.month - 1],
+        yearLabel:
+          month.month === 1 || index === 0 ? String(month.year) : undefined,
+        values: [month.income, month.expenses],
+        empty: month.count === 0,
+        tooltip: {
+          title: `${MONTH_NAMES[month.month - 1]} ${month.year}`,
+          rows: month.count
+            ? [
+                {
+                  label: "Inntekter",
+                  value: formatCurrency(month.income),
+                  swatch: "var(--income)",
+                },
+                {
+                  label: "Utgifter",
+                  value: formatCurrency(month.expenses),
+                  swatch: "var(--expense)",
+                },
+                {
+                  label: "Netto",
+                  value: formatSignedCurrency(month.net),
+                  tone: month.net >= 0 ? ("good" as const) : ("bad" as const),
+                },
+              ]
+            : [{ value: "Ingen data", tone: "muted" as const }],
+        },
+      })),
     [monthly]
   );
 
@@ -123,9 +161,11 @@ export default function PeriodPicker() {
     return true;
   }
 
-  function handleColClick(event: MouseEvent, ref: MonthRef) {
-    const additive = multiSelect || event.ctrlKey || event.metaKey || event.shiftKey;
-    selectMonth(ref, additive);
+  function handleColClick(point: MonthPoint, event: MouseEvent) {
+    const month = monthly.find((candidate) => candidate.key === point.key);
+    if (!month) return;
+    const additive = event.ctrlKey || event.metaKey || event.shiftKey;
+    selectMonth({ year: month.year, month: month.month }, additive);
   }
 
   return (
@@ -136,20 +176,14 @@ export default function PeriodPicker() {
           <span className="helper">{windowRangeLabel}</span>
         </div>
         <div className={styles["mom-controls"]}>
-          <button
-            className={`btn btn-ghost btn-small ${multiSelect ? "is-on" : ""}`}
-            type="button"
-            onClick={() => setMultiSelect((value) => !value)}
-            aria-pressed={multiSelect}
-            title="Velg flere måneder"
-          >
-            Velg flere
-          </button>
+          {/* "Velg flere" was a mode toggle for something the modifier keys
+              already did, and the two ways of expressing "add a month" could
+              disagree — the toggle stayed on while nothing looked different. */}
           <button
             className="btn btn-ghost btn-small"
             type="button"
-            onClick={resetAnchor}
-            title="Vis de siste 12 månedene"
+            onClick={goToToday}
+            title="Velg denne måneden og vis de siste 12 månedene"
           >
             I dag
           </button>
@@ -157,18 +191,18 @@ export default function PeriodPicker() {
             <button
               className="btn btn-ghost btn-small"
               type="button"
-              onClick={() => shiftAnchor(-1)}
-              aria-label="Vis tidligere måneder"
-              title="Tidligere"
+              onClick={() => shiftPeriod(-1)}
+              aria-label="Forrige måned"
+              title="Forrige måned"
             >
               ‹
             </button>
             <button
               className="btn btn-ghost btn-small"
               type="button"
-              onClick={() => shiftAnchor(1)}
-              aria-label="Vis senere måneder"
-              title="Senere"
+              onClick={() => shiftPeriod(1)}
+              aria-label="Neste måned"
+              title="Neste måned"
             >
               ›
             </button>
@@ -194,46 +228,22 @@ export default function PeriodPicker() {
         </div>
       ) : null}
 
-      <div className={styles["mom-chart"]} role="list">
-        {monthly.map((month) => {
-          const isActive = selectedKeys.has(month.key);
-          const hasData = month.count > 0;
-          return (
-            <button
-              key={month.key}
-              type="button"
-              role="listitem"
-              aria-pressed={isActive}
-              className={`${styles["mom-col"]} ${isActive ? styles["active"] : ""} ${hasData ? "" : styles["empty"]}`}
-              onClick={(event) =>
-                handleColClick(event, { year: month.year, month: month.month })
-              }
-              title={
-                hasData
-                  ? `${MONTH_NAMES[month.month - 1]} ${month.year}: inntekter ${formatCurrency(month.income)}, utgifter ${formatCurrency(month.expenses)}, netto ${formatSignedCurrency(month.net)}`
-                  : `${MONTH_NAMES[month.month - 1]} ${month.year}: ingen data`
-              }
-            >
-              <span className={styles["mom-bars"]} aria-hidden="true">
-                <span
-                  className={`${styles["mom-bar"]} ${styles["mom-bar-income"]}`}
-                  style={{ height: `${(month.income / maxValue) * 100}%` }}
-                />
-                <span
-                  className={`${styles["mom-bar"]} ${styles["mom-bar-expense"]}`}
-                  style={{ height: `${(month.expenses / maxValue) * 100}%` }}
-                />
-              </span>
-              <span className={styles["mom-label"]}>
-                {SHORT_MONTHS[month.month - 1]}
-                {month.month === 1 || month.key === monthly[0].key ? (
-                  <span className={styles["mom-label-year"]}>{month.year}</span>
-                ) : null}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <MonthColumns
+        points={chartPoints}
+        series={[
+          { key: "income", color: "var(--income)" },
+          { key: "expense", color: "var(--expense)" },
+        ]}
+        height={150}
+        // The figures are in the tooltip and this chart's job is picking a
+        // month, not reading a kroner value off the axis.
+        axisValues={false}
+        selectedKeys={selectedKeys}
+        onSelect={handleColClick}
+        selectHint={(point) => `Velg ${point.tooltip.title}`}
+        ariaLabel={`Inntekter og utgifter per måned, ${windowRangeLabel}`}
+      />
+
       <div className={styles["mom-legend"]}>
         <span className={styles["mom-legend-item"]}>
           <span className="breakdown-dot" style={{ background: "var(--income)" }} />
@@ -244,9 +254,7 @@ export default function PeriodPicker() {
           Utgifter
         </span>
         <span className={`${styles["mom-legend-item"]} helper`}>
-          {multiSelect
-            ? "Klikk for å legge til eller fjerne måneder"
-            : "Klikk på en måned · hold Ctrl/⌘ for å velge flere"}
+          Klikk på en måned · hold Ctrl/⌘ for å velge flere
         </span>
       </div>
     </section>

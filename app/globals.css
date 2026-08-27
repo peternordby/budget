@@ -32,8 +32,6 @@
   --warn-ink: #92400e;
   --bad-bg: #fee2e2;
   --bad-ink: #991b1b;
-  --gauge-warn: #c87f31;
-  --gauge-warn-ink: #a06828;
 
   --income-row-bg: #f0fdf4;
   --income-row-border: rgba(5, 150, 105, 0.15);
@@ -53,17 +51,21 @@
   --focus-ring: rgba(217, 119, 6, 0.12);
   --placeholder: #a8a29e;
 
-  /* Saturation/lightness for hue-generated category colors. */
-  --seg-s: 52%;
-  --seg-l: 56%;
-  --dot-s: 48%;
-  --dot-l: 50%;
-  --bar-s: 42%;
-  --bar-l: 52%;
-  --pill-bg-s: 40%;
-  --pill-bg-l: 95%;
-  --pill-ink-s: 35%;
-  --pill-ink-l: 35%;
+  /* The categorical palette: eight fixed slots, in this order.
+     The ORDER is the colour-vision-deficiency safety mechanism, not a
+     preference — adjacent slots are what end up touching in a stack or sitting
+     next to each other in a legend, and this sequence is the one that clears
+     the gates. Re-ordering or re-picking a step means re-validating the set (see
+     lib/categoryColor.ts). Light steps: worst adjacent pair CVD ΔE 9.1,
+     normal-vision ΔE 19.6. */
+  --cat-1: #2a78d6; /* blue */
+  --cat-2: #eb6834; /* orange */
+  --cat-3: #1baf7a; /* aqua */
+  --cat-4: #eda100; /* yellow */
+  --cat-5: #e87ba4; /* magenta */
+  --cat-6: #008300; /* green */
+  --cat-7: #4a3aa7; /* violet */
+  --cat-8: #e34948; /* red */
 
   --ambient-a: rgba(217, 119, 6, 0.07);
   --ambient-b: rgba(5, 150, 105, 0.05);
@@ -96,8 +98,6 @@ html[data-theme="dark"] {
   --warn-ink: #fcd34d;
   --bad-bg: rgba(248, 113, 113, 0.16);
   --bad-ink: #fca5a5;
-  --gauge-warn: #e8a04c;
-  --gauge-warn-ink: #e8a04c;
 
   --income-row-bg: rgba(52, 211, 153, 0.07);
   --income-row-border: rgba(52, 211, 153, 0.18);
@@ -117,16 +117,17 @@ html[data-theme="dark"] {
   --focus-ring: rgba(245, 158, 11, 0.22);
   --placeholder: #6f6862;
 
-  --seg-s: 48%;
-  --seg-l: 58%;
-  --dot-s: 50%;
-  --dot-l: 60%;
-  --bar-s: 40%;
-  --bar-l: 55%;
-  --pill-bg-s: 30%;
-  --pill-bg-l: 21%;
-  --pill-ink-s: 45%;
-  --pill-ink-l: 78%;
+  /* The same eight hues stepped for the dark surface — selected, not an
+     automatic flip of the light values. Worst adjacent pair CVD ΔE 8.4,
+     normal-vision ΔE 19.3, and all eight clear 3:1 against the card. */
+  --cat-1: #3987e5;
+  --cat-2: #d95926;
+  --cat-3: #199e70;
+  --cat-4: #c98500;
+  --cat-5: #d55181;
+  --cat-6: #008300;
+  --cat-7: #9085e9;
+  --cat-8: #e66767;
 
   --ambient-a: rgba(245, 158, 11, 0.06);
   --ambient-b: rgba(52, 211, 153, 0.04);

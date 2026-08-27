@@ -2,66 +2,17 @@
   margin-top: 16px;
 }
 
-/* The SVG's box. Its left margin is the value-axis gutter, so the viewBox maps
-   1:1 onto the plot and a percentage in HTML lines up with a coordinate in
-   SVG — which is what lets the labels live outside the stretched viewBox. */
+/* The chart measures this box and draws in its pixels, so there is no axis
+   gutter to reserve and no percentage-positioned HTML to keep in sync — the
+   value labels are `<text>` inside the SVG, sitting on their own gridlines. */
 .plot {
   position: relative;
-  margin-left: 46px;
 }
 
-.chart {
-  display: block;
-  width: 100%;
-  height: 300px;
+/* The value labels sit 4px above their own gridline, so the topmost one is
+   just outside the viewBox. */
+.plot svg {
   overflow: visible;
-}
-
-/* preserveAspectRatio="none" stretches the viewBox to the element, which would
-   stretch every stroke with it. non-scaling-stroke keeps them at their CSS
-   width — the same trick Sparkline.module.css uses. */
-.grid,
-.band-edge,
-.total-line,
-.guide,
-.point-mark {
-  vector-effect: non-scaling-stroke;
-}
-
-.grid {
-  stroke: var(--border);
-  stroke-width: 1;
-}
-
-.y-label {
-  position: absolute;
-  right: calc(100% + 8px);
-  transform: translateY(-50%);
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.x-axis {
-  position: relative;
-  height: 16px;
-  margin: 6px 0 0 46px;
-}
-
-.x-label {
-  position: absolute;
-  top: 0;
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.x-label-active {
-  color: var(--ink);
 }
 
 .band {
@@ -106,6 +57,8 @@
   fill: transparent;
   cursor: crosshair;
 }
+
+/* --- Legend / readout --- */
 
 /* --- Legend / readout --- */
 
@@ -196,10 +149,6 @@
 }
 
 @media (max-width: 860px) {
-  .chart {
-    height: 240px;
-  }
-
   .legend-head {
     display: none;
   }
@@ -214,106 +163,5 @@
   .legend-row > :nth-child(4) {
     grid-column: 2 / 4;
     text-align: left;
-  }
-}
-
-@media (max-width: 480px) {
-  .plot {
-    margin-left: 38px;
-  }
-
-  .x-axis {
-    margin-left: 38px;
-  }
-
-  /* Two labels is all that reliably fits; the rest would overlap. */
-  .x-label:not(:first-child):not(:last-child) {
-    display: none;
-  }
-}
-
-/* --- Hover tooltip --- */
-
-.tooltip {
-  position: absolute;
-  z-index: 4;
-  display: grid;
-  gap: 2px;
-  padding: 8px 10px;
-  min-width: 132px;
-  border-radius: var(--radius-soft);
-  border: 1px solid var(--border);
-  background: var(--surface-popover);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
-  backdrop-filter: blur(8px);
-  /* The guide is the pointer target; the tooltip must never eat the mouse or
-     it would fight the hit areas underneath and flicker. */
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-html[data-theme="dark"] .tooltip {
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.5);
-}
-
-.tooltip[data-side="center"] {
-  transform: translate(-50%, calc(-100% - 14px));
-}
-
-.tooltip[data-side="left"] {
-  transform: translate(0, calc(-100% - 14px));
-}
-
-.tooltip[data-side="right"] {
-  transform: translate(-100%, calc(-100% - 14px));
-}
-
-/* Near the top of the plot there is no room above the total line. */
-.tooltip[data-flip="below"][data-side="center"] {
-  transform: translate(-50%, 14px);
-}
-
-.tooltip[data-flip="below"][data-side="left"] {
-  transform: translate(0, 14px);
-}
-
-.tooltip[data-flip="below"][data-side="right"] {
-  transform: translate(-100%, 14px);
-}
-
-.tooltip-date {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.tooltip-total {
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-}
-
-.tooltip-change {
-  font-size: 12px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .tooltip {
-    animation: tooltip-in 120ms ease-out;
-  }
-}
-
-@keyframes tooltip-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
   }
 }

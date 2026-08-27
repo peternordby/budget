@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLedger, useLedgerSelection } from "@/components/LedgerProvider";
 import { usePeriod } from "@/lib/usePeriod";
 import { supabase } from "@/lib/supabaseClient";
-import { getCategoryHue } from "@/lib/categoryColor";
+import { categoryColor, getCategorySlot } from "@/lib/categoryColor";
 import { IconCheck, IconPencil, IconPlus, IconTrash, IconX } from "@/components/icons";
+import { BulletBar } from "@/components/charts";
 import { formatCurrency, monthLabel, monthName, toNumber } from "@/lib/format";
 import { monthKey, type MonthRef } from "@/lib/insights";
 import { decNumber, encField } from "@/lib/crypto";
@@ -41,12 +42,20 @@ export default function BudsjettPage() {
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [copying, setCopying] = useState(false);
+  // The previous month's budgets, per category id. Loaded rather than read on
+  // click, because the button's label has to state how many it would copy
+  // before anyone presses it.
+  const [previousBudgets, setPreviousBudgets] = useState<Record<number, number>>({});
   const [newName, setNewName] = useState("");
   const [newKind, setNewKind] = useState<CategoryKind>("variable");
   const [adding, setAdding] = useState(false);
-  const [renamingId, setRenamingId] = useState<number | null>(null);
-  const [renameDraft, setRenameDraft] = useState("");
+  // The row currently open for editing, and its pending kind. Budget edits go
+  // into `drafts` like every other pending figure; the kind is held separately
+  // because it writes to `category` rather than `budget`, and holding it means
+  // the row's cancel button can actually cancel it.
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [kindDraft, setKindDraft] = useState<CategoryKind | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const periodKey = single ? monthKey(single.year, single.month) : "";
@@ -57,6 +66,49 @@ export default function BudsjettPage() {
     setDrafts({});
     setStatus(null);
   }, [periodKey]);
+
+  useEffect(() => {
+    if (!single) {
+      setPreviousBudgets({});
+      return;
+    }
+    const previousRef = previousPeriod(single.year, single.month);
+    const fromWindow: Record<number, number> = {};
+    ledger.budgets.forEach((entry) => {
+      if (entry.year !== previousRef.year || entry.month !== previousRef.month) return;
+      fromWindow[entry.category_id] = entry.budget;
+    });
+    if (Object.keys(fromWindow).length) {
+      setPreviousBudgets(fromWindow);
+      return;
+    }
+
+    // LedgerProvider fetches budgets by year, so January's previous December
+    // can sit outside what it holds. One direct read rather than widening the
+    // whole window for a copy button.
+    if (previousRef.year === single.year) {
+      setPreviousBudgets({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("budget")
+        .select("category_id, budget")
+        .eq("user_id", ledger.userId)
+        .eq("year", previousRef.year)
+        .eq("month", previousRef.month);
+      if (cancelled || error) return;
+      const loaded: Record<number, number> = {};
+      for (const entry of data ?? []) {
+        loaded[entry.category_id] = await decNumber(entry.budget);
+      }
+      if (!cancelled) setPreviousBudgets(loaded);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [periodKey, ledger.budgets, ledger.userId, single]);
 
   const spentByCategoryId = useMemo(() => {
     const map = new Map<number, number>();
@@ -123,14 +175,29 @@ export default function BudsjettPage() {
     return Math.max(Math.round(parsed), 0);
   }
 
+  function isDirty(row: { id: number; budget: number }) {
+    const draft = drafts[row.id];
+    if (draft === undefined) return false;
+    return parseDraft(draft) !== row.budget;
+  }
+
   const dirtyRows = useMemo(
-    () =>
-      rows.filter((row) => {
-        const draft = drafts[row.id];
-        if (draft === undefined) return false;
-        return parseDraft(draft) !== row.budget;
-      }),
+    () => rows.filter(isDirty),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows, drafts]
+  );
+
+  // Rows the previous month budgeted and this one has not — the copy's whole
+  // scope. Keyed off the *effective* value (draft or stored), so a figure typed
+  // a second ago counts as set and will not be overwritten either.
+  const copyable = useMemo(
+    () =>
+      rows.filter(
+        (row) =>
+          (previousBudgets[row.id] ?? 0) > 0 && parseDraft(draftValue(row)) === 0
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, previousBudgets, drafts]
   );
 
   const totals = useMemo(() => {
@@ -145,13 +212,19 @@ export default function BudsjettPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, drafts]);
 
-  async function handleSave() {
-    if (!single || !dirtyRows.length) return;
+  /**
+   * Write the given rows' budgets. Takes the rows explicitly rather than always
+   * using `dirtyRows`, so a single row's tick and the toolbar's "Lagre N
+   * endringer" are one code path — "Kopier fra …" still fills every row at once
+   * and needs the batch.
+   */
+  async function saveRows(targets: { id: number }[]) {
+    if (!single || !targets.length) return;
     setSaving(true);
     setStatus(null);
 
-    const keep = dirtyRows.filter((row) => parseDraft(drafts[row.id]) > 0);
-    const clear = dirtyRows.filter((row) => parseDraft(drafts[row.id]) === 0);
+    const keep = targets.filter((row) => parseDraft(drafts[row.id]) > 0);
+    const clear = targets.filter((row) => parseDraft(drafts[row.id]) === 0);
 
     let error = null;
 
@@ -192,54 +265,82 @@ export default function BudsjettPage() {
       setStatus(error.message);
     } else {
       await ledger.refetch();
-      setDrafts({});
+      // Only the rows just written, so saving one row does not throw away the
+      // pending figures a "Kopier fra …" put on all the others.
+      setDrafts((current) => {
+        const next = { ...current };
+        targets.forEach((row) => delete next[row.id]);
+        return next;
+      });
     }
     setSaving(false);
   }
 
-  async function handleCopyPrevious() {
-    if (!single) return;
-    const previous = previousPeriod(single.year, single.month);
-    setCopying(true);
-    setStatus(null);
+  function handleSave() {
+    return saveRows(dirtyRows);
+  }
 
-    const next: Record<number, string> = {};
-    ledger.budgets.forEach((entry) => {
-      if (entry.year !== previous.year || entry.month !== previous.month) return;
-      next[entry.category_id] = String(entry.budget);
+  /** Commit one row: whichever of its name, kind and budget actually changed. */
+  async function commitRow(row: (typeof rows)[number]) {
+    const name = (nameDraft ?? row.name).trim();
+    // Blanking the name is a mistake, not an instruction: every form in the app
+    // needs a category, and a nameless one would render as an empty pill
+    // everywhere. Stay in edit mode and say so rather than silently keeping the
+    // old name, which looks like the save was ignored.
+    if (!name) {
+      setStatus("Kategorien må ha et navn.");
+      return;
+    }
+
+    const patch: { category?: string; kind?: CategoryKind } = {};
+    if (name !== row.name) patch.category = name;
+    if (kindDraft && kindDraft !== row.kind) patch.kind = kindDraft;
+    const wrotePatch = Object.keys(patch).length > 0;
+
+    if (wrotePatch && !(await writeCategory(row.id, patch))) return;
+
+    if (isDirty(row)) {
+      // saveRows refetches, so it covers the patch above too.
+      await saveRows([row]);
+    } else if (wrotePatch) {
+      await ledger.refetch();
+    }
+    closeRow(row);
+  }
+
+  function cancelRow(row: { id: number }) {
+    setDrafts((current) => {
+      const next = { ...current };
+      delete next[row.id];
+      return next;
     });
+    closeRow(row);
+  }
 
-    // January's previous month is the prior December, which can sit outside
-    // the years LedgerProvider fetched. One direct read rather than widening
-    // the whole window for a copy button.
-    if (!Object.keys(next).length && previous.year !== single.year) {
-      const { data, error } = await supabase
-        .from("budget")
-        .select("category_id, budget")
-        .eq("user_id", ledger.userId)
-        .eq("year", previous.year)
-        .eq("month", previous.month);
-      if (error) {
-        setStatus(error.message);
-        setCopying(false);
-        return;
-      }
-      for (const entry of data ?? []) {
-        next[entry.category_id] = String(await decNumber(entry.budget));
-      }
-    }
+  function closeRow(_row: { id: number }) {
+    setEditingId(null);
+    setNameDraft(null);
+    setKindDraft(null);
+  }
 
-    if (!Object.keys(next).length) {
-      setStatus(`Fant ingen budsjetter for ${monthLabel(previous.year, previous.month)}.`);
-    } else {
-      // Categories the previous month had no budget for are cleared, so the
-      // copy is a copy rather than a merge with whatever is on screen.
-      rows.forEach((row) => {
-        if (next[row.id] === undefined) next[row.id] = "";
+  /**
+   * Fill the *empty* budget cells from last month, and only those.
+   *
+   * It used to be a replace: every row the previous month had no budget for was
+   * cleared, "so the copy is a copy rather than a merge with whatever is on
+   * screen". That makes it destructive on the common use — most of the month is
+   * already budgeted and you want the two rows you forgot — so it fills gaps
+   * now, and the button's label says how many gaps it is filling.
+   */
+  function handleCopyPrevious() {
+    setStatus(null);
+    setDrafts((current) => {
+      const next = { ...current };
+      copyable.forEach((row) => {
+        next[row.id] = String(previousBudgets[row.id]);
       });
-      setDrafts(next);
-    }
-    setCopying(false);
+      return next;
+    });
   }
 
   async function handleAddCategory() {
@@ -260,23 +361,6 @@ export default function BudsjettPage() {
     setAdding(false);
   }
 
-  async function handleRename(id: number) {
-    const name = renameDraft.trim();
-    if (!name) return;
-    setStatus(null);
-    const { error } = await supabase
-      .from("category")
-      .update({ category: name })
-      .eq("id", id)
-      .eq("user_id", ledger.userId);
-    if (error) {
-      setStatus(error.message);
-      return;
-    }
-    setRenamingId(null);
-    await ledger.refetch();
-  }
-
   async function handleDelete(id: number) {
     setStatus(null);
     const { error } = await supabase
@@ -292,18 +376,28 @@ export default function BudsjettPage() {
     await ledger.refetch();
   }
 
-  async function handleChangeKind(id: number, kind: CategoryKind) {
+  /**
+   * The category row's own columns, in one update — the name and the kind both
+   * live on `category`, so editing both is one statement rather than two.
+   *
+   * No refetch of its own: commitRow may also be writing a budget, and two
+   * sequential refetches of the whole ledger for one row's edit is a waste.
+   */
+  async function writeCategory(
+    id: number,
+    patch: { category?: string; kind?: CategoryKind }
+  ) {
     setStatus(null);
     const { error } = await supabase
       .from("category")
-      .update({ kind })
+      .update(patch)
       .eq("id", id)
       .eq("user_id", ledger.userId);
     if (error) {
       setStatus(error.message);
-      return;
+      return false;
     }
-    await ledger.refetch();
+    return true;
   }
 
   const previous = single ? previousPeriod(single.year, single.month) : null;
@@ -328,16 +422,18 @@ export default function BudsjettPage() {
           <>
             <div className="toolbar">
               <div className="toolbar-actions">
-                <button
-                  className="btn btn-ghost"
-                  type="button"
-                  onClick={handleCopyPrevious}
-                  disabled={copying}
-                >
-                  {copying
-                    ? "Henter..."
-                    : `Kopier fra ${previous ? monthName(previous.month) : ""}`}
-                </button>
+                {/* Gone entirely when every category the previous month
+                    budgeted is already set here: a button that would do nothing
+                    is worse than no button, since pressing it looks broken. */}
+                {copyable.length ? (
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    onClick={handleCopyPrevious}
+                  >
+                    {`Kopier ${copyable.length} fra ${previous ? monthName(previous.month) : ""}`}
+                  </button>
+                ) : null}
                 <button
                   className="btn btn-primary"
                   type="button"
@@ -360,8 +456,8 @@ export default function BudsjettPage() {
                 <span>Kategori</span>
                 <span>Type</span>
                 <span className="num">Budsjett</span>
-                <span className="num">Brukt</span>
-                <span className="num">Igjen</span>
+                <span className="num">Faktisk</span>
+                <span className="num">Diff</span>
                 <span />
               </div>
 
@@ -370,14 +466,24 @@ export default function BudsjettPage() {
                 const budgetValue = parseDraft(value);
                 const income = isIncomeKind(row.kind);
                 const hasBudget = budgetValue > 0;
-                const remaining = budgetValue - row.spent;
-                const over = hasBudget && remaining < 0;
-                const percent = hasBudget
-                  ? Math.min((row.spent / budgetValue) * 100, 100)
-                  : 0;
-                const hue = getCategoryHue(row.name);
+                // Above the budget, as a fact — used for the bar's scale and
+                // its marker, in both directions.
+                const exceeded = hasBudget && row.spent > budgetValue;
+                // The signed variance, oriented so positive is always the good
+                // direction. For spending that is budget − faktisk (what is
+                // left); for income it is the other way round, because earning
+                // 2 129 kr more than planned is a surplus, not an overrun.
+                const diff = income
+                  ? row.spent - budgetValue
+                  : budgetValue - row.spent;
+                const short = hasBudget && diff < 0;
+                // Same scaling rule as /oversikt's rows, via the same
+                // <BulletBar>: under budget the track is the budget, over it
+                // the track is the spend and the budget is marked inside.
+                const barScale = !hasBudget ? 0 : exceeded ? row.spent : budgetValue;
+                const catColor = categoryColor(getCategorySlot(row.name));
                 const inUse = usedCategoryIds.has(row.id);
-                const isRenaming = renamingId === row.id;
+                const isEditing = editingId === row.id;
                 const isConfirming = confirmDeleteId === row.id;
 
                 return (
@@ -388,18 +494,19 @@ export default function BudsjettPage() {
                         style={{
                           background: income
                             ? "var(--income)"
-                            : `hsl(${hue} var(--dot-s) var(--dot-l))`,
+                            : catColor,
                         }}
                       />
-                      {isRenaming ? (
+                      {isEditing ? (
                         <input
-                          value={renameDraft}
-                          onChange={(event) => setRenameDraft(event.target.value)}
+                          className={styles["budget-name-input"]}
+                          value={nameDraft ?? row.name}
+                          onChange={(event) => setNameDraft(event.target.value)}
                           onKeyDown={(event) => {
-                            if (event.key === "Enter") handleRename(row.id);
-                            if (event.key === "Escape") setRenamingId(null);
+                            if (event.key === "Enter") commitRow(row);
+                            if (event.key === "Escape") cancelRow(row);
                           }}
-                          aria-label={`Nytt navn for ${row.name}`}
+                          aria-label={`Navn på ${row.name}`}
                           autoFocus
                         />
                       ) : (
@@ -409,59 +516,82 @@ export default function BudsjettPage() {
                       )}
                     </div>
 
-                    <select
-                      className={styles["budget-kind"]}
-                      value={row.kind}
-                      onChange={(event) =>
-                        handleChangeKind(row.id, event.target.value as CategoryKind)
-                      }
-                      aria-label={`Type for ${row.name}`}
-                    >
-                      {CATEGORY_KINDS.map((kind) => (
-                        <option key={kind} value={kind}>
-                          {KIND_LABELS[kind]}
-                        </option>
-                      ))}
-                    </select>
+                    {isEditing ? (
+                      <select
+                        className={styles["budget-kind"]}
+                        value={kindDraft ?? row.kind}
+                        onChange={(event) =>
+                          setKindDraft(event.target.value as CategoryKind)
+                        }
+                        aria-label={`Type for ${row.name}`}
+                      >
+                        {CATEGORY_KINDS.map((kind) => (
+                          <option key={kind} value={kind}>
+                            {KIND_LABELS[kind]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className={styles["budget-kind-text"]}>
+                        {KIND_LABELS[row.kind]}
+                      </span>
+                    )}
 
-                    <input
-                      className={`${styles["budget-input"]} num`}
-                      type="number"
-                      min="0"
-                      step="1"
-                      inputMode="numeric"
-                      placeholder="—"
-                      value={value}
-                      onChange={(event) =>
-                        setDrafts((current) => ({
-                          ...current,
-                          [row.id]: event.target.value,
-                        }))
-                      }
-                      aria-label={`Budsjett for ${row.name}`}
-                    />
+                    {isEditing ? (
+                      <input
+                        className={`${styles["budget-input"]} num`}
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputMode="numeric"
+                        placeholder="—"
+                        value={value}
+                        onChange={(event) =>
+                          setDrafts((current) => ({
+                            ...current,
+                            [row.id]: event.target.value,
+                          }))
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") commitRow(row);
+                          if (event.key === "Escape") cancelRow(row);
+                        }}
+                        aria-label={`Budsjett for ${row.name}`}
+                      />
+                    ) : (
+                      // The draft rather than the stored value, so what
+                      // "Kopier fra …" put on the row is visible before it is
+                      // saved — flagged as pending, or an unsaved figure would
+                      // be indistinguishable from a committed one.
+                      <span
+                        className={`num ${isDirty(row) ? styles["budget-pending"] : ""}`}
+                      >
+                        {hasBudget ? formatCurrency(budgetValue) : "—"}
+                      </span>
+                    )}
 
                     <span className="num">{formatCurrency(row.spent)}</span>
 
-                    <span className={`num ${over ? "text-expense" : hasBudget ? "text-income" : "helper"}`}>
-                      {hasBudget ? formatCurrency(remaining) : "—"}
+                    <span className={`num ${short ? "text-expense" : hasBudget ? "text-income" : "helper"}`}>
+                      {hasBudget ? formatCurrency(diff) : "—"}
                     </span>
 
                     <span className={styles["budget-actions"]}>
-                      {isRenaming ? (
+                      {isEditing ? (
                         <>
                           <button
                             className="icon-btn icon-btn-confirm"
                             type="button"
-                            onClick={() => handleRename(row.id)}
-                            aria-label={`Lagre navn for ${row.name}`}
+                            onClick={() => commitRow(row)}
+                            disabled={saving}
+                            aria-label={`Lagre ${row.name}`}
                           >
                             <IconCheck />
                           </button>
                           <button
                             className="icon-btn icon-btn-dismiss"
                             type="button"
-                            onClick={() => setRenamingId(null)}
+                            onClick={() => cancelRow(row)}
                             aria-label="Avbryt"
                           >
                             <IconX />
@@ -492,12 +622,13 @@ export default function BudsjettPage() {
                             className="icon-btn"
                             type="button"
                             onClick={() => {
-                              setRenameDraft(row.name);
                               setConfirmDeleteId(null);
-                              setRenamingId(row.id);
+                              setNameDraft(row.name);
+                              setKindDraft(row.kind);
+                              setEditingId(row.id);
                             }}
-                            aria-label={`Gi nytt navn til ${row.name}`}
-                            title="Gi nytt navn"
+                            aria-label={`Endre ${row.name}`}
+                            title="Endre navn, type og budsjett"
                           >
                             <IconPencil />
                           </button>
@@ -506,7 +637,7 @@ export default function BudsjettPage() {
                             type="button"
                             disabled={inUse}
                             onClick={() => {
-                              setRenamingId(null);
+                              closeRow(row);
                               setConfirmDeleteId(row.id);
                             }}
                             aria-label={`Slett ${row.name}`}
@@ -522,23 +653,21 @@ export default function BudsjettPage() {
                       )}
                     </span>
 
-                    <div
-                      className={styles["budget-track"]}
-                      style={
-                        {
-                          "--bar-color": income
+                    <div className={styles["budget-track"]}>
+                      <BulletBar
+                        fraction={barScale > 0 ? row.spent / barScale : 0}
+                        color={
+                          income
                             ? "var(--income)"
                             : hasBudget
-                              ? over
+                              ? exceeded
                                 ? "var(--expense)"
                                 : "var(--income)"
-                              : `hsl(${hue} var(--bar-s) var(--bar-l))`,
-                        } as CSSProperties
-                      }
-                    >
-                      <div
-                        className={styles["budget-bar"]}
-                        style={{ width: `${hasBudget ? percent : 0}%` }}
+                              : catColor
+                        }
+                        markerFraction={
+                          exceeded && barScale > 0 ? budgetValue / barScale : undefined
+                        }
                       />
                     </div>
                   </div>

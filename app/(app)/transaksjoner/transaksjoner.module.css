@@ -124,8 +124,8 @@
   justify-content: center;
   padding: 3px 10px;
   border-radius: 6px;
-  background: hsl(var(--cat-hue) var(--pill-bg-s) var(--pill-bg-l));
-  color: hsl(var(--cat-hue) var(--pill-ink-s) var(--pill-ink-l));
+  background: var(--cat-bg);
+  color: var(--cat-ink);
   font-size: 12px;
   font-weight: 600;
 }

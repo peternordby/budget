@@ -131,6 +131,20 @@ Consequences worth knowing before you build on this:
 - Prices and budgets are whole kroner, stored as encrypted decimal text since
   `0009_encrypted_fields.sql` widened those columns from `bigint` to `text`.
 - `pnpm test` runs the vitest suites in `lib/**` and `test/**`.
+- The profile avatar is a DiceBear `croodles-neutral` drawing seeded on the
+  user's name — derived, not uploaded, so there is no storage bucket and nothing
+  that can 404.
+- Category colours are eight fixed slots (`--cat-1`..`--cat-8`), assigned from
+  the category name's hash in `lib/categoryColor.ts` and validated as a set for
+  contrast and colourblind separation in both themes. The slot *order* is the
+  safety mechanism — re-ordering it means re-validating. See
+  `docs/design-system.md` -> Category colour.
+- Charts are SVG, drawn from `d3-scale`/`d3-shape` on top of the shared kit in
+  `components/charts.tsx`; animation is `motion` (one `<MotionConfig
+  reducedMotion="user">` in `app/(app)/layout.tsx` handles the OS setting for
+  all of it). `anime.js` is deliberately not installed — it overlaps `motion`
+  entirely, and two animation engines writing the same `transform` is a bug
+  waiting for a busy page. See `docs/frontend-architecture.md` -> Charts.
 - Frontend documentation is available in `docs/`.
 - The schema above is the starting point, not the current state: `supabase/migrations/`
   is applied by hand on top of it and always wins. `budget`'s ownership column,

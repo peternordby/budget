@@ -1,0 +1,270 @@
+/* The chart kit's styles. Shared by components/charts.tsx and the chart
+   components that build on it (MonthColumns, Sparkline, StackedAreaChart), so
+   gridlines, axis text and the tooltip are defined exactly once. */
+
+/* --- tooltip --- */
+
+.tooltip-anchor {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  /* Set per placement below, then applied once here so motion's own inline
+     transform on the inner element never has to compete with it. */
+  transform: translate(var(--tt-x, -50%), var(--tt-y, calc(-100% - 12px)));
+}
+
+.tooltip-anchor[data-side="center"] {
+  --tt-x: -50%;
+}
+
+.tooltip-anchor[data-side="left"] {
+  --tt-x: -18px;
+}
+
+.tooltip-anchor[data-side="right"] {
+  --tt-x: calc(-100% + 18px);
+}
+
+.tooltip-anchor[data-flip="above"] {
+  --tt-y: calc(-100% - 12px);
+}
+
+.tooltip-anchor[data-flip="below"] {
+  --tt-y: 12px;
+}
+
+.tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 118px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-popover);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-soft);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.tooltip-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.tooltip-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.tooltip-row :global(.num) {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+.tooltip-label {
+  color: var(--muted);
+}
+
+.tooltip-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+  transform: translateY(-1px);
+}
+
+/* --- axes --- */
+
+.grid {
+  stroke: var(--border-soft);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.axis-text {
+  fill: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.axis-label {
+  fill: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-anchor: middle;
+}
+
+.axis-label-active {
+  fill: var(--ink);
+}
+
+/* --- bullet bar --- */
+
+.bullet {
+  width: 100%;
+}
+
+.bullet svg {
+  display: block;
+  /* The budget marker overhangs the track by a pixel at each end. */
+  overflow: visible;
+}
+
+.bullet-track {
+  fill: var(--track-bg);
+}
+
+.bullet-marker {
+  fill: var(--budget-mark);
+}
+
+/* --- gauge --- */
+
+.gauge {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+/* --- share bar --- */
+
+/* Every chart carries its own air. Before this each card supplied its own
+   margin around the chart it happened to hold, so the gap above a chart was 2px
+   in the period picker, 12px on /innsikt and 14px on /oversikt. */
+.share-wrap,
+.columns-wrap {
+  margin: 14px 0;
+}
+
+.share-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.share-wrap svg {
+  display: block;
+}
+
+/* --- month columns --- */
+
+.columns-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.columns-wrap svg {
+  display: block;
+  overflow: visible;
+}
+
+.column-band {
+  fill: var(--bg-alt);
+  opacity: 0;
+  transition: opacity 140ms ease, fill 140ms ease;
+}
+
+.column-band-hover {
+  opacity: 1;
+}
+
+.column-band-active {
+  fill: var(--accent-soft);
+  opacity: 1;
+}
+
+.column-marker {
+  stroke: var(--budget-mark);
+  stroke-width: 1.5;
+}
+
+.zero-line {
+  stroke: var(--border);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+/* --- sparkline --- */
+
+.sparkline-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.sparkline-wrap svg {
+  display: block;
+}
+
+/* Geometry only. The colour is a presentation attribute set from the `color`
+   prop, and a `stroke`/`fill` declaration here would silently win over it —
+   CSS beats presentation attributes. */
+.sparkline-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.sparkline-area {
+  stroke: none;
+}
+
+.sparkline-dot {
+  /* The 2px surface ring keeps the dot legible where it sits on top of its own
+     line, instead of merging into it. */
+  stroke: var(--surface-solid);
+  stroke-width: 2;
+  paint-order: stroke;
+}
+
+.sparkline-guide {
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.5;
+}
+
+.hit-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.hit {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.hit-layer div.hit {
+  cursor: default;
+}
+
+.hit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}

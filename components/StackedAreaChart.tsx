@@ -1,28 +1,40 @@
 "use client";
 
+/**
+ * The /sparing stacked area chart: one band per savings category, stacked, with
+ * the total drawn on top.
+ *
+ * It measures its own width and draws in real pixels, so the axis labels are
+ * plain `<text>` inside the SVG. They used to be HTML positioned in
+ * percentages over a `preserveAspectRatio="none"` viewBox, because text inside
+ * a non-uniformly scaled box is squashed — badly on a phone, where the
+ * horizontal scale was a third of the vertical one. Measuring removed that
+ * whole layer, and the value-axis gutter with it.
+ *
+ * The scale and label maths live in `lib/chart.ts`; band geometry (including
+ * the carry-forward anchors) in `lib/savings.ts`.
+ */
+
 import { useId, useMemo, type CSSProperties } from "react";
+import { motion } from "motion/react";
+import { scaleLinear } from "d3-scale";
+import { area, curveMonotoneX, line } from "d3-shape";
 import {
   formatCurrency,
   formatDate,
   formatSignedCurrency,
 } from "@/lib/format";
-import { categoryHues } from "@/lib/categoryColor";
+import { categoryColor, categorySlots } from "@/lib/categoryColor";
 import { IconChevronDown, IconChevronUp } from "@/components/icons";
 import { bandShapes, datePositions, type StackedChart } from "@/lib/savings";
+import { axisTicks, labelledDates, shortAmount } from "@/lib/chart";
+import { ChartTooltip, GridLines, useMeasure } from "@/components/charts";
+import { T_DRAW, T_FAST } from "@/lib/motion";
+import kit from "@/components/charts.module.css";
 import styles from "./StackedAreaChart.module.css";
 
-// The SVG holds shapes only, stretched to its box with preserveAspectRatio
-//="none" so the chart's height is set in CSS independently of its width. All
-// text is HTML positioned over the same box in percentages: text inside a
-// non-uniformly scaled viewBox is squashed, badly so on a phone, where the
-// horizontal scale is a third of the vertical one.
-const VIEW_W = 1000;
-const VIEW_H = 320;
-
-// Smallest horizontal gap between two date labels, as a fraction of the plot.
-// Snapshot dates cluster (four in one month, then a year's silence), so
-// thinning has to go by position rather than by every nth date.
-const MIN_LABEL_GAP = 0.085;
+const HEIGHT = 300;
+const LABEL_BAND = 20;
 
 type StackedAreaChartProps = {
   chart: StackedChart;
@@ -31,83 +43,17 @@ type StackedAreaChartProps = {
   onHoverIndex: (index: number | null) => void;
 };
 
-/**
- * Round gridline values covering 0..max.
- *
- * Picks the smallest "nice" step (1, 2, 2.5 or 5 times a power of ten) that
- * covers the data in at most MAX_INTERVALS bands. Choosing the step from
- * `max / 3` instead used to jump a whole magnitude — a 205 600 max landed on a
- * 100 000 step and a 300 000 top gridline, leaving a third of the plot empty.
- */
-const MAX_INTERVALS = 5;
-
-export function axisTicks(max: number): number[] {
-  if (max <= 0) return [0];
-
-  const magnitude = 10 ** Math.floor(Math.log10(max));
-  const candidates: number[] = [];
-  for (const scale of [magnitude / 100, magnitude / 10, magnitude, magnitude * 10]) {
-    for (const multiple of [1, 2, 2.5, 5]) candidates.push(scale * multiple);
-  }
-  candidates.sort((a, b) => a - b);
-
-  const step =
-    candidates.find(
-      (candidate) => candidate > 0 && Math.ceil(max / candidate) <= MAX_INTERVALS
-    ) ?? max;
-
-  const intervals = Math.max(1, Math.ceil(max / step));
-  const ticks: number[] = [];
-  for (let i = 0; i <= intervals; i += 1) ticks.push(Math.round(i * step));
-  return ticks;
-}
-
-/** Compact axis label: 124 500 -> "125k", 1 240 000 -> "1,2M". */
-export function shortAmount(value: number): string {
-  if (value === 0) return "0";
-  if (Math.abs(value) >= 1_000_000) {
-    const millions = value / 1_000_000;
-    return `${millions.toFixed(millions < 10 ? 1 : 0).replace(".", ",")}M`;
-  }
-  if (Math.abs(value) >= 1_000) return `${Math.round(value / 1_000)}k`;
-  return String(Math.round(value));
-}
-
-/**
- * Which dates to label: the first, the last, and as many in between as fit
- * without colliding. The last is non-negotiable, so anything too close to it
- * is dropped rather than allowed to overlap it.
- */
-export function labelledDates(fractions: number[]): number[] {
-  if (fractions.length <= 1) return fractions.map((_, index) => index);
-
-  const kept = [0];
-  const last = fractions.length - 1;
-  for (let i = 1; i < last; i += 1) {
-    if (fractions[i] - fractions[kept[kept.length - 1]] >= MIN_LABEL_GAP) {
-      kept.push(i);
-    }
-  }
-  while (
-    kept.length &&
-    fractions[last] - fractions[kept[kept.length - 1]] < MIN_LABEL_GAP
-  ) {
-    kept.pop();
-  }
-  kept.push(last);
-  return kept;
-}
-
 export default function StackedAreaChart({
   chart,
   hoverIndex,
   onHoverIndex,
 }: StackedAreaChartProps) {
-  const gradientId = useId();
+  const gradientId = useId().replace(/[^\w-]/g, "");
+  const [ref, width] = useMeasure<HTMLDivElement>();
   const { dates, bands, totals, max } = chart;
 
-  const hues = useMemo(
-    () => categoryHues(bands.map((band) => band.category)),
+  const slots = useMemo(
+    () => categorySlots(bands.map((band) => band.category)),
     [bands]
   );
 
@@ -119,18 +65,20 @@ export default function StackedAreaChart({
   }, [dates]);
 
   const xs = useMemo(
-    () => fractions.map((fraction) => fraction * VIEW_W),
-    [fractions]
+    () => fractions.map((fraction) => fraction * width),
+    [fractions, width]
   );
 
   const ticks = useMemo(() => axisTicks(max), [max]);
   // Scale to the topmost gridline rather than to the data, so the top tick
   // lands exactly on the top of the plot. Scaling to `max` instead put any
   // tick above it at a negative offset, where its label floated out of the
-  // chart and collided with the card heading — and left the total line
-  // touching the top edge with no headroom.
+  // chart, and left the total line touching the top edge with no headroom.
   const scaleMax = ticks[ticks.length - 1] || 1;
-  const y = (value: number) => VIEW_H - (value / scaleMax) * VIEW_H;
+  const y = useMemo(
+    () => scaleLinear().domain([0, scaleMax]).range([HEIGHT, 0]),
+    [scaleMax]
+  );
   const labelled = useMemo(() => labelledDates(fractions), [fractions]);
 
   // A single date has no width to fill, so bands are drawn as marks rather
@@ -139,272 +87,234 @@ export default function StackedAreaChart({
 
   if (!dates.length) return null;
 
-  const swatchOf = (category: string) =>
-    `hsl(${hues.get(category) ?? 0} var(--seg-s) var(--seg-l))`;
+  const swatchOf = (category: string) => categoryColor(slots.get(category) ?? 0);
+  // A step off the fill, so a band's own upper edge separates it from the one
+  // above without a border being drawn round the mark. Mixed towards `--ink`,
+  // which darkens it in the light theme and lightens it in the dark one — in
+  // both cases away from the fill.
   const edgeOf = (category: string) =>
-    `hsl(${hues.get(category) ?? 0} var(--seg-s) calc(var(--seg-l) - 14%))`;
+    `color-mix(in oklab, ${swatchOf(category)} 78%, var(--ink))`;
   const gradientOf = (category: string) =>
-    `${gradientId}-${(hues.get(category) ?? 0).toString(36)}`;
+    `${gradientId}-${slots.get(category) ?? 0}`;
+
+  const bandArea = area<{ index: number; upper: number; lower: number }>()
+    .x((point) => xs[point.index])
+    .y0((point) => y(point.lower))
+    .y1((point) => y(point.upper))
+    .curve(curveMonotoneX);
+  const edgeLine = line<{ index: number; upper: number }>()
+    .x((point) => xs[point.index])
+    .y((point) => y(point.upper))
+    .curve(curveMonotoneX);
 
   return (
     <div className={styles["wrap"]}>
-      <div className={styles["plot"]}>
-        {/* Value axis, in the gutter to the left of the plot box. */}
-        {ticks.map((tick) => (
-          <span
-            key={`y-${tick}`}
-            className={styles["y-label"]}
-            style={{ top: `${(1 - tick / scaleMax) * 100}%` }}
+      <div className={styles["plot"]} ref={ref}>
+        {width > 0 ? (
+          <svg
+            width={width}
+            height={HEIGHT + LABEL_BAND}
+            role="img"
+            aria-label={`Sparing fordelt på ${bands.length} kategorier, ${formatDate(
+              dates[0]
+            )} til ${formatDate(dates[dates.length - 1])}. Total nå ${formatCurrency(
+              totals[totals.length - 1]
+            )}.`}
+            onMouseLeave={() => onHoverIndex(null)}
           >
-            {shortAmount(tick)}
-          </span>
-        ))}
+            <defs>
+              {bands.map((band) => (
+                <linearGradient
+                  key={band.category}
+                  id={gradientOf(band.category)}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  {/* A wash, not a saturated block: six stacked bands at 95 %
+                      opacity read as loud blocks of poster paint, and the total
+                      line and gridlines disappear into them. */}
+                  <stop
+                    offset="0%"
+                    stopColor={swatchOf(band.category)}
+                    stopOpacity="0.72"
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={swatchOf(band.category)}
+                    stopOpacity="0.4"
+                  />
+                </linearGradient>
+              ))}
+            </defs>
 
-        <svg
-          className={styles["chart"]}
-          viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-          preserveAspectRatio="none"
-          role="img"
-          aria-label={`Sparing fordelt på ${bands.length} kategorier, ${formatDate(
-            dates[0]
-          )} til ${formatDate(dates[dates.length - 1])}. Total nå ${formatCurrency(
-            totals[totals.length - 1]
-          )}.`}
-          onMouseLeave={() => onHoverIndex(null)}
-        >
-          <defs>
-            {bands.map((band) => (
-              <linearGradient
-                key={band.category}
-                id={gradientOf(band.category)}
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop
-                  offset="0%"
-                  stopColor={swatchOf(band.category)}
-                  stopOpacity="0.95"
-                />
-                <stop
-                  offset="100%"
-                  stopColor={swatchOf(band.category)}
-                  stopOpacity="0.6"
-                />
-              </linearGradient>
-            ))}
-          </defs>
+            <GridLines ticks={ticks} y={y} width={width} format={shortAmount} />
 
-          {ticks.map((tick) => (
-            <line
-              key={`grid-${tick}`}
-              className={styles["grid"]}
-              x1={0}
-              x2={VIEW_W}
-              y1={y(tick)}
-              y2={y(tick)}
-            />
-          ))}
+            {/* Bottom of the stack first, so later bands paint over earlier. */}
+            {bands.map((band) => {
+              const shapes = bandShapes(band);
+              return (
+                <g key={band.category}>
+                  {shapes.map((shape) => {
+                    const observed = shape.filter((point) => !point.anchor);
 
-          {/* Bottom of the stack first, so later bands paint over earlier. */}
-          {bands.map((band) => {
-            const shapes = bandShapes(band);
-            return (
-              <g key={band.category}>
-                <title>{`${band.category}: ${formatCurrency(band.latest)} per ${formatDate(band.latestDate)}`}</title>
-                {shapes.map((shape) => {
-                  const observed = shape.filter((point) => !point.anchor);
+                    if (singlePoint || observed.length === 1) {
+                      // Nothing to sweep between: draw the one observation as a
+                      // tick so a category seen exactly once is still visible.
+                      const only = observed[0];
+                      if (!only || only.upper === only.lower) return null;
+                      return (
+                        <line
+                          key={`mark-${only.index}`}
+                          className={styles["point-mark"]}
+                          x1={xs[only.index]}
+                          x2={xs[only.index]}
+                          y1={y(only.lower)}
+                          y2={y(only.upper)}
+                          stroke={edgeOf(band.category)}
+                        />
+                      );
+                    }
 
-                  if (singlePoint || observed.length === 1) {
-                    // Nothing to sweep between: draw the one observation as a
-                    // tick so a category seen exactly once is still visible.
-                    const only = observed[0];
-                    if (!only || only.upper === only.lower) return null;
                     return (
-                      <line
-                        key={`mark-${only.index}`}
-                        className={styles["point-mark"]}
-                        x1={xs[only.index]}
-                        x2={xs[only.index]}
-                        y1={y(only.lower)}
-                        y2={y(only.upper)}
-                        stroke={edgeOf(band.category)}
-                      />
+                      <g key={`seg-${shape[0].index}-${shape[shape.length - 1].index}`}>
+                        <motion.path
+                          className={styles["band"]}
+                          d={bandArea(shape) ?? ""}
+                          fill={`url(#${gradientOf(band.category)})`}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={T_DRAW}
+                        />
+                        {/* The band's own upper edge, so two neighbours stay
+                            separable even where their fills are close. It stops
+                            at the real observations — an anchor is a drawing
+                            device, not a measured value, and stroking through
+                            it would draw a line down to the baseline that looks
+                            like data. */}
+                        <path
+                          className={styles["band-edge"]}
+                          d={edgeLine(observed) ?? ""}
+                          stroke={edgeOf(band.category)}
+                        />
+                      </g>
                     );
-                  }
+                  })}
+                </g>
+              );
+            })}
 
-                  const top = shape
-                    .map((point) => `${xs[point.index]},${y(point.upper)}`)
-                    .join(" ");
-                  const bottom = [...shape]
-                    .reverse()
-                    .map((point) => `${xs[point.index]},${y(point.lower)}`)
-                    .join(" ");
-                  // The visible upper edge stops at the real observations —
-                  // an anchor is a drawing device, not a measured value, and
-                  // stroking through it would draw a line down to the
-                  // baseline that looks like data.
-                  const edge = observed
-                    .map((point) => `${xs[point.index]},${y(point.upper)}`)
-                    .join(" ");
+            {/* The top of the stack, drawn once so the overall shape reads even
+                where a band boundary is faint. */}
+            {!singlePoint ? (
+              <motion.path
+                className={styles["total-line"]}
+                d={
+                  line<number>()
+                    .x((_, index) => xs[index])
+                    .y((total) => y(total))
+                    .curve(curveMonotoneX)(totals) ?? ""
+                }
+                initial={{ pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                transition={T_DRAW}
+              />
+            ) : null}
 
-                  return (
-                    <g key={`seg-${shape[0].index}-${shape[shape.length - 1].index}`}>
-                      <polygon
-                        className={styles["band"]}
-                        points={`${top} ${bottom}`}
-                        fill={`url(#${gradientOf(band.category)})`}
-                      />
-                      {/* The band's own upper edge, so two neighbours stay
-                          separable even where their fills are close. */}
-                      <polyline
-                        className={styles["band-edge"]}
-                        points={edge}
-                        stroke={edgeOf(band.category)}
-                      />
-                    </g>
-                  );
-                })}
+            {hoverIndex !== null && xs[hoverIndex] !== undefined ? (
+              <g>
+                <line
+                  className={styles["guide"]}
+                  x1={xs[hoverIndex]}
+                  x2={xs[hoverIndex]}
+                  y1={0}
+                  y2={HEIGHT}
+                />
+                <motion.circle
+                  className={styles["guide-dot"]}
+                  cx={xs[hoverIndex]}
+                  cy={y(totals[hoverIndex])}
+                  initial={{ r: 0 }}
+                  animate={{ r: 5 }}
+                  transition={T_FAST}
+                />
               </g>
-            );
-          })}
+            ) : null}
 
-          {/* The top of the stack, drawn once so the overall shape reads even
-              where a band boundary is faint. */}
-          {!singlePoint ? (
-            <polyline
-              className={styles["total-line"]}
-              points={totals
-                .map((total, index) => `${xs[index]},${y(total)}`)
-                .join(" ")}
-            />
-          ) : null}
-
-          {hoverIndex !== null && xs[hoverIndex] !== undefined ? (
-            <g>
-              <line
-                className={styles["guide"]}
-                x1={xs[hoverIndex]}
-                x2={xs[hoverIndex]}
-                y1={0}
-                y2={VIEW_H}
-              />
-              <circle
-                className={styles["guide-dot"]}
-                cx={xs[hoverIndex]}
-                cy={y(totals[hoverIndex])}
-                r={5}
-              />
-            </g>
-          ) : null}
-
-          {/* Hit areas last, so they sit above the painted bands. Each spans
-              the midpoints to its neighbours, so pointing anywhere picks the
-              nearest snapshot rather than only its exact pixel. */}
-          {dates.map((date, index) => {
-            const left =
-              index === 0 ? 0 : (xs[index - 1] + xs[index]) / 2;
-            const right =
-              index === dates.length - 1
-                ? VIEW_W
-                : (xs[index] + xs[index + 1]) / 2;
-            return (
-              <rect
-                key={`hit-${date}`}
-                className={styles["hit"]}
-                x={left}
-                y={0}
-                width={Math.max(right - left, 1)}
-                height={VIEW_H}
-                onMouseEnter={() => onHoverIndex(index)}
-              />
-            );
-          })}
-        </svg>
-
-      {/* Tooltip. HTML rather than SVG for the same reason the axis labels are:
-          text inside the stretched viewBox is squashed. Positioned off the
-          same 0..1 fractions, so it tracks the guide exactly. */}
-      {hoverIndex !== null && fractions[hoverIndex] !== undefined ? (
-        <div
-          className={styles["tooltip"]}
-          // A tooltip centred on the guide would hang off the plot at either
-          // end, so the outer fifths anchor to their own edge instead.
-          data-side={
-            fractions[hoverIndex] > 0.8
-              ? "right"
-              : fractions[hoverIndex] < 0.2
-                ? "left"
-                : "center"
-          }
-          style={
-            {
-              left: `${fractions[hoverIndex] * 100}%`,
-              // Sits above the total line, unless that would push it out of
-              // the top of the plot, in which case it drops below.
-              top: `${(1 - totals[hoverIndex] / scaleMax) * 100}%`,
-            } as CSSProperties
-          }
-          data-flip={
-            totals[hoverIndex] / scaleMax > 0.75 ? "below" : "above"
-          }
-          role="status"
-          aria-live="polite"
-        >
-          <span className={styles["tooltip-date"]}>
-            {formatDate(dates[hoverIndex])}
-          </span>
-          <strong className={styles["tooltip-total"]}>
-            {formatCurrency(totals[hoverIndex])}
-          </strong>
-          {hoverIndex > 0 ? (
-            <span
-              className={`${styles["tooltip-change"]} ${
-                totals[hoverIndex] - totals[hoverIndex - 1] >= 0
-                  ? "text-income"
-                  : "text-expense"
-              }`}
-            >
-              {formatSignedCurrency(
-                totals[hoverIndex] - totals[hoverIndex - 1]
-              )}{" "}
-              <span className="helper">
-                fra {formatDate(dates[hoverIndex - 1])}
-              </span>
-            </span>
-          ) : (
-            <span className={`${styles["tooltip-change"]} helper`}>
-              Første registrering
-            </span>
-          )}
-        </div>
-      ) : null}
-      </div>
-
-      <div className={styles["x-axis"]}>
-        {labelled.map((index) => (
-          <span
-            key={`x-${index}`}
-            className={`${styles["x-label"]} ${
-              hoverIndex === index ? styles["x-label-active"] : ""
-            }`}
-            style={
-              {
-                left: `${fractions[index] * 100}%`,
-                // The end labels would otherwise hang outside the plot.
-                transform:
+            {labelled.map((index) => (
+              <text
+                key={`x-${index}`}
+                className={`${kit["axis-label"]} ${
+                  hoverIndex === index ? kit["axis-label-active"] : ""
+                }`}
+                x={xs[index]}
+                y={HEIGHT + 14}
+                textAnchor={
                   index === 0 && fractions[index] < 0.02
-                    ? "translateX(0)"
+                    ? "start"
                     : index === dates.length - 1 && fractions[index] > 0.98
-                      ? "translateX(-100%)"
-                      : "translateX(-50%)",
-              } as CSSProperties
-            }
-          >
-            {formatDate(dates[index])}
-          </span>
-        ))}
+                      ? "end"
+                      : "middle"
+                }
+              >
+                {formatDate(dates[index])}
+              </text>
+            ))}
+
+            {/* Hit areas last, so they sit above the painted bands. Each spans
+                the midpoints to its neighbours, so pointing anywhere picks the
+                nearest snapshot rather than only its exact pixel. */}
+            {dates.map((date, index) => {
+              const left = index === 0 ? 0 : (xs[index - 1] + xs[index]) / 2;
+              const right =
+                index === dates.length - 1
+                  ? width
+                  : (xs[index] + xs[index + 1]) / 2;
+              return (
+                <rect
+                  key={`hit-${date}`}
+                  className={styles["hit"]}
+                  x={left}
+                  y={0}
+                  width={Math.max(right - left, 1)}
+                  height={HEIGHT + LABEL_BAND}
+                  onMouseEnter={() => onHoverIndex(index)}
+                />
+              );
+            })}
+          </svg>
+        ) : (
+          <div style={{ height: HEIGHT + LABEL_BAND }} />
+        )}
+
+        <ChartTooltip
+          content={
+            hoverIndex !== null && xs[hoverIndex] !== undefined
+              ? {
+                  x: xs[hoverIndex],
+                  y: y(totals[hoverIndex]),
+                  boxWidth: width,
+                  title: formatDate(dates[hoverIndex]),
+                  rows: [
+                    { value: formatCurrency(totals[hoverIndex]) },
+                    hoverIndex > 0
+                      ? {
+                          label: `fra ${formatDate(dates[hoverIndex - 1])}`,
+                          value: formatSignedCurrency(
+                            totals[hoverIndex] - totals[hoverIndex - 1]
+                          ),
+                          tone:
+                            totals[hoverIndex] - totals[hoverIndex - 1] >= 0
+                              ? "good"
+                              : "bad",
+                        }
+                      : { value: "Første registrering", tone: "muted" },
+                  ],
+                }
+              : null
+          }
+        />
       </div>
     </div>
   );
@@ -434,8 +344,8 @@ export function StackedAreaLegend({
   dragTarget,
   onDragState,
 }: LegendProps) {
-  const hues = useMemo(
-    () => categoryHues(chart.bands.map((band) => band.category)),
+  const slots = useMemo(
+    () => categorySlots(chart.bands.map((band) => band.category)),
     [chart.bands]
   );
 
@@ -505,7 +415,7 @@ export function StackedAreaLegend({
               className={styles["swatch"]}
               style={
                 {
-                  background: `hsl(${hues.get(band.category) ?? 0} var(--seg-s) var(--seg-l))`,
+                  background: categoryColor(slots.get(band.category) ?? 0),
                 } as CSSProperties
               }
             />

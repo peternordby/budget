@@ -1,13 +1,17 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState } from "react";
 import {
   useAnalysisWindow,
   useLedger,
+  useLedgerHistory,
   toLedgerEntries,
 } from "@/components/LedgerProvider";
 import { usePeriod } from "@/lib/usePeriod";
+import { periodLabel } from "@/lib/period";
 import Sparkline from "@/components/Sparkline";
+import MonthOverMonth from "@/components/MonthOverMonth";
+import Anomalies from "@/components/Anomalies";
 import CategoryDrilldown from "@/components/CategoryDrilldown";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -25,6 +29,9 @@ import {
   type SuspectedSubscription,
 } from "@/lib/subscriptions";
 import { IconX } from "@/components/icons";
+import { ShareBar, type ShareSegment } from "@/components/charts";
+import { categoryColor, getCategorySlot } from "@/lib/categoryColor";
+import MonthColumns, { type MonthPoint } from "@/components/MonthColumns";
 import { useDismissals } from "@/lib/dismissals";
 import { decField, encField } from "@/lib/crypto";
 import styles from "./innsikt.module.css";
@@ -80,7 +87,7 @@ export default function InnsiktPage() {
   // onto the fixed-vs-variable chart and to anchor the analysis window — this
   // page does not add a picker or a widening effect of its own; both already
   // live in the layout.
-  const { selectedKeys, anchor } = usePeriod(fallback);
+  const { selectedKeys, selectedList, single, anchor } = usePeriod(fallback);
   const { isDismissed, dismiss, restoreAll } = useDismissals();
 
   // Trailing two years ending at the selected month, clamped to the fetched
@@ -103,6 +110,12 @@ export default function InnsiktPage() {
     [ledger.expenses]
   );
 
+  // The two sections moved here from /oversikt consume a trailing 12-month
+  // window rather than this page's 24-month analysis window: both are about the
+  // selected month against its recent past, not about a two-year trend.
+  const historyEntries = useLedgerHistory(anchor);
+  const label = periodLabel(selectedList);
+
   // --- Section 1: Inntekt mot utgift ---
 
   // The delta itself is the subject, so each month is one bar measured from a
@@ -112,20 +125,35 @@ export default function InnsiktPage() {
     () => aggregateByMonth(entries, months),
     [entries, months]
   );
-  // The zero line sits where the largest surplus and the largest deficit meet,
-  // so both directions keep their true proportions. All-surplus and
-  // all-deficit windows still get a full-height plot.
-  const netScale = useMemo(() => {
-    let up = 0;
-    let down = 0;
-    monthly.forEach((point) => {
-      up = Math.max(up, point.net);
-      down = Math.max(down, -point.net);
-    });
-    const span = up + down;
-    if (span <= 0) return { up: 1, down: 0, zeroPct: 100 };
-    return { up, down, zeroPct: (down / span) * 100 };
-  }, [monthly]);
+  // One point per month. MonthColumns owns the scale: it puts zero on a
+  // gridline and spans both directions with one linear scale, so a 10 000
+  // surplus bar really is ten times a 1 000 deficit bar.
+  const netPoints = useMemo<MonthPoint[]>(
+    () =>
+      monthly.map((point, index) => {
+        const ref = months[index];
+        return {
+          key: point.key,
+          label: SHORT_MONTHS[ref.month - 1],
+          yearLabel: ref.month === 1 || index === 0 ? String(ref.year) : undefined,
+          values: [point.net],
+          empty: point.count === 0,
+          tooltip: {
+            title: `${MONTH_NAMES[ref.month - 1]} ${ref.year}`,
+            rows: [
+              { label: "Inntekter", value: formatCurrency(point.income) },
+              { label: "Utgifter", value: formatCurrency(point.expenses) },
+              {
+                label: "Netto",
+                value: formatSignedCurrency(point.net),
+                tone: point.net >= 0 ? ("good" as const) : ("bad" as const),
+              },
+            ],
+          },
+        };
+      }),
+    [monthly, months]
+  );
   const netTotals = useMemo(() => {
     const surplus = monthly.filter((point) => point.net > 0).length;
     const sum = monthly.reduce((total, point) => total + point.net, 0);
@@ -140,18 +168,18 @@ export default function InnsiktPage() {
   // what is already committed, what was chosen, what was put aside, what was
   // never spent. `base` is the denominator mixSummary picked, so these always
   // total 100 %.
-  const mixSegments = useMemo(() => {
+  const mixSegments = useMemo<(ShareSegment & { percent: number })[]>(() => {
     if (mixTotals.base <= 0) return [];
     return [
-      { key: "fixed", label: "Fast", amount: mixTotals.fixed, color: "var(--accent)" },
-      { key: "variable", label: "Variabelt", amount: mixTotals.variable, color: "var(--expense)" },
-      { key: "savings", label: "Sparing", amount: mixTotals.savings, color: "var(--income)" },
-      { key: "leftover", label: "Ubrukt", amount: mixTotals.leftover, color: "var(--muted)" },
+      { key: "fixed", label: "Fast", value: mixTotals.fixed, color: "var(--accent)" },
+      { key: "variable", label: "Variabelt", value: mixTotals.variable, color: "var(--expense)" },
+      { key: "savings", label: "Sparing", value: mixTotals.savings, color: "var(--income)" },
+      { key: "leftover", label: "Ubrukt", value: mixTotals.leftover, color: "var(--muted)" },
     ]
-      .filter((segment) => segment.amount > 0)
+      .filter((segment) => segment.value > 0)
       .map((segment) => ({
         ...segment,
-        percent: (segment.amount / mixTotals.base) * 100,
+        percent: (segment.value / mixTotals.base) * 100,
       }));
   }, [mixTotals]);
   const fixedPoints = useMemo(() => mix.map((point) => point.fixed), [mix]);
@@ -160,34 +188,7 @@ export default function InnsiktPage() {
 
   const series = useMemo(() => categorySeries(entries, months), [entries, months]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  // Which point of which tile's sparkline the pointer is over. One piece of
-  // state for the whole grid: only one tile can be hovered at a time, and
-  // per-tile state would re-render every tile on every move anyway.
-  const [hover, setHover] = useState<{ category: string; index: number } | null>(
-    null
-  );
-
-  const hoveredPoint = useMemo(() => {
-    if (!hover) return null;
-    const entry = series.find((item) => item.category === hover.category);
-    const ref = months[hover.index];
-    if (!entry || !ref) return null;
-    // A single-point series has no width to divide, so it sits centred.
-    const leftPct =
-      entry.points.length > 1
-        ? (hover.index / (entry.points.length - 1)) * 100
-        : 50;
-    return {
-      category: hover.category,
-      amount: entry.points[hover.index] ?? 0,
-      label: `${MONTH_NAMES[ref.month - 1]} ${ref.year}`,
-      leftPct,
-      // Anchor to its own edge in the outer fifths, or the tooltip hangs
-      // outside a 220px tile.
-      side: leftPct > 80 ? "end" : leftPct < 20 ? "start" : "center",
-    };
-  }, [hover, series, months]);
-
+  const [activeMix, setActiveMix] = useState<string | null>(null);
   // --- Section 4: Abonnementer vi ikke har registrert ---
 
   // Safe now that `months` ends at the selected month rather than at the
@@ -425,6 +426,19 @@ export default function InnsiktPage() {
 
   return (
     <>
+      {/* Moved from /oversikt: both are about the selected month against its
+          recent past, which is an insight rather than an overview, and having
+          them here puts every "what does this mean" section on one route. They
+          lead the page because the sections below all widen to 24 months. */}
+      <MonthOverMonth entries={historyEntries} single={single} />
+
+      <Anomalies
+        entries={historyEntries}
+        selected={single}
+        periodLabel={label}
+        templates={ledger.templates}
+      />
+
       <section className="card section-gap">
         <div className="card-head">
           <h2 className="section-title">Inntekt mot utgift</h2>
@@ -438,61 +452,20 @@ export default function InnsiktPage() {
           </p>
         ) : (
           <>
-            <div
-              className={styles["net-chart"]}
-              style={{ "--zero-pct": `${netScale.zeroPct}%` } as CSSProperties}
-            >
-              {monthly.map((point, index) => {
-                const ref = months[index];
-                const isSelected = selectedKeys.has(point.key);
-                const surplus = point.net >= 0;
-                // Each half of the plot is scaled by its own extreme, so the
-                // two sides meet at the zero line without either being
-                // squashed by the other's magnitude.
-                const heightPct = surplus
-                  ? netScale.up > 0
-                    ? (point.net / netScale.up) * (100 - netScale.zeroPct)
-                    : 0
-                  : netScale.down > 0
-                    ? (-point.net / netScale.down) * netScale.zeroPct
-                    : 0;
-                const label = `${MONTH_NAMES[ref.month - 1]} ${ref.year}: inntekter ${formatCurrency(point.income)}, utgifter ${formatCurrency(point.expenses)}, netto ${formatSignedCurrency(point.net)}`;
-                return (
-                  <div
-                    key={point.key}
-                    className={`${styles["net-col"]} ${isSelected ? styles["active"] : ""} ${point.count === 0 ? styles["empty"] : ""}`}
-                    // A readout, not a control: the period picker above owns
-                    // month selection, so nothing here is clickable. role/
-                    // aria-label is what makes the title's figures reachable
-                    // by a screen reader, which a bare title is not.
-                    role="img"
-                    title={label}
-                    aria-label={label}
-                  >
-                    <div className={styles["net-track"]}>
-                      <div className={styles["net-zero"]} />
-                      <div
-                        className={`${styles["net-bar"]} ${surplus ? styles["surplus"] : styles["deficit"]}`}
-                        style={
-                          surplus
-                            ? { bottom: `${netScale.zeroPct}%`, height: `${heightPct}%` }
-                            : {
-                                top: `${100 - netScale.zeroPct}%`,
-                                height: `${heightPct}%`,
-                              }
-                        }
-                      />
-                    </div>
-                    <span className={styles["net-label"]}>
-                      {SHORT_MONTHS[ref.month - 1]}
-                      {ref.month === 1 || index === 0 ? (
-                        <span className={styles["net-label-year"]}>{ref.year}</span>
-                      ) : null}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+            <MonthColumns
+              points={netPoints}
+              series={[
+                {
+                  key: "net",
+                  color: "var(--income)",
+                  negativeColor: "var(--expense)",
+                },
+              ]}
+              height={170}
+              diverging
+              selectedKeys={selectedKeys}
+              ariaLabel={`Netto per måned, ${windowLabel}`}
+            />
             <div className="stat-row">
               <div className="stat stat-small">
                 <span className="stat-label">Sum netto</span>
@@ -522,22 +495,25 @@ export default function InnsiktPage() {
         </div>
         {mixSegments.length ? (
           <>
-            <div className={styles["mix-bar"]}>
+            <ShareBar
+              segments={mixSegments}
+              formatValue={(value) => formatCurrency(Math.round(value))}
+              activeKey={activeMix}
+              onActiveKey={setActiveMix}
+              ariaLabel="Snittmåneden fordelt på fast, variabelt, sparing og ubrukt"
+            />
+            <div className={styles["mix-legend"]}>
               {mixSegments.map((segment) => (
                 <span
                   key={segment.key}
-                  className={styles["mix-segment"]}
-                  style={{ width: `${segment.percent}%`, background: segment.color }}
-                  title={`${segment.label}: ${formatCurrency(Math.round(segment.amount))} (${Math.round(segment.percent)} %)`}
-                />
-              ))}
-            </div>
-            <div className={styles["mix-legend"]}>
-              {mixSegments.map((segment) => (
-                <span key={segment.key} className={styles["mix-legend-item"]}>
+                  className={styles["mix-legend-item"]}
+                  data-dim={activeMix && activeMix !== segment.key ? "true" : undefined}
+                  onMouseEnter={() => setActiveMix(segment.key)}
+                  onMouseLeave={() => setActiveMix(null)}
+                >
                   <span className="breakdown-dot" style={{ background: segment.color }} />
                   <span className={styles["mix-legend-name"]}>{segment.label}</span>
-                  <span className="num">{formatCurrency(Math.round(segment.amount))}</span>
+                  <span className="num">{formatCurrency(Math.round(segment.value))}</span>
                   <span className="helper">{Math.round(segment.percent)} %</span>
                 </span>
               ))}
@@ -632,46 +608,22 @@ export default function InnsiktPage() {
                   }
                 >
                   <span className={styles["category-tile-name"]}>{entry.category}</span>
-                  <span
-                    className={styles["tile-chart"]}
-                    onMouseLeave={() => setHover(null)}
-                  >
+                  <span className={styles["tile-chart"]}>
                     <Sparkline
                       points={entry.points}
+                      color={categoryColor(getCategorySlot(entry.category))}
                       ariaLabel={`Utvikling for ${entry.category}`}
+                      hover={{
+                        title: (index) => {
+                          const ref = months[index];
+                          return ref
+                            ? `${MONTH_NAMES[ref.month - 1]} ${ref.year}`
+                            : "";
+                        },
+                        value: (index) =>
+                          formatCurrency(entry.points[index] ?? 0),
+                      }}
                     />
-                    {/* One hit area per month, laid over the sparkline, so
-                        pointing anywhere in the tile snaps to the nearest
-                        point. The tooltip is HTML positioned in percentages
-                        over the same box rather than text inside the stretched
-                        viewBox — the same reason StackedAreaChart keeps its
-                        labels outside the SVG. */}
-                    <span className={styles["tile-hits"]} aria-hidden="true">
-                      {entry.points.map((_, pointIndex) => (
-                        <span
-                          key={months[pointIndex] ? monthKey(months[pointIndex].year, months[pointIndex].month) : pointIndex}
-                          className={styles["tile-hit"]}
-                          onMouseEnter={() =>
-                            setHover({ category: entry.category, index: pointIndex })
-                          }
-                        />
-                      ))}
-                    </span>
-                    {hoveredPoint && hoveredPoint.category === entry.category ? (
-                      <span
-                        className={styles["tile-tooltip"]}
-                        style={{ left: `${hoveredPoint.leftPct}%` }}
-                        data-side={hoveredPoint.side}
-                        aria-hidden="true"
-                      >
-                        <span className={styles["tile-tooltip-month"]}>
-                          {hoveredPoint.label}
-                        </span>
-                        <span className="num">
-                          {formatCurrency(hoveredPoint.amount)}
-                        </span>
-                      </span>
-                    ) : null}
                   </span>
                   <span className={styles["category-tile-stats"]}>
                     <span className={styles["tile-stat"]}>

@@ -11,7 +11,7 @@ import RecurringPanel from "@/components/RecurringPanel";
 import ItemAutocomplete from "@/components/ItemAutocomplete";
 import Toast from "@/components/Toast";
 import { supabase } from "@/lib/supabaseClient";
-import { getCategoryHue } from "@/lib/categoryColor";
+import { categoryInk, categoryTint, getCategorySlot } from "@/lib/categoryColor";
 import {
   IconCheck,
   IconChevronDown,
@@ -1320,7 +1320,8 @@ export default function TransaksjonerPage() {
               const isIncome = signedAmount >= 0;
               const amount = formatCurrency(Math.abs(signedAmount));
               const categoryStyle = {
-                "--cat-hue": getCategoryHue(categoryName),
+                "--cat-bg": categoryTint(getCategorySlot(categoryName)),
+                "--cat-ink": categoryInk(getCategorySlot(categoryName)),
               } as CSSProperties;
               const isEditing = editingExpenseId === expense.id;
 

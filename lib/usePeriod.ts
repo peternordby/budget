@@ -8,6 +8,7 @@ import {
   parsePeriod,
   refToKey,
   serializePeriod,
+  yearAnchor,
   type PeriodState,
 } from "@/lib/period";
 
@@ -21,8 +22,10 @@ export type PeriodApi = {
   ready: boolean;
   selectMonth: (ref: MonthRef, additive: boolean) => void;
   selectYear: (year: number) => void;
-  shiftAnchor: (delta: number) => void;
-  resetAnchor: () => void;
+  /** Move the selection *and* the window by whole months. */
+  shiftPeriod: (delta: number) => void;
+  /** Select this month and scroll the window back to it. */
+  goToToday: () => void;
   bootstrap: (ref: MonthRef) => void;
 };
 
@@ -74,21 +77,39 @@ export function usePeriod(fallback: MonthRef): PeriodApi {
       for (let month = 1; month <= 12; month += 1) {
         months.push(refToKey({ year, month }));
       }
-      write({ selected: months, anchor: { year, month: 12 } });
+      // yearAnchor, not December: the picker's window overhangs its anchor, so
+      // anchoring at December would draw April–March and hide a third of the
+      // year that was just selected.
+      write({ selected: months, anchor: yearAnchor(year) });
     },
     [write]
   );
 
-  const shiftAnchor = useCallback(
+  // The arrows move the period, not just the view: pressing ‹ used to scroll
+  // the chart a month into the past and leave the selection where it was, so
+  // every figure on the page stayed put and the button looked like it had done
+  // nothing. Each selected month moves by the same delta, so a multi-month
+  // selection keeps its size and a single month behaves as "previous/next".
+  const shiftPeriod = useCallback(
     (delta: number) => {
-      write({ selected: state.selected, anchor: addMonths(state.anchor, delta) });
+      write({
+        selected: state.selected
+          .map((key) => refToKey(addMonths(keyToRef(key), delta)))
+          .sort(),
+        anchor: addMonths(state.anchor, delta),
+      });
     },
     [state.selected, state.anchor, write]
   );
 
-  const resetAnchor = useCallback(() => {
-    write({ selected: state.selected, anchor: fallback });
-  }, [state.selected, fallback.year, fallback.month, write]);
+  // Selection *and* anchor, which is what "I dag" means: it used to move only
+  // the window, so pressing it while a whole year was selected scrolled the
+  // chart back to today and left all twelve months selected — every figure on
+  // the page still annual, with no obvious way back to a single month. It also
+  // deliberately does not go through selectMonth, which preserves the anchor.
+  const goToToday = useCallback(() => {
+    write({ selected: [refToKey(fallback)], anchor: fallback });
+  }, [fallback.year, fallback.month, write]);
 
   const bootstrap = useCallback(
     (ref: MonthRef) => {
@@ -108,8 +129,8 @@ export function usePeriod(fallback: MonthRef): PeriodApi {
     ready: Boolean(p),
     selectMonth,
     selectYear,
-    shiftAnchor,
-    resetAnchor,
+    shiftPeriod,
+    goToToday,
     bootstrap,
   };
 }

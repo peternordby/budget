@@ -1,122 +1,3 @@
-/* --- Section 1: Inntekt mot utgift --- */
-
-/* One bar per month measured from a zero line, borrowing PeriodPicker's
-   column/label/active treatment so the two charts read as the same family.
-   `--zero-pct` is the line's distance from the track's bottom: it moves with
-   the data, since a window with no deficit should not waste half its height
-   on an empty lower plot. */
-.net-chart {
-  display: flex;
-  align-items: stretch;
-  gap: 4px;
-  height: 190px;
-  margin-top: 4px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-}
-
-.net-col {
-  flex: 1 1 0;
-  min-width: 22px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  height: 100%;
-  padding: 6px 2px 4px;
-  border-radius: 8px;
-  transition: background 150ms ease;
-}
-
-.net-col.active {
-  background: var(--accent-soft);
-}
-
-.net-col.empty .net-track {
-  opacity: 0.45;
-}
-
-.net-track {
-  position: relative;
-  width: 100%;
-  max-width: 30px;
-  flex: 1;
-}
-
-/* The baseline is drawn per column rather than once across the chart, so it
-   cannot drift out of alignment with the bars sitting on it. */
-.net-zero {
-  position: absolute;
-  left: -2px;
-  right: -2px;
-  bottom: var(--zero-pct);
-  height: 1px;
-  background: var(--border);
-}
-
-.net-bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  min-height: 2px;
-  transition: height 450ms cubic-bezier(0.22, 0.61, 0.36, 1);
-}
-
-.net-bar.surplus {
-  background: var(--income);
-  opacity: 0.85;
-  border-radius: 4px 4px 0 0;
-}
-
-.net-bar.deficit {
-  background: var(--expense);
-  opacity: 0.85;
-  border-radius: 0 0 4px 4px;
-}
-
-.net-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.net-col.active .net-label {
-  color: var(--ink);
-}
-
-.net-label-year {
-  display: block;
-  font-size: 9px;
-  font-weight: 600;
-  opacity: 0.7;
-}
-
-/* --- Section 2: Faste og variable utgifter --- */
-
-/* One average month as a single bar. The same idiom as /oversikt's category
-   breakdown, kept local rather than promoted: that one splits spending into
-   categories, this one splits income into what happens to it, and the two
-   would drift apart the moment either grows a state. */
-.mix-bar {
-  display: flex;
-  height: 24px;
-  border-radius: 12px;
-  overflow: hidden;
-  gap: 2px;
-  margin-bottom: 14px;
-}
-
-.mix-segment {
-  height: 100%;
-  min-width: 4px;
-  transition: width 400ms cubic-bezier(0.22, 0.61, 0.36, 1);
-  cursor: default;
-}
-
 .mix-legend {
   display: flex;
   flex-wrap: wrap;
@@ -126,11 +7,16 @@
 
 /* Label, amount and share on one baseline, so the four rows can be compared
    down the column when they wrap on a narrow screen. */
+.mix-legend-item[data-dim="true"] {
+  opacity: 0.4;
+}
+
 .mix-legend-item {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
   font-size: 13px;
+  transition: opacity 140ms ease;
 }
 
 .mix-legend-name {
@@ -186,51 +72,6 @@
 .tile-chart {
   position: relative;
   display: block;
-}
-
-.tile-hits {
-  position: absolute;
-  inset: 0;
-  display: flex;
-}
-
-.tile-hit {
-  flex: 1;
-}
-
-.tile-tooltip {
-  position: absolute;
-  bottom: calc(100% + 4px);
-  transform: translateX(-50%);
-  z-index: 2;
-  display: grid;
-  gap: 1px;
-  padding: 5px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface-popover);
-  box-shadow: var(--shadow-tight);
-  font-size: 11px;
-  line-height: 1.3;
-  white-space: nowrap;
-  /* Or it steals the pointer from the hit areas underneath and flickers. */
-  pointer-events: none;
-}
-
-.tile-tooltip[data-side="start"] {
-  transform: none;
-}
-
-.tile-tooltip[data-side="end"] {
-  transform: translateX(-100%);
-}
-
-.tile-tooltip-month {
-  color: var(--muted);
-  text-transform: uppercase;
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  font-weight: 600;
 }
 
 .category-tile-stats {

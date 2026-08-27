@@ -1,7 +1,8 @@
 /* The budget editor: one row per category, six real grid columns plus a
    full-bleed track underneath. Same shape as /oversikt's category list, but
-   this one is an editing surface, so the amounts are inputs and the row
-   carries rename/delete controls instead of opening a drill-down. */
+   this one is an editing surface: the pencil turns that row's type and budget
+   into controls, and the row carries edit/delete rather than opening a
+   drill-down. */
 
 .budget-list {
   display: flex;
@@ -50,6 +51,14 @@
   white-space: nowrap;
 }
 
+/* The name field in edit mode. `min-width: 0` because the cell is a flex
+   container and an input's default intrinsic width would push the row's other
+   columns out rather than shrinking. */
+.budget-name-input {
+  flex: 1;
+  min-width: 0;
+}
+
 .budget-dot {
   flex: none;
   width: 8px;
@@ -63,6 +72,20 @@
   min-width: 0;
 }
 
+/* The read-only type cell: the row shows plain text until the pencil turns that
+   cell and the budget into controls. */
+.budget-kind-text {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* A figure a "Kopier fra …" put on the row but nobody has saved yet. The
+   toolbar's "Lagre N endringer" counts them; this says which ones. */
+.budget-pending {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
 .budget-actions {
   display: flex;
   justify-content: flex-end;
@@ -71,21 +94,11 @@
 
 /* The track spans the whole row under the columns, so a glance down the list
    reads as a chart rather than as a table of numbers. */
+/* Just the row's full-bleed slot for the bar — the track, fill and budget
+   marker are the shared <BulletBar>. */
 .budget-track {
   grid-column: 1 / -1;
   position: relative;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--track-bg);
-}
-
-.budget-bar {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 0;
-  border-radius: 3px;
-  background: var(--bar-color);
-  transition: width 400ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .budget-total {
@@ -120,7 +133,22 @@
     grid-column: 1 / -1;
   }
 
-  .budget-input {
+  /* Read-only type and budget: the row shows plain text until the pencil turns
+   those two cells into controls. Sized like the inputs they replace, so opening
+   a row for editing does not shift the grid. */
+.budget-kind-text {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* A figure a "Kopier fra …" put on the row but nobody has saved yet. The
+   toolbar's "Lagre N endringer" counts them; this says which. */
+.budget-pending {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.budget-input {
     grid-column: 1;
   }
 }

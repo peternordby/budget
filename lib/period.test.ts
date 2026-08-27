@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   isMonthKey,
   keyToRef,
+  WINDOW_AFTER,
+  WINDOW_BEFORE,
+  WINDOW_LENGTH,
+  chartWindow,
   parsePeriod,
+  periodLabel,
   refToKey,
+  yearAnchor,
   serializePeriod,
 } from "@/lib/period";
 
@@ -115,5 +121,82 @@ describe("serializePeriod", () => {
     const original = { selected: ["2025-11", "2025-12"], anchor: { year: 2026, month: 1 } };
     const { p, w } = serializePeriod(original);
     expect(parsePeriod(p, w, FALLBACK)).toEqual(original);
+  });
+});
+
+describe("periodLabel", () => {
+  it("names a single month", () => {
+    expect(periodLabel([{ year: 2026, month: 3 }])).toBe("mars 2026");
+  });
+
+  it("names a whole year by the year alone", () => {
+    const all = Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1 }));
+    expect(periodLabel(all)).toBe("2026");
+  });
+
+  it("counts months inside one year", () => {
+    expect(
+      periodLabel([
+        { year: 2026, month: 1 },
+        { year: 2026, month: 2 },
+        { year: 2026, month: 3 },
+      ])
+    ).toBe("3 måneder 2026");
+  });
+
+  it("drops the year when the selection spans more than one", () => {
+    expect(
+      periodLabel([
+        { year: 2025, month: 12 },
+        { year: 2026, month: 1 },
+      ])
+    ).toBe("2 måneder valgt");
+  });
+
+  it("says so when nothing is selected", () => {
+    expect(periodLabel([])).toBe("Ingen periode");
+  });
+});
+
+describe("chartWindow", () => {
+  it("reaches WINDOW_BEFORE months back and WINDOW_AFTER months forward", () => {
+    const months = chartWindow({ year: 2026, month: 8 });
+    expect(months).toHaveLength(WINDOW_LENGTH);
+    expect(months[WINDOW_BEFORE]).toEqual({ year: 2026, month: 8 });
+    expect(months[0]).toEqual({ year: 2025, month: 12 });
+    expect(months[months.length - 1]).toEqual({ year: 2026, month: 11 });
+  });
+
+  it("crosses the year boundary in both directions", () => {
+    const months = chartWindow({ year: 2026, month: 1 });
+    expect(months[0]).toEqual({ year: 2025, month: 5 });
+    expect(months[months.length - 1]).toEqual({ year: 2026, month: 4 });
+  });
+
+  it("is oldest first, with no gaps", () => {
+    const months = chartWindow({ year: 2026, month: 8 });
+    for (let i = 1; i < months.length; i += 1) {
+      const previous = months[i - 1];
+      const expected =
+        previous.month === 12
+          ? { year: previous.year + 1, month: 1 }
+          : { year: previous.year, month: previous.month + 1 };
+      expect(months[i]).toEqual(expected);
+    }
+  });
+});
+
+describe("yearAnchor", () => {
+  it("puts a whole year exactly inside the window", () => {
+    // The reason it exists: with a window that overhangs its anchor, anchoring a
+    // year selection at December would draw April–March.
+    const months = chartWindow(yearAnchor(2026));
+    expect(months[0]).toEqual({ year: 2026, month: 1 });
+    expect(months[months.length - 1]).toEqual({ year: 2026, month: 12 });
+    expect(months.every((ref) => ref.year === 2026)).toBe(true);
+  });
+
+  it("stays consistent with the window constants", () => {
+    expect(yearAnchor(2026)).toEqual({ year: 2026, month: 12 - WINDOW_AFTER });
   });
 });
