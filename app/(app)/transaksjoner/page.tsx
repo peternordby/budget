@@ -22,7 +22,7 @@ import {
 } from "@/components/icons";
 import { useToast } from "@/lib/useToast";
 import { usePeriod } from "@/lib/usePeriod";
-import { refToKey } from "@/lib/period";
+import { keyToRef, refToKey } from "@/lib/period";
 import {
   formatCurrency,
   formatDate,
@@ -37,6 +37,12 @@ import {
   type CategoryKind,
 } from "@/lib/categories";
 import { toCsv } from "@/lib/csv";
+import {
+  expenseKey,
+  guessKind,
+  parseExpenseCsv,
+  type ExpenseImport,
+} from "@/lib/importExpenses";
 import { encField } from "@/lib/crypto";
 import styles from "./transaksjoner.module.css";
 
@@ -167,11 +173,18 @@ export default function TransaksjonerPage() {
     key: "date",
     direction: "desc",
   });
-  // Off by default: the filter otherwise silently hides matches outside the
-  // selected months, which is the trap this toggle exists to avoid. When on,
-  // it widens to the ledger provider's fetched window — not all of history,
-  // see the scope line rendered next to the toggle.
-  const [searchWholeWindow, setSearchWholeWindow] = useState(false);
+  // Which months the activity table searches: the picker's selection, or every
+  // month that has ever had a transaction. "Alle" widens the provider's fetch
+  // window to the full span of availableMonths (see the effect below), so it
+  // really does mean all of history rather than the 24-month window the
+  // provider happens to have loaded.
+  const [searchAll, setSearchAll] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState<ExpenseImport | null>(null);
+  const [importName, setImportName] = useState("");
+  const [importCategoryId, setImportCategoryId] = useState("");
+  const [importing, setImporting] = useState(false);
+  const importFile = useRef<HTMLInputElement | null>(null);
 
   const allMonthOptions = useMemo(
     () => [
@@ -293,10 +306,22 @@ export default function TransaksjonerPage() {
     [categoryByName]
   );
 
-  // The all-time-search toggle widens the source array for every downstream
-  // view of the activity table (filter options, filtering/sorting, and the
-  // empty-state check) so the widened search isn't only half-widened.
-  const activitySource = searchWholeWindow ? ledger.expenses : expenses;
+  // The all-time scope widens the source array for every downstream view of
+  // the activity table (filter options, filtering/sorting, and the empty-state
+  // check) so the widened search isn't only half-widened.
+  const activitySource = searchAll ? ledger.expenses : expenses;
+
+  // availableMonths is all-time by design, so its ends are the real bounds of
+  // the user's history. ensureMonthCovered only ever widens, and returns the
+  // identical state when nothing needs widening, so this settles after one
+  // fetch instead of looping.
+  useEffect(() => {
+    if (!searchAll || !ledger.availableMonths.length) return;
+    ledger.ensureMonthCovered(keyToRef(ledger.availableMonths[0]));
+    ledger.ensureMonthCovered(
+      keyToRef(ledger.availableMonths[ledger.availableMonths.length - 1])
+    );
+  }, [searchAll, ledger.availableMonths, ledger.ensureMonthCovered]);
 
   const activityTagOptions = useMemo(() => {
     const tags = new Set<string>();
@@ -411,38 +436,25 @@ export default function TransaksjonerPage() {
   const activityTotalLabel = activityFilters.tag
     ? `Total for merkelapp «${activityFilters.tag}»`
     : "Total for filtrert utvalg";
-  const activitySortLabel = useMemo(() => {
-    const labelByKey: Record<ActivitySortKey, string> = {
-      date: "dato",
-      tag: "merkelapp",
-      item: "beskrivelse",
-      amount: "beløp",
-      category: "kategori",
-    };
-    const directionLabel =
-      activitySort.direction === "asc" ? "stigende" : "synkende";
-    return `${labelByKey[activitySort.key]} (${directionLabel})`;
-  }, [activitySort.direction, activitySort.key]);
-
-  // The toggle widens to the provider's fetch window, not to all of history
-  // (ledger.availableMonths may reach further back) — so the copy states the
-  // actual month count and range rather than implying completeness.
-  const searchWindowLabel = useMemo(() => {
-    const start = ledger.windowStart;
-    const end = ledger.windowEnd;
-    const monthCount =
-      (end.year * 12 + end.month) - (start.year * 12 + start.month) + 1;
-    const startKey = refToKey(start);
-    const endKey = refToKey(end);
-    return `Søker i ${monthCount} måneder (${startKey}–${endKey})`;
-  }, [ledger.windowStart, ledger.windowEnd]);
+  // The two scope options, named by what they actually cover: the picker's
+  // selection, or every month that has data. Stating the month count is what
+  // makes the second one trustworthy — the old wording ("Søk i hele perioden")
+  // promised all of history while searching only the fetched window.
+  const scopeLabel = useMemo(
+    () => (single ? `${selectedMonthLabel} ${single.year}` : "Valgt periode"),
+    [selectedMonthLabel, single]
+  );
+  const allScopeLabel = `Alle måneder (${ledger.availableMonths.length})`;
 
   const exportFilename = useMemo(() => {
     const sanitize = (key: string) => key.replace(/[^0-9A-Za-z_-]/g, "");
-    if (searchWholeWindow) {
-      const start = sanitize(refToKey(ledger.windowStart));
-      const end = sanitize(refToKey(ledger.windowEnd));
-      return `transaksjoner-${start}-til-${end}.csv`;
+    if (searchAll) {
+      const months = ledger.availableMonths;
+      if (months.length) {
+        const start = sanitize(months[0]);
+        const end = sanitize(months[months.length - 1]);
+        return `transaksjoner-${start}-til-${end}.csv`;
+      }
     }
     if (single) {
       return `transaksjoner-${sanitize(refToKey(single))}.csv`;
@@ -457,7 +469,7 @@ export default function TransaksjonerPage() {
     const first = sanitize(sortedKeys[0]);
     const last = sanitize(sortedKeys[sortedKeys.length - 1]);
     return `transaksjoner-${first}-til-${last}.csv`;
-  }, [anchor, ledger.windowEnd, ledger.windowStart, searchWholeWindow, selectedKeys, single]);
+  }, [anchor, ledger.availableMonths, searchAll, selectedKeys, single]);
 
   function handleExportCsv() {
     if (filteredAndSortedExpenses.length === 0) return;
@@ -491,6 +503,306 @@ export default function TransaksjonerPage() {
     link.click();
     URL.revokeObjectURL(url);
   }
+
+  // --- CSV import ------------------------------------------------------
+  // Names in the file are resolved against the account's own categories, case
+  // insensitively; whatever is left over is created on confirm.
+  const categoryIdByName = useMemo(() => {
+    const map = new Map<string, number>();
+    ledger.categories.forEach((category) =>
+      map.set(category.category.trim().toLowerCase(), category.id)
+    );
+    return map;
+  }, [ledger.categories]);
+
+  // Re-importing the same file must not double the ledger, and `expense` has
+  // no unique constraint to lean on (its columns are ciphertext, so it cannot
+  // have one). ponytail: compared against the fetched window only — a row
+  // outside it is invisible to this check. Set the scope to "Alle måneder"
+  // before importing an old file, which loads all of it.
+  const existingKeys = useMemo(
+    () =>
+      new Set(
+        ledger.expenses.map((expense) =>
+          expenseKey({
+            date: expense.date,
+            item: expense.item,
+            price: toNumber(expense.price),
+            category: getExpenseCategoryLabel(expense),
+          })
+        )
+      ),
+    [ledger.expenses]
+  );
+
+  // What confirming would actually write: rows with a category resolved,
+  // duplicates and already-known rows dropped, and the categories that have to
+  // be created first.
+  const importPlan = useMemo(() => {
+    if (!importPreview) return null;
+    const fallback =
+      ledger.categories.find(
+        (category) => String(category.id) === importCategoryId
+      ) ?? null;
+    const named = importPreview.rows
+      .map((row) => ({ ...row, name: row.category || fallback?.category || "" }))
+      .filter((row) => row.name);
+
+    const seen = new Set<string>();
+    const rows = named.filter((row) => {
+      const key = expenseKey({ ...row, category: row.name });
+      if (existingKeys.has(key) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const dates = rows.map((row) => row.date).sort();
+    return {
+      rows,
+      duplicates: named.length - rows.length,
+      missing: importPreview.categories.filter(
+        (name) => !categoryIdByName.has(name.toLowerCase())
+      ),
+      from: dates[0] ?? null,
+      to: dates[dates.length - 1] ?? null,
+    };
+  }, [
+    categoryIdByName,
+    existingKeys,
+    importCategoryId,
+    importPreview,
+    ledger.categories,
+  ]);
+
+  // Only asked for when the file left a category blank; until it is answered
+  // those rows are excluded from the plan rather than guessed at.
+  const needsFallback = Boolean(
+    importPreview?.rows.some((row) => !row.category)
+  );
+
+  async function handleImportFile(file: File) {
+    setImportName(file.name);
+    setImportPreview(parseExpenseCsv(await file.text()));
+  }
+
+  function cancelImport() {
+    setImportPreview(null);
+    setImportName("");
+    setImportCategoryId("");
+    // Without this the same file cannot be picked twice in a row: the input
+    // fires no change event when the value is unchanged.
+    if (importFile.current) importFile.current.value = "";
+  }
+
+  async function handleConfirmImport() {
+    if (!importPreview || !importPlan?.rows.length) return;
+    setImporting(true);
+    setStatus(null);
+
+    const ids = new Map(categoryIdByName);
+    for (const name of importPlan.missing) {
+      const { data, error } = await supabase
+        .from("category")
+        .insert({
+          category: name,
+          kind: guessKind(importPreview.rows, name, importPreview.signed),
+          user_id: ledger.userId,
+        })
+        .select("id");
+      if (error || !data?.length) {
+        setStatus(error?.message ?? `Kunne ikke opprette kategorien ${name}.`);
+        setImporting(false);
+        return;
+      }
+      ids.set(name.trim().toLowerCase(), data[0].id);
+    }
+
+    // Encrypted at the call site, like every other write on this page.
+    const payload = await Promise.all(
+      importPlan.rows.map(async (row) => ({
+        item: await encField(row.item),
+        price: await encField(row.price),
+        category_id: ids.get(row.name.trim().toLowerCase()) as number,
+        tag: await encField(row.tag),
+        user_id: ledger.userId,
+        date: row.date,
+      }))
+    );
+
+    for (let i = 0; i < payload.length; i += 200) {
+      const { error } = await supabase
+        .from("expense")
+        .insert(payload.slice(i, i + 200));
+      if (error) {
+        setStatus(error.message);
+        setImporting(false);
+        // Some chunks may already be in; reload so the table tells the truth.
+        await ledger.refetch();
+        return;
+      }
+    }
+
+    const count = payload.length;
+    await ledger.refetch();
+    cancelImport();
+    setImportOpen(false);
+    setImporting(false);
+    showToast({
+      message:
+        count === 1
+          ? "1 transaksjon importert."
+          : `${count} transaksjoner importert.`,
+      tone: "info",
+    });
+  }
+
+  const importPanel = (
+    <div className="import">
+      <div className="import-head">
+        <strong>Importer fra CSV</strong>
+        <span className="helper">
+          Trenger kolonnene dato, beskrivelse og beløp; kategori og merkelapp
+          brukes hvis filen har dem. Semikolon, komma og tab fungerer alle, og
+          en fil eksportert herfra leses rett inn igjen.
+        </span>
+      </div>
+      <input
+        ref={importFile}
+        className="import-file"
+        type="file"
+        accept=".csv,text/csv,text/plain"
+        aria-label="Velg CSV-fil"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) handleImportFile(file);
+        }}
+      />
+
+      {importPreview && importPlan ? (
+        <div className="import-preview">
+          <div className="card-head">
+            <strong>{importName}</strong>
+            <span className="helper">
+              {importPreview.rows.length} rader lest
+            </span>
+          </div>
+
+          {importPlan.rows.length ? (
+            <div className="stat-row">
+              <div className="stat stat-small">
+                <span className="stat-label">Importeres</span>
+                <strong className="stat-value">{importPlan.rows.length}</strong>
+              </div>
+              {importPlan.from ? (
+                <div className="stat stat-small">
+                  <span className="stat-label">Periode</span>
+                  <strong className="stat-value">
+                    {formatDate(importPlan.from)} –{" "}
+                    {formatDate(importPlan.to as string)}
+                  </strong>
+                </div>
+              ) : null}
+              {importPlan.duplicates ? (
+                <div className="stat stat-small">
+                  <span className="stat-label">Finnes allerede</span>
+                  <strong className="stat-value">
+                    {importPlan.duplicates}
+                  </strong>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="empty">
+              {needsFallback && !importCategoryId
+                ? "Velg en kategori for radene under, så er filen klar."
+                : "Ingen nye rader i denne filen."}
+            </div>
+          )}
+
+          {needsFallback ? (
+            <div className="field">
+              <label htmlFor="import-fallback-category">
+                Kategori for rader uten kategori
+              </label>
+              <select
+                id="import-fallback-category"
+                value={importCategoryId}
+                onChange={(event) => setImportCategoryId(event.target.value)}
+              >
+                <option value="">Velg kategori...</option>
+                {ledger.categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.category}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {importPlan.missing.length ? (
+            <p className="helper">
+              Nye kategorier som opprettes:{" "}
+              {importPlan.missing
+                .map(
+                  (name) =>
+                    `${name} (${
+                      guessKind(
+                        importPreview.rows,
+                        name,
+                        importPreview.signed
+                      ) === "income"
+                        ? "inntekt"
+                        : "variabel"
+                    })`
+                )
+                .join(", ")}
+            </p>
+          ) : null}
+
+          {importPreview.errors.length ? (
+            <details className="import-errors">
+              <summary>
+                {importPreview.errors.length === 1
+                  ? "1 rad ble hoppet over"
+                  : `${importPreview.errors.length} rader ble hoppet over`}
+              </summary>
+              <ul>
+                {importPreview.errors.slice(0, 50).map((error, index) => (
+                  <li key={index}>{error}</li>
+                ))}
+                {importPreview.errors.length > 50 ? (
+                  <li className="helper">
+                    ... og {importPreview.errors.length - 50} flere.
+                  </li>
+                ) : null}
+              </ul>
+            </details>
+          ) : null}
+
+          <div className="form-actions">
+            <button
+              className="btn btn-primary btn-small"
+              type="button"
+              onClick={handleConfirmImport}
+              disabled={importing || !importPlan.rows.length}
+            >
+              {importing
+                ? "Importerer..."
+                : `Importer ${importPlan.rows.length} transaksjoner`}
+            </button>
+            <button
+              className="btn btn-ghost btn-small"
+              type="button"
+              onClick={cancelImport}
+              disabled={importing}
+            >
+              Avbryt
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 
   useEffect(() => {
     if (!activityFilters.tag) return;
@@ -1118,14 +1430,35 @@ export default function TransaksjonerPage() {
       <section className="card section-gap">
         <div className="card-head">
           <h2 className="section-title">Aktivitet</h2>
-          <span className="helper">Sortert på {activitySortLabel}</span>
+          <div className="toolbar-actions">
+            <button
+              className={`btn btn-ghost btn-small${importOpen ? " is-on" : ""}`}
+              type="button"
+              aria-expanded={importOpen}
+              onClick={() => {
+                if (importOpen) cancelImport();
+                setImportOpen((open) => !open);
+              }}
+            >
+              Importer CSV
+            </button>
+            <button
+              className="btn btn-ghost btn-small"
+              type="button"
+              onClick={handleExportCsv}
+              disabled={filteredAndSortedExpenses.length === 0}
+            >
+              Eksporter CSV
+            </button>
+          </div>
         </div>
         {status ? <div className="status">{status}</div> : null}
+        {importOpen ? importPanel : null}
         <div className="toolbar">
-          <div className="field">
-            <label htmlFor="activity-item-query">Beskrivelse</label>
+          <div className="field field-wide">
             <input
               id="activity-item-query"
+              aria-label="Søk i beskrivelse"
               value={activityFilters.itemQuery}
               onChange={(event) =>
                 setActivityFilters((prev) => ({
@@ -1137,9 +1470,9 @@ export default function TransaksjonerPage() {
             />
           </div>
           <div className="field">
-            <label htmlFor="activity-tag-filter">Merkelapp</label>
             <select
               id="activity-tag-filter"
+              aria-label="Merkelapp"
               value={activityFilters.tag}
               onChange={(event) =>
                 setActivityFilters((prev) => ({
@@ -1157,9 +1490,9 @@ export default function TransaksjonerPage() {
             </select>
           </div>
           <div className="field">
-            <label htmlFor="activity-category-filter">Kategori</label>
             <select
               id="activity-category-filter"
+              aria-label="Kategori"
               value={activityFilters.category}
               onChange={(event) =>
                 setActivityFilters((prev) => ({
@@ -1176,37 +1509,29 @@ export default function TransaksjonerPage() {
               ))}
             </select>
           </div>
-          <label className="toolbar-check" htmlFor="activity-search-whole-window">
-            <input
-              id="activity-search-whole-window"
-              type="checkbox"
-              checked={searchWholeWindow}
-              onChange={(event) => setSearchWholeWindow(event.target.checked)}
-            />
-            Søk i hele perioden
-          </label>
-          <div className="toolbar-actions">
-            <button
-              className="btn btn-ghost btn-small"
-              type="button"
-              onClick={clearActivityFilters}
-              disabled={!hasActivityFilters}
+          <div className="field">
+            <select
+              id="activity-scope"
+              aria-label="Hvilke måneder søket dekker"
+              value={searchAll ? "all" : "period"}
+              onChange={(event) => setSearchAll(event.target.value === "all")}
             >
-              Nullstill filtre
-            </button>
-            <button
-              className="btn btn-ghost btn-small"
-              type="button"
-              onClick={handleExportCsv}
-              disabled={filteredAndSortedExpenses.length === 0}
-            >
-              Eksporter CSV
-            </button>
+              <option value="period">{scopeLabel}</option>
+              <option value="all">{allScopeLabel}</option>
+            </select>
           </div>
+          {hasActivityFilters ? (
+            <button
+              className="icon-btn icon-btn-sm"
+              type="button"
+              title="Nullstill filtre"
+              aria-label="Nullstill filtre"
+              onClick={clearActivityFilters}
+            >
+              <IconX />
+            </button>
+          ) : null}
         </div>
-        {searchWholeWindow ? (
-          <div className="helper">{searchWindowLabel}</div>
-        ) : null}
         <div className={`stat-row ${styles["activity-total-row"]}`}>
           <div className="stat">
             <span className="stat-label">{activityTotalLabel}</span>

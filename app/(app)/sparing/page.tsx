@@ -489,8 +489,8 @@ export default function SparingPage() {
           </div>
         </div>
 
-        <div className={styles["import"]}>
-          <div className={styles["import-head"]}>
+        <div className="import">
+          <div className="import-head">
             <strong>Importer fra CSV</strong>
             <span className="helper">
               Enten «dato;kategori;beløp», eller en datokolonne fulgt av én
@@ -499,7 +499,7 @@ export default function SparingPage() {
           </div>
           <input
             ref={fileInput}
-            className={styles["import-file"]}
+            className="import-file"
             type="file"
             accept=".csv,text/csv,text/plain"
             aria-label="Velg CSV-fil"
@@ -510,7 +510,7 @@ export default function SparingPage() {
           />
 
           {importPreview ? (
-            <div className={styles["import-preview"]}>
+            <div className="import-preview">
               <div className="card-head">
                 <strong>{importName}</strong>
                 <span className="badge">
@@ -560,7 +560,7 @@ export default function SparingPage() {
               )}
 
               {importPreview.errors.length ? (
-                <details className={styles["import-errors"]}>
+                <details className="import-errors">
                   <summary>
                     {importPreview.errors.length === 1
                       ? "1 rad ble hoppet over"

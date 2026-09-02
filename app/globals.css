@@ -751,41 +751,29 @@ select:focus {
   text-align: right;
 }
 
-/* --- Toolbar: filter fields on one baseline, actions pinned to the end ---
-   The activity filters were an auto-fit grid that put inputs, a checkbox and
-   two buttons in equal-width cells, so nothing shared a baseline and the
-   export button wrapped onto a row of its own. */
+/* --- Toolbar: one row of filter controls ---
+   The controls label themselves ("Alle kategorier" is both the placeholder and
+   the reset value), so there are no <label>s above them and nothing to keep on
+   a shared baseline: an uppercase caption over every select was most of what
+   made the filter row read as a form to fill in rather than a row to skim.
+   Actions belong in the card head instead, so the row is filters only. */
 .toolbar {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
   margin: 4px 0 16px;
 }
 
 .toolbar .field {
-  flex: 1 1 170px;
+  flex: 1 1 150px;
   min-width: 0;
 }
 
-.toolbar-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 40px;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: normal;
-  text-transform: none;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.toolbar-check input {
-  width: auto;
-  margin: 0;
-  accent-color: var(--accent);
+/* The search box is the control people reach for first, so it gets the room
+   two selects would have taken. */
+.toolbar .field-wide {
+  flex: 2 1 220px;
 }
 
 .toolbar-actions {
@@ -793,6 +781,72 @@ select:focus {
   align-items: center;
   gap: 8px;
   margin-left: auto;
+}
+
+/* --- CSV import panel (used by /sparing and /transaksjoner) --- */
+.import {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.import-head {
+  display: grid;
+  gap: 4px;
+}
+
+/* The native file input, restyled only as far as its button pseudo-element
+   allows — enough to stop it reading as unstyled browser chrome. */
+.import-file {
+  padding: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.import-file::file-selector-button {
+  margin-right: 12px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-solid);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.import-file::file-selector-button:hover {
+  background: var(--bg-alt);
+}
+
+.import-preview {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+}
+
+.import-errors summary {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warn-ink);
+  cursor: pointer;
+}
+
+.import-errors ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 .text-income {
@@ -917,10 +971,6 @@ select:focus {
   .toolbar-actions {
     width: 100%;
     margin-left: 0;
-  }
-
-  .toolbar-check {
-    height: auto;
   }
 }
 
