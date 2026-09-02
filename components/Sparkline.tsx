@@ -174,6 +174,12 @@ export default function Sparkline({
                   x: hoveredCoord[0],
                   y: hoveredCoord[1],
                   boxWidth: width,
+                  // Always upward, never derived: a sparkline is 32px tall, so
+                  // ChartTooltip's y < 78 rule put every readout *below* the
+                  // line — under the chart, on top of whatever follows it (the
+                  // next tile in /innsikt's grid). Above the hovered point it
+                  // sits over the chart it belongs to.
+                  flip: "above",
                   title: hover.title(hoverIndex),
                   rows: [{ value: hover.value(hoverIndex) }],
                 }

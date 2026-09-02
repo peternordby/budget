@@ -6,7 +6,7 @@ import { usePeriod } from "@/lib/usePeriod";
 import { periodLabel } from "@/lib/period";
 import { categoryColor, getCategorySlot } from "@/lib/categoryColor";
 import { GaugeArc, ShareBar, type ShareSegment } from "@/components/charts";
-import { formatCurrency, toNumber } from "@/lib/format";
+import { formatCurrency, formatSignedCurrency, toNumber } from "@/lib/format";
 import { monthKey, type MonthRef } from "@/lib/insights";
 import {
   isIncomeKind,
@@ -214,6 +214,43 @@ export default function OversiktPage() {
 
   return (
     <>
+      {summary.count > 0 ? (
+        <section className="card section-gap">
+          <div className="card-head">
+            <h2 className="section-title">Inntekter mot utgifter</h2>
+            <span className="helper">{label}</span>
+          </div>
+          <div className={styles["net-figure"]}>
+            <span className="stat-label">Differanse</span>
+            <strong
+              style={{
+                color: summary.net >= 0 ? "var(--income)" : "var(--expense)",
+              }}
+            >
+              {formatSignedCurrency(summary.net)}
+            </strong>
+          </div>
+          <div className="stat-row">
+            <div className="stat">
+              <span className="stat-label">Inntekter</span>
+              <strong className="stat-value">{formatCurrency(summary.income)}</strong>
+            </div>
+            <div className="stat">
+              <span className="stat-label">Utgifter</span>
+              <strong className="stat-value">{formatCurrency(summary.expensesTotal)}</strong>
+            </div>
+            {summary.savings > 0 ? (
+              <div className="stat">
+                <span className="stat-label">Sparing</span>
+                <strong className="stat-value">{formatCurrency(summary.savings)}</strong>
+                {/* Set aside, not spent: kept out of the difference above for
+                    the same reason the gauge leaves it out. */}
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
       {budgetSummary.budgetTotal > 0 ? (
         <section className={`card section-gap ${styles["gauge-card"]}`}>
           <div className="card-head">
@@ -359,7 +396,7 @@ export default function OversiktPage() {
           render unconditionally now lives on /budsjett — so without this a month
           with no budget and no spending is a blank page, which reads as a
           failure rather than as an empty month. */}
-      {budgetSummary.budgetTotal <= 0 && expenseBreakdown.items.length === 0 ? (
+      {budgetSummary.budgetTotal <= 0 && summary.count === 0 ? (
         <section className="card section-gap">
           <div className="card-head">
             <h2 className="section-title">Ingenting å vise</h2>

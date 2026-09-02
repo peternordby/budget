@@ -11,6 +11,7 @@ import {
 import { usePeriod } from "@/lib/usePeriod";
 import { categorySeries } from "@/lib/trends";
 import { monthKey, type MonthRef } from "@/lib/insights";
+import { windowLabel as formatWindowLabel } from "@/lib/period";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { IconX } from "@/components/icons";
 import MonthColumns, { type MonthPoint } from "@/components/MonthColumns";
@@ -32,9 +33,9 @@ const SHORT_MONTHS = [
   "des",
 ];
 
-// Same two-year history /innsikt's category tiles use, so a tile and the
+// Same twelve-month history /innsikt's category tiles use, so a tile and the
 // panel it opens report the same Snitt and Median.
-const ANALYSIS_MONTHS = 24;
+const ANALYSIS_MONTHS = 12;
 
 type CategoryDrilldownProps = {
   category: string | null;
@@ -130,22 +131,16 @@ export default function CategoryDrilldown({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [isOpen]);
 
-  // Trailing two years ending at the host's selected month, clamped to the
+  // Trailing twelve months ending at the host's selected month, clamped to the
   // fetched range — the same hook app/(app)/innsikt/page.tsx uses, so both
   // consumers of categorySeries bucket the same way, and neither divides by a
   // window the period picker happened to widen. See useAnalysisWindow in
   // components/LedgerProvider.tsx.
   const months = useAnalysisWindow(anchor, ANALYSIS_MONTHS);
 
-  // The heading states the window the bars actually cover: useAnalysisWindow
-  // clamps to the fetched range, so this is not always ANALYSIS_MONTHS long.
-  // Phrased like the /transaksjoner search scope line so the two read alike.
-  const windowLabel = useMemo(() => {
-    if (!months.length) return "";
-    const first = months[0];
-    const last = months[months.length - 1];
-    return `Siste ${months.length} måneder (${monthKey(first.year, first.month)}–${monthKey(last.year, last.month)})`;
-  }, [months]);
+  // Shared with /innsikt's section headers: the label states the window the
+  // bars actually cover, which useAnalysisWindow clamps to the fetched range.
+  const windowLabel = useMemo(() => formatWindowLabel(months), [months]);
 
   const entries = useMemo(
     () => toLedgerEntries(ledger.expenses),

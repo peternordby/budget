@@ -22,6 +22,8 @@ export type PeriodApi = {
   ready: boolean;
   selectMonth: (ref: MonthRef, additive: boolean) => void;
   selectYear: (year: number) => void;
+  /** Select an explicit set of month keys (the picker's "Alle"). */
+  selectMonths: (keys: string[]) => void;
   /** Move the selection *and* the window by whole months. */
   shiftPeriod: (delta: number) => void;
   /** Select this month and scroll the window back to it. */
@@ -85,6 +87,16 @@ export function usePeriod(fallback: MonthRef): PeriodApi {
     [write]
   );
 
+  const selectMonths = useCallback(
+    (keys: string[]) => {
+      if (!keys.length) return;
+      const sorted = Array.from(new Set(keys)).sort();
+      // Anchor on the newest month so the chart lands where the data is.
+      write({ selected: sorted, anchor: keyToRef(sorted[sorted.length - 1]) });
+    },
+    [write]
+  );
+
   // The arrows move the period, not just the view: pressing ‹ used to scroll
   // the chart a month into the past and leave the selection where it was, so
   // every figure on the page stayed put and the button looked like it had done
@@ -129,6 +141,7 @@ export function usePeriod(fallback: MonthRef): PeriodApi {
     ready: Boolean(p),
     selectMonth,
     selectYear,
+    selectMonths,
     shiftPeriod,
     goToToday,
     bootstrap,

@@ -152,3 +152,18 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* --- Income vs. expenses --- */
+
+.net-figure {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.net-figure strong {
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}

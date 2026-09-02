@@ -40,6 +40,7 @@ export default function PeriodPicker() {
     anchor,
     selectMonth,
     selectYear,
+    selectMonths,
     shiftPeriod,
     goToToday,
     bootstrap,
@@ -212,6 +213,21 @@ export default function PeriodPicker() {
 
       {yearButtons.length ? (
         <div className={styles["mom-years"]}>
+          {availableMonths.length ? (
+            <button
+              type="button"
+              className={`btn btn-ghost btn-small ${styles["mom-year"]} ${
+                selectedKeys.size === availableMonths.length &&
+                availableMonths.every((key) => selectedKeys.has(key))
+                  ? "is-on"
+                  : ""
+              }`}
+              onClick={() => selectMonths(availableMonths)}
+              title="Velg alle måneder med data"
+            >
+              Alle
+            </button>
+          ) : null}
           {yearButtons.map((year) => (
             <button
               key={year}

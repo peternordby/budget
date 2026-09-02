@@ -7,8 +7,10 @@ import {
   WINDOW_LENGTH,
   chartWindow,
   parsePeriod,
+  monthRangeLabel,
   periodLabel,
   refToKey,
+  windowLabel,
   yearAnchor,
   serializePeriod,
 } from "@/lib/period";
@@ -198,5 +200,29 @@ describe("yearAnchor", () => {
 
   it("stays consistent with the window constants", () => {
     expect(yearAnchor(2026)).toEqual({ year: 2026, month: 12 - WINDOW_AFTER });
+  });
+});
+
+const monthList = (pairs: [number, number][]) =>
+  pairs.map(([year, month]) => ({ year, month }));
+
+describe("windowLabel", () => {
+  it("states the real month count, not the caller's constant", () => {
+    // useAnalysisWindow clamps to the fetched range, so seven months of a
+    // twelve-month request must not be labelled "Siste 12 måneder".
+    const seven = monthList(
+      Array.from({ length: 7 }, (_, i): [number, number] => [2026, i + 2])
+    );
+    expect(windowLabel(seven)).toBe("Siste 7 måneder · feb–aug 2026");
+  });
+
+  it("names the year once inside a year, twice across one", () => {
+    expect(monthRangeLabel(monthList([[2026, 1], [2026, 12]]))).toBe("jan–des 2026");
+    expect(monthRangeLabel(monthList([[2025, 9], [2026, 8]]))).toBe("sep 2025–aug 2026");
+  });
+
+  it("collapses a single month and survives an empty window", () => {
+    expect(monthRangeLabel(monthList([[2026, 5]]))).toBe("mai 2026");
+    expect(windowLabel([])).toBe("");
   });
 });

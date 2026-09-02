@@ -4,16 +4,47 @@ import { useMemo } from "react";
 import { MONTH_NAMES, formatCurrency, formatSignedCurrency } from "@/lib/format";
 import {
   compareMonths,
-  previousMonth,
+  previousPeriod,
   type LedgerEntry,
   type MonthRef,
 } from "@/lib/insights";
+import { periodLabel } from "@/lib/period";
 import styles from "./MonthOverMonth.module.css";
 
 type MonthOverMonthProps = {
   entries: LedgerEntry[];
-  single: MonthRef | null;
+  /** The whole selection, not just a single month: a year compares with the
+   *  year before it. */
+  selected: MonthRef[];
 };
+
+/**
+ * What the selection is being compared against, in three registers: the card
+ * title, the "mot ..." helper, and the short form repeated on every delta chip
+ * ("+12 % fra juli"), which has to stay short enough to read inline.
+ */
+function comparisonWording(selected: MonthRef[]) {
+  const previous = previousPeriod(selected);
+  if (!previous.length) return null;
+  const label = periodLabel(previous);
+  if (selected.length === 1) {
+    return {
+      title: "Sammenlignet med forrige måned",
+      label,
+      short: MONTH_NAMES[previous[0].month - 1],
+    };
+  }
+  // Twelve months inside one calendar year is the year buttons' selection, and
+  // its previous period is the same twelve months a year earlier.
+  const isWholeYear =
+    selected.length === 12 &&
+    new Set(previous.map((ref) => ref.year)).size === 1;
+  return {
+    title: isWholeYear ? "Sammenlignet med i fjor" : "Sammenlignet med forrige periode",
+    label,
+    short: isWholeYear ? String(previous[0].year) : `forrige ${selected.length} mnd`,
+  };
+}
 
 function formatSignedPct(pct: number) {
   const rounded = Math.round(pct);
@@ -59,28 +90,24 @@ function CompareStat({
 
 export default function MonthOverMonth({
   entries,
-  single,
+  selected,
 }: MonthOverMonthProps) {
   const comparison = useMemo(
-    () => (single ? compareMonths(entries, single) : null),
-    [entries, single]
+    () => compareMonths(entries, selected),
+    [entries, selected]
   );
-  const prevLabel = single ? MONTH_NAMES[previousMonth(single).month - 1] : "";
+  const wording = comparisonWording(selected);
+  const prevLabel = wording?.short ?? "";
 
   return (
     <section className="card section-gap mom-card">
       <div className="card-head">
-        <h2 className="section-title">Sammenlignet med forrige måned</h2>
-        {single && prevLabel ? (
-          <span className="helper">mot {prevLabel}</span>
-        ) : null}
+        <h2 className="section-title">
+          {wording?.title ?? "Sammenlignet med forrige periode"}
+        </h2>
+        {wording ? <span className="helper">mot {wording.label}</span> : null}
       </div>
-      {!single ? (
-        <p className={`helper ${styles["mom-hint"]}`}>
-          Flere måneder valgt. Velg én måned for å sammenligne med forrige
-          måned.
-        </p>
-      ) : comparison && comparison.previous.count > 0 ? (
+      {comparison && comparison.previous.count > 0 ? (
         <div className={styles["mom-compare"]}>
           <div className="stat-row">
             <CompareStat
@@ -144,7 +171,7 @@ export default function MonthOverMonth({
         </div>
       ) : (
         <p className={`helper ${styles["mom-hint"]}`}>
-          Ingen data for forrige måned å sammenligne med.
+          {`Ingen data for ${wording?.label ?? "forrige periode"} å sammenligne med.`}
         </p>
       )}
     </section>

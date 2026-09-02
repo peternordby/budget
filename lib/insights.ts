@@ -107,36 +107,76 @@ export type CategoryMover = {
   pct: number | null;
 };
 
+/** The same figures as MonthlyTotal, summed over a set of months. */
+export type PeriodTotal = {
+  income: number;
+  expenses: number;
+  savings: number;
+  net: number;
+  count: number;
+};
+
+export function sumMonths(totals: MonthlyTotal[]): PeriodTotal {
+  return totals.reduce<PeriodTotal>(
+    (sum, month) => ({
+      income: sum.income + month.income,
+      expenses: sum.expenses + month.expenses,
+      savings: sum.savings + month.savings,
+      net: sum.net + month.net,
+      count: sum.count + month.count,
+    }),
+    { income: 0, expenses: 0, savings: 0, net: 0, count: 0 }
+  );
+}
+
+/**
+ * The months a selection is compared against: the same shape, shifted back by
+ * its own length. One month compares with the month before it; a whole year
+ * with the same twelve months a year earlier; four months with the four before
+ * them. A gappy Ctrl-click selection keeps its gaps.
+ */
+export function previousPeriod(selected: MonthRef[]): MonthRef[] {
+  return selected.map((ref) => addMonths(ref, -selected.length));
+}
+
 export type MonthComparison = {
-  current: MonthlyTotal;
-  previous: MonthlyTotal;
+  current: PeriodTotal;
+  previous: PeriodTotal;
   expensePct: number | null;
   incomePct: number | null;
   movers: CategoryMover[];
 };
 
+/**
+ * Compares a selected period with the one before it (see previousPeriod).
+ * Takes a list rather than a single month because the period picker can select
+ * a whole year, and "sammenlignet med forrige måned" over twelve selected
+ * months compared December with November and called it the year.
+ */
 export function compareMonths(
   entries: LedgerEntry[],
-  selected: MonthRef
+  selected: MonthRef[]
 ): MonthComparison | null {
-  const prevRef = previousMonth(selected);
-  const [previous, current] = aggregateByMonth(entries, [prevRef, selected]);
+  if (!selected.length) return null;
+  const prevRefs = previousPeriod(selected);
+  const current = sumMonths(aggregateByMonth(entries, selected));
+  const previous = sumMonths(aggregateByMonth(entries, prevRefs));
   if (previous.count === 0 && current.count === 0) return null;
 
-  const currentKey = monthKey(selected.year, selected.month);
-  const previousKey = monthKey(prevRef.year, prevRef.month);
+  const currentKeys = new Set(selected.map((ref) => monthKey(ref.year, ref.month)));
+  const previousKeys = new Set(prevRefs.map((ref) => monthKey(ref.year, ref.month)));
   const currentByCategory = new Map<string, number>();
   const previousByCategory = new Map<string, number>();
 
   entries.forEach((entry) => {
     if (!isSpendingKind(entry.kind)) return;
     const key = entryMonthKey(entry);
-    if (key === currentKey) {
+    if (currentKeys.has(key)) {
       currentByCategory.set(
         entry.category,
         (currentByCategory.get(entry.category) ?? 0) + entry.amount
       );
-    } else if (key === previousKey) {
+    } else if (previousKeys.has(key)) {
       previousByCategory.set(
         entry.category,
         (previousByCategory.get(entry.category) ?? 0) + entry.amount
@@ -264,6 +304,25 @@ function stdDev(values: number[], valueMean: number) {
   return Math.sqrt(variance);
 }
 
+// The kroner at stake in one anomaly — what makes one worth reading before
+// another of the same severity. A spike is worth its excess over the average,
+// not its total: a 12 000 kr category that ran 1 000 kr hot is a smaller
+// finding than a 3 000 kr one that doubled.
+function anomalyMagnitude(anomaly: Anomaly): number {
+  switch (anomaly.kind) {
+    case "large-transaction":
+      return anomaly.entry.amount;
+    case "category-spike":
+      return anomaly.current - anomaly.average;
+    case "new-category":
+      return anomaly.total;
+    case "duplicate":
+      return anomaly.amount * (anomaly.count - 1);
+    case "missing-fixed":
+      return anomaly.amount;
+  }
+}
+
 export function detectAnomalies(
   entries: LedgerEntry[],
   selected: MonthRef,
@@ -277,18 +336,28 @@ export function detectAnomalies(
   const anomalies: Anomaly[] = [];
 
   // 1. Single transactions far above the category's typical amount.
-  const amountsByCategory = new Map<string, number[]>();
+  //
+  // The baseline excludes the transaction being judged. Including it made the
+  // rule mathematically unable to fire on a small sample: with n amounts, one
+  // outlier can reach at most (n-1)/sqrt(n-1) standard deviations above the
+  // mean it is itself part of, which is under 2 for n = 5 — exactly
+  // MIN_SAMPLES. So the very cases the rule exists for (one big charge among a
+  // handful of small ones) were silently unreportable, and the rule only ever
+  // fired once a category had a long history.
+  const byCategory = new Map<string, LedgerEntry[]>();
   allExpenses.forEach((entry) => {
-    const list = amountsByCategory.get(entry.category) ?? [];
-    list.push(entry.amount);
-    amountsByCategory.set(entry.category, list);
+    const list = byCategory.get(entry.category) ?? [];
+    list.push(entry);
+    byCategory.set(entry.category, list);
   });
   selectedExpenses.forEach((entry) => {
-    const amounts = amountsByCategory.get(entry.category) ?? [];
-    if (amounts.length < MIN_SAMPLES) return;
-    const amountMean = mean(amounts);
-    const amountStd = stdDev(amounts, amountMean);
-    const amountMedian = median(amounts);
+    const others = (byCategory.get(entry.category) ?? [])
+      .filter((candidate) => candidate.id !== entry.id)
+      .map((candidate) => candidate.amount);
+    if (others.length < MIN_SAMPLES) return;
+    const amountMean = mean(others);
+    const amountStd = stdDev(others, amountMean);
+    const amountMedian = median(others);
     if (amountStd === 0 || amountMedian <= 0) return;
     const ratio = entry.amount / amountMedian;
     if (
@@ -390,9 +459,15 @@ export function detectAnomalies(
     });
   });
 
+  // Severity first, then size within a severity: the list is read top-down and
+  // acted on, so the 4 000 kr surprise has to come before the 600 kr one. Sort
+  // was severity-only, which left the order to however the rules happened to
+  // run — by category insertion order, in practice.
   const severityRank = { bad: 0, warn: 1, info: 2 } as const;
   anomalies.sort(
-    (a, b) => severityRank[a.severity] - severityRank[b.severity]
+    (a, b) =>
+      severityRank[a.severity] - severityRank[b.severity] ||
+      anomalyMagnitude(b) - anomalyMagnitude(a)
   );
   return anomalies;
 }

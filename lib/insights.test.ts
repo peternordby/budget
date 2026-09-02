@@ -4,6 +4,7 @@ import {
   aggregateByMonth,
   compareMonths,
   detectAnomalies,
+  previousPeriod,
   listWindowMonths,
   monthKey,
   previousMonth,
@@ -123,7 +124,7 @@ describe("aggregateByMonth", () => {
 });
 
 describe("compareMonths", () => {
-  const selected = { year: 2026, month: 8 };
+  const selected = [{ year: 2026, month: 8 }];
 
   it("returns null when neither month has data", () => {
     expect(compareMonths([], selected)).toBeNull();
@@ -169,14 +170,86 @@ describe("compareMonths", () => {
         entry({ amount: 9000, kind: "savings", category: "Buffer", date: "2026-08-10" }),
         entry({ amount: 100, kind: "variable", category: "Mat", date: "2026-08-11" }),
       ],
-      { year: 2026, month: 8 }
+      selected
     );
     expect(result?.movers.map((m) => m.category)).not.toContain("Buffer");
+  });
+
+  // The period picker's year buttons select twelve months at once. Comparing
+  // that with "the previous month" compared December with November and called
+  // it the year, so the comparison shifts by the selection's own length.
+  it("compares a whole year with the same year before it", () => {
+    const year = (y: number) =>
+      Array.from({ length: 12 }, (_, i) => ({ year: y, month: i + 1 }));
+    const result = compareMonths(
+      [
+        entry({ amount: 1000, date: "2025-03-10" }),
+        entry({ amount: 1000, date: "2025-11-10" }),
+        entry({ amount: 1500, date: "2026-03-10" }),
+        entry({ amount: 1500, date: "2026-11-10" }),
+        // Two years back: outside both periods, so it must not be counted.
+        entry({ amount: 99999, date: "2024-03-10" }),
+      ],
+      year(2026)
+    );
+    expect(result?.current.expenses).toBe(3000);
+    expect(result?.previous.expenses).toBe(2000);
+    expect(result?.expensePct).toBe(50);
+  });
+
+  it("shifts an arbitrary selection back by its own length", () => {
+    expect(
+      previousPeriod([
+        { year: 2026, month: 7 },
+        { year: 2026, month: 8 },
+      ])
+    ).toEqual([
+      { year: 2026, month: 5 },
+      { year: 2026, month: 6 },
+    ]);
   });
 });
 
 describe("detectAnomalies", () => {
   const selected = { year: 2026, month: 8 };
+
+  // The baseline used to include the transaction being judged, which capped
+  // how many standard deviations it could sit above its own mean: with these
+  // exact numbers the old rule computed mean 500 / sd 258 and required 1016,
+  // so a 1 000 kr charge among 200–600 kr ones went unreported.
+  it("judges a transaction against the others, not against itself", () => {
+    const result = detectAnomalies(
+      [
+        entry({ amount: 200, date: "2026-03-05" }),
+        entry({ amount: 300, date: "2026-04-05" }),
+        entry({ amount: 400, date: "2026-05-05" }),
+        entry({ amount: 500, date: "2026-06-05" }),
+        entry({ amount: 600, date: "2026-07-05" }),
+        entry({ amount: 1000, date: "2026-08-05" }),
+      ],
+      selected
+    );
+    const large = result.filter((a) => a.kind === "large-transaction");
+    expect(large).toHaveLength(1);
+    expect(large[0].kind === "large-transaction" && large[0].entry.amount).toBe(1000);
+  });
+
+  it("puts the bigger finding first within a severity", () => {
+    const result = detectAnomalies(
+      [
+        entry({ item: "Kaffe", amount: 200, date: "2026-08-02" }),
+        entry({ item: "Kaffe", amount: 200, date: "2026-08-02" }),
+        entry({ item: "Strøm", amount: 900, date: "2026-08-03" }),
+        entry({ item: "Strøm", amount: 900, date: "2026-08-03" }),
+      ],
+      selected
+    );
+    const duplicates = result.filter((a) => a.kind === "duplicate");
+    expect(duplicates.map((a) => a.kind === "duplicate" && a.item)).toEqual([
+      "Strøm",
+      "Kaffe",
+    ]);
+  });
 
   it("finds nothing in an empty ledger", () => {
     expect(detectAnomalies([], selected)).toEqual([]);

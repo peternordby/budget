@@ -17,6 +17,12 @@
  * unreadable when stepping through months quickly. The hover band and the
  * tooltip still animate: those are pointer feedback, not data arriving.
  *
+ * The hover band is drawn only when `onSelect` is given. It reads as "this
+ * column is pickable", so on the read-only charts (/innsikt's net columns, the
+ * drill-down) it lit up a target that does nothing; there, a hover produces the
+ * tooltip and nothing else. The *selected* band is unconditional — that is
+ * state, not an affordance.
+ *
  * Interaction sits in an HTML layer of transparent buttons over the SVG rather
  * than on the SVG shapes: a real `<button>` brings keyboard focus, `aria-pressed`
  * and a focus ring with it, and tiling them across the plot means pointing
@@ -154,7 +160,11 @@ export default function MonthColumns({
 
           {points.map((point, index) => {
             const isSelected = selectedKeys?.has(point.key) ?? false;
-            const isHovered = hoverIndex === index;
+            // Only where a column can actually be clicked. The band is a
+            // "this one is pickable" affordance, so on a read-only chart
+            // (/innsikt's net columns, CategoryDrilldown) it lit up a target
+            // that does nothing — the tooltip is the whole payload there.
+            const isHovered = Boolean(onSelect) && hoverIndex === index;
             return (
               <rect
                 key={`band-${point.key}`}

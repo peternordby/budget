@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useAnalysisWindow,
   useLedger,
@@ -8,7 +8,11 @@ import {
   toLedgerEntries,
 } from "@/components/LedgerProvider";
 import { usePeriod } from "@/lib/usePeriod";
-import { periodLabel } from "@/lib/period";
+import {
+  monthRangeLabel,
+  periodLabel,
+  windowLabel as formatWindowLabel,
+} from "@/lib/period";
 import Sparkline from "@/components/Sparkline";
 import MonthOverMonth from "@/components/MonthOverMonth";
 import Anomalies from "@/components/Anomalies";
@@ -20,7 +24,12 @@ import {
   formatSignedCurrency,
   formatDateParts,
 } from "@/lib/format";
-import { aggregateByMonth, monthKey, type MonthRef } from "@/lib/insights";
+import {
+  aggregateByMonth,
+  monthKey,
+  previousPeriod,
+  type MonthRef,
+} from "@/lib/insights";
 import { lastDayOfMonth } from "@/lib/recurring";
 import { categorySeries, mixSummary, spendingMix } from "@/lib/trends";
 import {
@@ -51,9 +60,10 @@ const SHORT_MONTHS = [
   "des",
 ];
 
-// Two years of history: long enough for a seasonal pattern to be visible in a
-// sparkline, short enough that a month still reads as a distinct bar.
-const ANALYSIS_MONTHS = 24;
+// One year of history: a full seasonal cycle, and every section compares
+// against the same twelve months the rest of the app already works in
+// (useLedgerHistory, the period picker's window).
+const ANALYSIS_MONTHS = 12;
 
 // The detection window. Mirrors the phrasing on the /transaksjoner search
 // scope line: the copy states the real month count and range rather than a
@@ -90,29 +100,48 @@ export default function InnsiktPage() {
   const { selectedKeys, selectedList, single, anchor } = usePeriod(fallback);
   const { isDismissed, dismiss, restoreAll } = useDismissals();
 
-  // Trailing two years ending at the selected month, clamped to the fetched
+  // Trailing twelve months ending at the selected month, clamped to the fetched
   // range — deliberately *not* ledger.windowStart/windowEnd, which are a fetch
   // detail the period picker can widen in either direction. See
   // useAnalysisWindow in components/LedgerProvider.tsx.
   const months = useAnalysisWindow(anchor, ANALYSIS_MONTHS);
 
   // Every figure on the page is computed over `months`, so each section's
-  // header states the real range rather than implying a fixed 24.
-  const windowLabel = useMemo(() => {
-    if (!months.length) return "";
-    const first = months[0];
-    const last = months[months.length - 1];
-    return `${months.length} måneder · ${monthKey(first.year, first.month)}–${monthKey(last.year, last.month)}`;
-  }, [months]);
+  // header states the real range rather than implying a fixed 12.
+  const windowLabel = useMemo(() => formatWindowLabel(months), [months]);
+
+  // MonthOverMonth compares the selection with the period before it, which for
+  // a year button is the whole year before — months the layout's picker never
+  // widens the fetch to cover, and unfetched months would read as a real drop
+  // to zero. This is the page's one exception to leaving the window alone.
+  const comparisonStart = useMemo(
+    () => previousPeriod(selectedList)[0] ?? null,
+    [selectedList]
+  );
+  useEffect(() => {
+    if (comparisonStart) ledger.ensureMonthCovered(comparisonStart);
+  }, [comparisonStart?.year, comparisonStart?.month, ledger.ensureMonthCovered]);
+
+  // Both sparklines index straight into `months`: every series on this page is
+  // bucketed over it, one point per month, so the point index is the month.
+  const monthTitleAt = useCallback(
+    (index: number) => {
+      const ref = months[index];
+      return ref ? `${MONTH_NAMES[ref.month - 1]} ${ref.year}` : "";
+    },
+    [months]
+  );
 
   const entries = useMemo(
     () => toLedgerEntries(ledger.expenses),
     [ledger.expenses]
   );
 
-  // The two sections moved here from /oversikt consume a trailing 12-month
-  // window rather than this page's 24-month analysis window: both are about the
-  // selected month against its recent past, not about a two-year trend.
+  // Anomalies takes a trailing 12-month window off the same anchor: it is the
+  // window detectAnomalies treats as the complete history for its averages, and
+  // Anomalies.tsx says so in its copy. MonthOverMonth deliberately does *not*
+  // use it — it buckets by explicit month keys, so it takes the whole fetched
+  // ledger and can reach a full period back past this window.
   const historyEntries = useLedgerHistory(anchor);
   const label = periodLabel(selectedList);
 
@@ -194,12 +223,10 @@ export default function InnsiktPage() {
   // Safe now that `months` ends at the selected month rather than at the
   // fetch edge: these are the six months up to and including the anchor.
   const lastSixMonths = useMemo(() => months.slice(-SUBSCRIPTION_MONTHS), [months]);
-  const subscriptionRangeLabel = useMemo(() => {
-    if (!lastSixMonths.length) return "";
-    const first = lastSixMonths[0];
-    const last = lastSixMonths[lastSixMonths.length - 1];
-    return `${monthKey(first.year, first.month)}–${monthKey(last.year, last.month)}`;
-  }, [lastSixMonths]);
+  const subscriptionRangeLabel = useMemo(
+    () => monthRangeLabel(lastSixMonths),
+    [lastSixMonths]
+  );
   const allSubscriptions = useMemo(
     () => detectSubscriptions(entries, ledger.templates, lastSixMonths),
     [entries, ledger.templates, lastSixMonths]
@@ -426,18 +453,13 @@ export default function InnsiktPage() {
 
   return (
     <>
-      {/* Moved from /oversikt: both are about the selected month against its
-          recent past, which is an insight rather than an overview, and having
-          them here puts every "what does this mean" section on one route. They
-          lead the page because the sections below all widen to 24 months. */}
-      <MonthOverMonth entries={historyEntries} single={single} />
-
-      <Anomalies
-        entries={historyEntries}
-        selected={single}
-        periodLabel={label}
-        templates={ledger.templates}
-      />
+      {/* Moved from /oversikt: both are about the selection against its recent
+          past, which is an insight rather than an overview, and having them
+          here puts every "what does this mean" section on one route.
+          MonthOverMonth leads because it is the summary; Avvik sits last, since
+          it is a list of things to go and check rather than something to read
+          the month by. */}
+      <MonthOverMonth entries={entries} selected={selectedList} />
 
       <section className="card section-gap">
         <div className="card-head">
@@ -576,6 +598,11 @@ export default function InnsiktPage() {
               <Sparkline
                 points={fixedPoints}
                 ariaLabel="Faste utgifter per måned"
+                hover={{
+                  title: monthTitleAt,
+                  value: (index) =>
+                    formatCurrency(Math.round(fixedPoints[index] ?? 0)),
+                }}
               />
             </div>
           </>
@@ -614,12 +641,7 @@ export default function InnsiktPage() {
                       color={categoryColor(getCategorySlot(entry.category))}
                       ariaLabel={`Utvikling for ${entry.category}`}
                       hover={{
-                        title: (index) => {
-                          const ref = months[index];
-                          return ref
-                            ? `${MONTH_NAMES[ref.month - 1]} ${ref.year}`
-                            : "";
-                        },
+                        title: monthTitleAt,
                         value: (index) =>
                           formatCurrency(entry.points[index] ?? 0),
                       }}
@@ -728,6 +750,15 @@ export default function InnsiktPage() {
           </div>
         )}
       </section>
+
+      {/* Last, deliberately: it is a to-do list about the month, and it used
+          to push the month's actual figures below the fold. */}
+      <Anomalies
+        entries={historyEntries}
+        selected={single}
+        periodLabel={label}
+        templates={ledger.templates}
+      />
 
       <CategoryDrilldown
         category={selectedCategory}

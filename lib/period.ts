@@ -3,7 +3,7 @@
 // URL user-editable input: every parse tolerates garbage rather than throwing.
 
 import { addMonths, listWindowMonths, monthKey, type MonthRef } from "@/lib/insights";
-import { monthLabel } from "@/lib/format";
+import { MONTH_NAMES, monthLabel } from "@/lib/format";
 
 export type PeriodState = {
   /** Sorted ascending, always at least one entry. */
@@ -79,6 +79,36 @@ export function periodLabel(selected: MonthRef[]) {
     return `${selected.length} måneder ${year}`;
   }
   return `${selected.length} måneder valgt`;
+}
+
+/**
+ * Label for an analysis window: "Siste 12 måneder · sep 2025–aug 2026".
+ *
+ * The month count is read off the list rather than off the caller's constant,
+ * because `useAnalysisWindow` clamps to what has actually been fetched — a
+ * heading that promised twelve months over a chart drawing seven was the bug
+ * this replaces. The dates are month names, not the raw `2025-09` keys the two
+ * callers each formatted for themselves; the year is stated once when the
+ * window sits inside one.
+ */
+export function windowLabel(months: MonthRef[]) {
+  if (!months.length) return "";
+  return `Siste ${months.length} måneder · ${monthRangeLabel(months)}`;
+}
+
+/** Just the span: "mar–aug 2026", or "sep 2025–aug 2026" across a year end. */
+export function monthRangeLabel(months: MonthRef[]) {
+  if (!months.length) return "";
+  const first = months[0];
+  const last = months[months.length - 1];
+  // The first three letters of every Norwegian month name are its standard
+  // abbreviation, so there is no second table to keep in step with MONTH_NAMES.
+  const short = (ref: MonthRef) => MONTH_NAMES[ref.month - 1].slice(0, 3);
+  if (first.year === last.year) {
+    if (first.month === last.month) return `${short(first)} ${last.year}`;
+    return `${short(first)}–${short(last)} ${last.year}`;
+  }
+  return `${short(first)} ${first.year}–${short(last)} ${last.year}`;
 }
 
 /* --- The period picker's 12-month window -----------------------------------
