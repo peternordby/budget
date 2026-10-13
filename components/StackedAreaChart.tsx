@@ -362,7 +362,8 @@ export function StackedAreaLegend({
           {hoverIndex !== null ? formatDate(chart.dates[hoverIndex]) : "Nå"}
         </span>
         <span className="num">Endring</span>
-        <span>Rekkefølge</span>
+        {/* "Rekkefølge" was wider than its 52px column and ran past the card. */}
+        <span>Flytt</span>
       </div>
 
       {rows.map((band, rowIndex) => {

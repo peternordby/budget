@@ -1,8 +1,7 @@
 /* The budget editor: one row per category, six real grid columns plus a
    full-bleed track underneath. Same shape as /oversikt's category list, but
-   this one is an editing surface: the pencil turns that row's type and budget
-   into controls, and the row carries edit/delete rather than opening a
-   drill-down. */
+   this one is an editing surface: the pencil turns that row's budget into an
+   input. Names, kinds and deleting live on /profil/kategorier. */
 
 .budget-list {
   display: flex;
@@ -51,14 +50,6 @@
   white-space: nowrap;
 }
 
-/* The name field in edit mode. `min-width: 0` because the cell is a flex
-   container and an input's default intrinsic width would push the row's other
-   columns out rather than shrinking. */
-.budget-name-input {
-  flex: 1;
-  min-width: 0;
-}
-
 .budget-dot {
   flex: none;
   width: 8px;
@@ -66,14 +57,12 @@
   border-radius: 50%;
 }
 
-.budget-kind,
 .budget-input {
   width: 100%;
   min-width: 0;
 }
 
-/* The read-only type cell: the row shows plain text until the pencil turns that
-   cell and the budget into controls. */
+/* The type is read-only here; it is changed on /profil/kategorier. */
 .budget-kind-text {
   font-size: 13px;
   color: var(--muted);
@@ -111,44 +100,37 @@
 /* Below the breakpoint the six columns starve the name into a single letter,
    so the name and its controls take the top line and the figures wrap under
    it — the same concession /oversikt's category row makes at 720px. */
+/* Below the breakpoint the name and the pencil share the top line and the
+   three figures sit under them in their own columns. The type is dropped —
+   it is a property of the category, shown on /profil/kategorier, and on a
+   phone it pushed the figures onto a third line. */
 @media (max-width: 860px) {
-  .budget-header {
+  .budget-header,
+  .budget-kind-text {
     display: none;
   }
 
   .budget-row,
   .budget-total {
-    grid-template-columns: minmax(0, 1fr) 100px 100px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 6px;
   }
 
   .budget-name {
     grid-column: 1 / 3;
+    grid-row: 1;
   }
 
   .budget-actions {
     grid-column: 3;
+    grid-row: 1;
   }
 
-  .budget-kind {
+  .budget-total > span:first-child {
     grid-column: 1 / -1;
   }
 
-  /* Read-only type and budget: the row shows plain text until the pencil turns
-   those two cells into controls. Sized like the inputs they replace, so opening
-   a row for editing does not shift the grid. */
-.budget-kind-text {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-/* A figure a "Kopier fra …" put on the row but nobody has saved yet. The
-   toolbar's "Lagre N endringer" counts them; this says which. */
-.budget-pending {
-  color: var(--accent-strong);
-  font-weight: 700;
-}
-
-.budget-input {
-    grid-column: 1;
+  .budget-total > span:empty {
+    display: none;
   }
 }

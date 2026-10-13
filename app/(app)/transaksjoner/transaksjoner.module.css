@@ -7,14 +7,65 @@
 
 .list-header {
   display: grid;
-  grid-template-columns: var(--list-cols) 32px;
+  grid-template-columns: var(--list-cols) 68px;
   gap: 12px;
   align-items: center;
   padding: 0 14px;
 }
 
-/* The amount column is right-aligned (.num); its draggable header button has
+/* The amount column is right-aligned (.num); its header button has
    to follow, or the label floats away from the digits it sorts. */
+/* The filters, in the table's own columns under their headers. Compact
+   (30px) like the inline new-row cells beside them; a range is two inputs
+   stacked in one column. */
+.filter-row {
+  display: grid;
+  grid-template-columns: var(--list-cols) 68px;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--bg-alt);
+}
+
+.filter-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.filter-cell :global(input),
+.filter-cell :global(select) {
+  min-width: 0;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.filter-cell :global(select) {
+  padding-right: 26px;
+  background-position: right 8px center;
+  background-size: 12px;
+}
+
+/* Min and max share the amount column, side by side. */
+.filter-cell[data-col="amount"] {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* The range picker's popover hangs over the rows below. */
+.filter-row {
+  position: relative;
+  z-index: 2;
+}
+
+.filter-reset {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .list-sort.align-end {
   justify-content: flex-end;
   text-align: right;
@@ -38,19 +89,6 @@
   transition: color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
 }
 
-.list-sort.draggable {
-  cursor: grab;
-}
-
-.list-sort.dragging {
-  opacity: 0.35;
-}
-
-.list-sort.drop-target {
-  box-shadow: inset 2px 0 0 var(--accent);
-  color: var(--ink);
-}
-
 .list-sort:hover {
   color: var(--ink);
 }
@@ -71,7 +109,7 @@
 
 .list-row {
   display: grid;
-  grid-template-columns: var(--list-cols) 32px;
+  grid-template-columns: var(--list-cols) 68px;
   gap: 12px;
   align-items: center;
   padding: 10px 14px;
@@ -111,11 +149,6 @@
   outline-offset: -2px;
 }
 
-.activity-total-row {
-  margin: 4px 0 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-soft);
-}
 
 .category-pill {
   width: fit-content;
@@ -130,29 +163,131 @@
   font-weight: 600;
 }
 
-/* Positioning only — the look comes from .icon-btn/.icon-btn-danger in
-   globals.css. The row reserves a grid column for it, but it is pinned so it
-   stays centred against a row whose height varies with wrapped content. */
-.row-delete {
+/* Edit and delete, pinned to the row's right edge so they stay centred
+   against a row whose height varies with wrapped content. The grid reserves
+   the 68px trailing column for them. */
+.row-buttons {
   position: absolute;
   top: 50%;
   right: 8px;
   transform: translateY(-50%);
+  display: flex;
+  gap: 4px;
 }
+
+/* --- The phone's entry form: the main thing the app is used for on a phone,
+   so it comes first on the page (see the .shell ordering below) and every
+   control is a thumb-sized target. --- */
 
 .mobile-new-row-card {
   display: none;
-  margin-bottom: 20px;
 }
 
 .mobile-new-row-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px 10px;
 }
 
-.mobile-new-row-grid .field:first-child {
+/* Description, amount and category get the whole width; date and merkelapp
+   are the two that are usually left alone, so they share a line. */
+.mobile-field[data-col="item"],
+.mobile-field[data-col="amount"],
+.mobile-field[data-col="category"] {
   grid-column: 1 / -1;
+}
+
+.mobile-new-row-grid :global(input) {
+  height: 44px;
+  font-size: 16px; /* 16px or iOS zooms the page on focus */
+}
+
+.mobile-new-row-grid .mobile-amount {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.category-chip {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: var(--cat-bg);
+  color: var(--cat-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.category-chip[aria-checked="true"] {
+  border-color: var(--cat);
+  box-shadow: inset 0 0 0 1px var(--cat);
+  background: color-mix(in oklab, var(--cat) 28%, var(--surface-solid));
+  color: var(--ink);
+}
+
+.mobile-new-row-actions {
+  margin-top: 16px;
+}
+
+.mobile-new-row-actions :global(.btn) {
+  width: 100%;
+  height: 48px;
+  font-size: 16px;
+  border-radius: 12px;
+}
+
+.filter-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* A fixed expense the month has not booked yet: a suggestion, not a row, so
+   dashed and quiet until it is ticked into the list proper. */
+.fixed-row {
+  border-style: dashed;
+  background: transparent;
+}
+
+.fixed-row strong,
+.fixed-row span {
+  opacity: 0.85;
+}
+
+.fixed-actions {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 4px;
+}
+
+.fixed-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.fixed-head > :first-child {
+  margin-right: auto;
 }
 
 .new-row {
@@ -180,7 +315,8 @@
 
 .cell-input {
   width: 100%;
-  padding: 6px 8px;
+  height: 30px;
+  padding: 0 8px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--surface-solid);
@@ -208,7 +344,9 @@
 }
 
 select.cell-input {
-  padding: 6px 6px;
+  padding: 0 26px 0 8px;
+  background-position: right 8px center;
+  background-size: 12px;
   font-size: 12px;
 }
 
@@ -219,83 +357,121 @@ select.cell-input {
   justify-content: flex-end;
 }
 
-/* Keyboard-accessible edit trigger; visually hidden, revealed on focus. */
-.edit-button {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
-.edit-button:focus-visible {
-  position: absolute;
-  top: 4px;
-  right: 40px;
-  width: auto;
-  height: auto;
-  padding: 3px 10px;
-  margin: 0;
-  overflow: visible;
-  clip: auto;
-  white-space: normal;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  background: var(--accent-soft);
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 600;
-  z-index: 5;
-}
-
 @media (max-width: 860px) {
   .list-header {
     display: none;
   }
 
-  .list-row {
-    grid-template-columns: 1fr;
-    gap: 6px;
-    padding-top: 36px;
-    padding-right: 14px;
+  /* No column headers to sit under on a phone, so the filters become a
+     two-column form, each labelled by its placeholder or aria-label. */
+  .filter-row {
+    grid-template-columns: 1fr 1fr;
   }
 
-  .list-row.new-row,
+  .filter-cell[data-col="item"] {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+
+  .filter-cell[data-col="date"],
+  .filter-cell[data-col="amount"] {
+    grid-column: 1 / -1;
+  }
+
+  .filter-reset {
+    order: 2;
+    grid-column: 1 / -1;
+  }
+
+  .filter-reset:empty {
+    display: none;
+  }
+
+  /* The two selects share the last line. */
+  .filter-cell[data-col="tag"],
+  .filter-cell[data-col="category"] {
+    order: 1;
+  }
+
+  .filter-cell :global(input),
+  .filter-cell :global(select),
+  .filter-cell :global(button[aria-haspopup]) {
+    height: 36px;
+    font-size: 16px;
+  }
+
+  .list {
+    gap: 6px;
+  }
+
+  /* A row is two lines on a phone — what and how much, then when and where —
+     instead of one line per field, which made a month of rows several screens
+     long. The delete button keeps its pinned spot on the right. */
+  .list-row {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "item item item amount"
+      "date tag cat cat";
+    gap: 2px 8px;
+    padding: 10px 84px 10px 12px;
+  }
+
+  .list-row [data-col="item"] {
+    grid-area: item;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .list-row [data-col="amount"] {
+    grid-area: amount;
+  }
+
+  .list-row [data-col="date"] {
+    grid-area: date;
+    font-size: 12px;
+  }
+
+  .list-row [data-col="tag"] {
+    grid-area: tag;
+    font-size: 12px;
+  }
+
+  .list-row [data-col="category"] {
+    grid-area: cat;
+    justify-self: start;
+    padding: 1px 8px;
+    font-size: 11px;
+  }
+
+  .list-row.fixed-row {
+    padding-right: 84px;
+  }
+
   .list-row.editing-row {
     grid-template-columns: 1fr 1fr;
-    padding-top: 14px;
+    grid-template-areas: none;
+    padding: 14px;
     gap: 8px;
   }
 
-  .list-row.new-row .cell-input,
   .list-row.editing-row .cell-input {
     grid-column: span 1;
+    height: 40px;
+    font-size: 16px;
   }
 
-  .list-row.new-row > .icon-btn,
   .list-row.editing-row > .row-actions {
     grid-column: 1 / -1;
     justify-self: stretch;
   }
 
-  .list-row.new-row > .icon-btn {
-    width: 100%;
-    border-radius: 8px;
-    height: 36px;
-  }
-
   .mobile-new-row-card {
     display: block;
+    order: -1;
   }
 
   .new-row {
     display: none;
   }
 }
-

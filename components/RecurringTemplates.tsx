@@ -4,29 +4,10 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { formatCurrency } from "@/lib/format";
 import { useLedger } from "@/components/LedgerProvider";
-import {
-  materializationDate,
-  pendingTemplates,
-  type BookedRef,
-  type RecurringTemplate,
-} from "@/lib/recurring";
-import { IconCheck, IconChevronDown, IconTrash, IconX } from "@/components/icons";
-import { missingFixedRef, useDismissals } from "@/lib/dismissals";
-import { monthKey } from "@/lib/insights";
+import type { RecurringTemplate } from "@/lib/recurring";
+import { IconCheck, IconPlus, IconTrash, IconX } from "@/components/icons";
 import { encField } from "@/lib/crypto";
-import { Collapse } from "@/components/charts";
-import styles from "./RecurringPanel.module.css";
-
-type RecurringPanelProps = {
-  userId: string;
-  month: { year: number; month: number } | null;
-  monthLabel: string;
-  bookedExpenses: BookedRef[];
-  bookedLoading: boolean;
-  bookedKnown: boolean;
-  categories: { id: number; category: string }[];
-  onGenerated: () => void;
-};
+import styles from "./RecurringTemplates.module.css";
 
 const emptyDraft = {
   item: "",
@@ -36,81 +17,23 @@ const emptyDraft = {
   dayOfMonth: "1",
 };
 
-export default function RecurringPanel({
-  userId,
-  month,
-  monthLabel,
-  bookedExpenses,
-  bookedLoading,
-  bookedKnown,
-  categories,
-  onGenerated,
-}: RecurringPanelProps) {
+/**
+ * The fixed-expense templates: what repeats every month, on which day. Only
+ * the templates live here, on /profil/faste-utgifter — booking them into a
+ * month happens in the transaction list itself, where a month's unbooked ones
+ * show up as rows to tick or skip.
+ */
+export default function RecurringTemplates() {
   const ledger = useLedger();
+  const userId = ledger.userId;
+  const categories = ledger.categories;
   const templates = ledger.templates;
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState(emptyDraft);
-  const [collapsed, setCollapsed] = useState(true);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
-  const { isDismissed, dismiss, restoreAll } = useDismissals();
-
-  // Filtering dismissals out here rather than inside pendingTemplates keeps
-  // lib/recurring.ts pure: it answers "what has not been booked", which is a
-  // fact, while "what should I be nagged about" is a preference.
-  const allPending = month
-    ? pendingTemplates(
-        templates,
-        bookedExpenses,
-        month.year,
-        month.month,
-        bookedKnown
-      )
-    : [];
-  const periodKey = month ? monthKey(month.year, month.month) : "";
-  // Not memoized: allPending is rebuilt from props every render anyway, and a
-  // filter over a handful of templates is cheaper than a dependency list that
-  // could go stale (two templates swapping pending/booked keeps the count the
-  // same while changing which rows are in the list).
-  const pending = periodKey
-    ? allPending.filter(
-        (template) =>
-          !isDismissed("missing-fixed", missingFixedRef(template.id, periodKey))
-      )
-    : allPending;
-  const dismissedCount = allPending.length - pending.length;
   const activeCount = templates.filter((template) => template.active).length;
-
-  async function handleGenerate() {
-    if (!month || bookedLoading || !bookedKnown || !pending.length) return;
-
-    setBusy(true);
-    setStatus(null);
-
-    const rows = await Promise.all(
-      pending.map(async (template) => ({
-        item: await encField(template.item),
-        price: await encField(template.price),
-        category_id: template.category_id,
-        tag: await encField(template.tag),
-        user_id: userId,
-        date: materializationDate(template, month.year, month.month),
-        recurring_id: template.id,
-      }))
-    );
-
-    const { error } = await supabase.from("expense").insert(rows);
-
-    if (error) {
-      setStatus(error.message);
-    } else {
-      setStatus(`La inn ${rows.length} faste utgifter for ${monthLabel}.`);
-      onGenerated();
-    }
-
-    setBusy(false);
-  }
 
   async function handleAddTemplate() {
     const parsed = Number(draft.price);
@@ -184,75 +107,25 @@ export default function RecurringPanel({
   }
 
   return (
-    <section className="card section-gap recurring-card">
+    <section className="card section-gap">
       <div className="card-head">
-        <button
-          type="button"
-          className="collapse-toggle"
-          onClick={() => setCollapsed((value) => !value)}
-          aria-expanded={!collapsed}
-          aria-controls="recurring-body"
-        >
-          <span className={`collapse-chevron ${collapsed ? "collapsed" : ""}`}>
-            <IconChevronDown />
-          </span>
-          <h2 className="section-title">Faste utgifter</h2>
-        </button>
-        <span className="card-head-meta">
-          <span className="helper">{activeCount} aktive</span>
-          {month && !bookedLoading && pending.length ? (
-            <span className="badge badge-warn">{pending.length} mangler</span>
-          ) : null}
-          {dismissedCount ? (
-            <button
-              className="btn btn-ghost btn-small"
-              type="button"
-              onClick={() => restoreAll("missing-fixed")}
-              title="Vis skjulte varsler igjen"
-            >
-              {dismissedCount} skjult
-            </button>
-          ) : null}
-        </span>
+        <h2 className="section-title">Faste utgifter</h2>
+        <span className="helper">{activeCount} aktive</span>
       </div>
+      <p className="helper">
+        Det som går ut hver måned: husleie, strøm, abonnementer. De dukker opp
+        øverst i transaksjonslisten for hver måned de ikke er ført, der du fører
+        dem med ett trykk eller hopper over måneden.
+      </p>
 
       {status ? <div className="status">{status}</div> : null}
 
-      <Collapse open={!collapsed}>
-        <div id="recurring-body">
-          {!month ? (
-            <p className="helper">
-              Velg én måned for å legge inn faste utgifter.
-            </p>
-          ) : bookedLoading ? (
-            <p className="helper">Laster transaksjoner...</p>
-          ) : !bookedKnown ? (
-            <p className="helper">
-              Transaksjoner kunne ikke lastes, så faste utgifter kan ikke føres akkurat nå.
-            </p>
-          ) : pending.length ? (
-            <button
-              className="btn btn-primary"
-              type="button"
-              onClick={handleGenerate}
-              disabled={busy}
-            >
-              {busy
-                ? "Legger inn..."
-                : `Legg inn ${pending.length} faste utgifter for ${monthLabel}`}
-            </button>
-          ) : activeCount ? (
-            <p className="helper">
-              Alle faste utgifter er allerede ført for {monthLabel}.
-            </p>
-          ) : null}
-
+      <div>
           <div className={styles["recurring-list"]}>
             {templates.map((template) => {
               const categoryName =
                 categories.find((entry) => entry.id === template.category_id)
                   ?.category ?? "Ukategorisert";
-              const isPending = pending.some((entry) => entry.id === template.id);
               const isConfirmingDelete = confirmDeleteId === template.id;
               return (
                 <div
@@ -266,16 +139,7 @@ export default function RecurringPanel({
                     {formatCurrency(template.price)}
                   </span>
                   <span className={styles["recurring-state"]}>
-                    {!template.active ? (
-                      <span className="helper">Pauset</span>
-                    ) : bookedLoading || !bookedKnown ? null : isPending ? (
-                      // A badge rather than grey text: this is the same fact
-                      // the "N mangler" badge in the header reports, and the
-                      // two should look like one warning, not two states.
-                      <span className="badge badge-warn">Ikke ført</span>
-                    ) : month ? (
-                      <span className="helper">Ført</span>
-                    ) : null}
+                    {!template.active ? <span className="helper">Pauset</span> : null}
                   </span>
                   <span className={styles["recurring-actions"]}>
                     {isConfirmingDelete ? (
@@ -309,22 +173,6 @@ export default function RecurringPanel({
                         >
                           {template.active ? "Pause" : "Aktiver"}
                         </button>
-                        {isPending && periodKey ? (
-                          <button
-                            className="icon-btn"
-                            type="button"
-                            onClick={() =>
-                              dismiss(
-                                "missing-fixed",
-                                missingFixedRef(template.id, periodKey)
-                              )
-                            }
-                            aria-label={`${template.item} gjelder ikke ${monthLabel}`}
-                            title={`Gjelder ikke ${monthLabel}`}
-                          >
-                            <IconX />
-                          </button>
-                        ) : null}
                         <button
                           className="icon-btn icon-btn-danger"
                           type="button"
@@ -344,7 +192,7 @@ export default function RecurringPanel({
             {!templates.length ? (
               <div className="empty">
                 Ingen faste utgifter ennå. Legg inn husleie, strøm og abonnementer
-                én gang, så føres de med ett klikk hver måned.
+                én gang, så føres de med ett trykk hver måned.
               </div>
             ) : null}
           </div>
@@ -444,15 +292,15 @@ export default function RecurringPanel({
             </div>
           ) : (
             <button
-              className="btn btn-ghost btn-small"
+              className={`btn btn-ghost ${styles["recurring-add"]}`}
               type="button"
               onClick={() => setAdding(true)}
             >
+              <IconPlus />
               Ny fast utgift
             </button>
           )}
-        </div>
-      </Collapse>
+      </div>
     </section>
   );
 }

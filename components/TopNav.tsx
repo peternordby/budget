@@ -11,14 +11,14 @@ type TopNavProps = {
   user?: ProfileUser | null;
 };
 
-// `short` is what the phone's bottom tab bar shows. Four tabs fit their full
-// names; the fifth pushed "Transaksjoner" past its share of a 375px screen, so
-// the narrow layout gets abbreviations rather than ellipses.
+// `short` is what the phone's bottom tab bar shows: six full names do not fit
+// a 375px screen, so the narrow layout gets abbreviations rather than ellipses.
 const ROUTES = [
   { href: "/oversikt", label: "Oversikt", short: "Oversikt" },
   { href: "/transaksjoner", label: "Transaksjoner", short: "Trans." },
   { href: "/budsjett", label: "Budsjett", short: "Budsjett" },
   { href: "/innsikt", label: "Innsikt", short: "Innsikt" },
+  { href: "/trender", label: "Trender", short: "Trender" },
   { href: "/sparing", label: "Sparing", short: "Sparing" },
 ];
 
@@ -53,7 +53,7 @@ export default function TopNav({ user }: TopNavProps) {
               now lives — a sixth tab would not fit the phone's bottom bar, and
               a profile is not a view of the ledger anyway. */}
           <Link
-            className={`user-chip ${styles["user-link"]} ${pathname === "/profil" ? styles["active"] : ""}`}
+            className={`user-chip ${styles["user-link"]} ${pathname.startsWith("/profil") ? styles["active"] : ""}`}
             href="/profil"
             title={`${name} — profil og innstillinger`}
           >

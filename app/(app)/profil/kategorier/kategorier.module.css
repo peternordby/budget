@@ -1,0 +1,82 @@
+.crumbs {
+  display: flex;
+}
+
+.lede {
+  margin: -4px 0 16px;
+}
+
+.add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px auto;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.group {
+  margin-top: 18px;
+}
+
+.group-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Dot, name, kind (or usage when read-only), actions. The name and kind cells
+   hold controls of the same width in edit mode, so opening a row does not
+   shift the columns. */
+.row {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) 180px 68px;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 4px 10px;
+  border-radius: var(--radius-soft);
+}
+
+.row:hover {
+  background: var(--bg-alt);
+}
+
+.row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-name-input,
+.row-kind {
+  min-width: 0;
+}
+
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+@media (max-width: 560px) {
+  .add {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .add :global(.btn) {
+    grid-column: 1 / -1;
+  }
+
+  .row {
+    grid-template-columns: 8px minmax(0, 1fr) 68px;
+  }
+
+  /* The usage note drops under the name; in edit mode the kind select takes
+     its own line. */
+  .row-kind {
+    grid-column: 2 / 3;
+    grid-row: 2;
+  }
+}

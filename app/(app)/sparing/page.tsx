@@ -479,7 +479,7 @@ export default function SparingPage() {
           </div>
           <div className="toolbar-actions">
             <button
-              className="btn btn-primary btn-small"
+              className="btn btn-primary"
               type="button"
               onClick={handleAdd}
               disabled={busy || !draftValid}
@@ -616,9 +616,9 @@ export default function SparingPage() {
 
           <div className="toolbar">
             <div className="field">
-              <label htmlFor="savings-history-filter">Kategori</label>
               <select
                 id="savings-history-filter"
+                aria-label="Kategori"
                 value={categoryFilter}
                 onChange={(event) => setCategoryFilter(event.target.value)}
               >

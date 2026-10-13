@@ -1,0 +1,47 @@
+.wrap {
+  position: relative;
+  width: 100%;
+  margin: 14px 0 4px;
+}
+
+.wrap svg {
+  display: block;
+}
+
+.group {
+  fill: none;
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  opacity: 0.7;
+}
+
+.leaf {
+  transition: opacity 140ms ease;
+}
+
+.text {
+  fill: var(--ink);
+  text-anchor: middle;
+  dominant-baseline: middle;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.hit {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}

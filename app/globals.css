@@ -202,11 +202,6 @@ a {
 
 /* Clears the fixed bottom tab bar TopNav.module.css switches to at this
    width, so the last card is never trapped underneath it. */
-@media (max-width: 640px) {
-  .shell {
-    padding-bottom: calc(84px + env(safe-area-inset-bottom));
-  }
-}
 
 .section-gap {
   margin-top: 20px;
@@ -315,8 +310,9 @@ a {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 6px 12px;
-  border-radius: 8px;
+  height: 36px;
+  padding: 0 12px 0 6px;
+  border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--surface-solid);
   font-size: 13px;
@@ -333,8 +329,8 @@ a {
    dismiss pair reads wrong in neutral grey. */
 
 .icon-btn {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
   padding: 0;
   border-radius: 8px;
@@ -378,8 +374,8 @@ a {
 }
 
 .icon-btn-lg {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
 }
 
@@ -410,6 +406,13 @@ a {
 .icon-btn-dismiss:hover:not(:disabled) {
   background: var(--cancel-bg-hover);
   color: var(--expense);
+}
+
+/* A toggle that is currently on (the column-order pencil). */
+.icon-btn.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 
 /* Destructive, but only on hover: a table of 40 rows with a permanently red
@@ -476,10 +479,20 @@ label {
   color: var(--muted);
 }
 
+/* Controls come in three heights and nothing else: 36px (a text input, a
+   select, a .btn, .icon-btn-lg, the user chip), 30px (.btn-small, .icon-btn,
+   the inline table cells) and 22px (.icon-btn-sm). Set as a height rather
+   than left to padding, because padding gave a <button> 33px, an <input> 41px
+   and a date input 43px — three controls that sat in one row at three
+   heights. */
+:where(input:not([type="checkbox"], [type="radio"], [type="file"]), select) {
+  height: 36px;
+}
+
 input,
 select {
   width: 100%;
-  padding: 10px 12px;
+  padding: 0 12px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--surface-solid);
@@ -487,6 +500,19 @@ select {
   font-family: inherit;
   color: var(--ink);
   transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+/* The native arrow sits a few pixels from the border and cannot be padded, so
+   selects draw their own: same chevron as the icon set, 12px in from the
+   edge, with the text kept clear of it. */
+select {
+  appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2378716c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  text-overflow: ellipsis;
 }
 
 input::placeholder {
@@ -508,11 +534,19 @@ select:focus {
 }
 
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
   border: 1px solid transparent;
   border-radius: 10px;
-  padding: 8px 16px;
+  padding: 0 16px;
   font-weight: 600;
   font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
   cursor: pointer;
   transition: background 150ms ease, box-shadow 150ms ease, color 150ms ease,
     transform 120ms ease;
@@ -523,7 +557,9 @@ select:focus {
 }
 
 .btn-small {
-  padding: 6px 12px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
   font-size: 12px;
 }
 
@@ -624,36 +660,6 @@ select:focus {
   border-color: var(--accent);
 }
 
-.collapse-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: none;
-  border: none;
-  padding: 0;
-  margin: 0;
-  cursor: pointer;
-  color: inherit;
-  text-align: left;
-}
-
-.collapse-toggle .section-title {
-  margin: 0;
-}
-
-/* Was private to oversikt.module.css, which is why the other collapsible card
-   (RecurringPanel) had no chevron at all — it could not reach the class. Both
-   collapsible card headers now look and behave the same. */
-.collapse-chevron {
-  display: inline-grid;
-  place-items: center;
-  color: var(--muted);
-  transition: transform 200ms ease;
-}
-
-.collapse-chevron.collapsed {
-  transform: rotate(-90deg);
-}
 
 /* Every card opens with a title and, usually, a right-aligned bit of meta
    (the period, a count, the sort order). One header primitive for all of
@@ -669,6 +675,26 @@ select:focus {
 
 .card-head .section-title {
   margin-bottom: 0;
+}
+
+/* Above the card's later children: a header's own popovers (the "⋮" menu)
+   hang down over the content, and `.card > *` would otherwise let the next
+   sibling — equal z-index, later in the DOM — paint over them. */
+.card > .card-head {
+  z-index: 3;
+}
+
+/* A collapsed card is nothing but its head; the head's bottom margin would
+   otherwise sit under it as 14px of dead space, so the title floated above
+   the card's centre line. */
+.card-head:last-child {
+  margin-bottom: 0;
+}
+
+/* A card head holding controls (a collapse toggle, buttons) centres them on
+   the title instead of hanging them off the text baseline. */
+.card-head:has(button) {
+  align-items: center;
 }
 
 /* --- Stats: one "label + big number (+ delta chip)" primitive ---
@@ -757,9 +783,12 @@ select:focus {
    a shared baseline: an uppercase caption over every select was most of what
    made the filter row read as a form to fill in rather than a row to skim.
    Actions belong in the card head instead, so the row is filters only. */
+/* Bottom-aligned: where the fields carry a label (/sparing's entry row), a
+   centred button floated halfway up the label instead of sitting level with
+   the inputs. Unlabelled rows look the same either way. */
 .toolbar {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   flex-wrap: wrap;
   margin: 4px 0 16px;
@@ -935,32 +964,31 @@ select:focus {
     max-width: none;
   }
 
-  .nav-tabs {
-    width: 100%;
-    justify-content: space-between;
+  /* The page is a column whose order a route can change: /transaksjoner puts
+     its entry form above the period picker on a phone (order: -1 in its
+     module), because adding a purchase is what the phone is for. The header
+     and the error banner stay above everything. */
+  .shell {
+    display: flex;
+    flex-direction: column;
   }
 
-  .nav-link {
-    width: 100%;
-    text-align: center;
+  .shell > .nav,
+  .shell > .status {
+    order: -2;
   }
 
-  .user-chip,
-  .btn {
+  /* Buttons keep their natural width: stretching every .btn to the row made
+     the period picker's year chips a stack of full-width bars and put a
+     full-width "Lagre" over the budget list. A form's own submit row still
+     stretches (below), where one big target is the point. */
+  .user-chip {
     width: 100%;
     justify-content: center;
   }
 
-  .metrics-grid .card {
-    min-height: 84px;
-  }
-
   .card-head {
     align-items: flex-start;
-  }
-
-  .budget-row {
-    grid-template-columns: 1fr;
   }
 
   .form-actions {
@@ -972,11 +1000,47 @@ select:focus {
     width: 100%;
     margin-left: 0;
   }
+
+  /* A card head's own actions (Filtrer, the "⋮" menu) stay on the right,
+     beside the title, rather than wrapping onto a full-width line of their
+     own. */
+  .card-head .toolbar-actions {
+    width: auto;
+    margin-left: auto;
+  }
 }
 
 @media (max-width: 640px) {
+  /* The bottom padding clears the fixed tab bar. This rule used to set 48px
+     and, coming later than the one that reserved the bar's 84px, won — so the
+     last row of every page sat under the tabs. */
   .shell {
-    padding: 16px 12px 48px;
+    padding: 16px 12px calc(84px + env(safe-area-inset-bottom));
+  }
+
+  /* backdrop-filter makes an element the containing block for its
+     position: fixed descendants, so with it the "bottom" tab bar was fixed to
+     the header instead of the screen. A solid header on phones instead. */
+  /* The routes have moved to the bottom bar, so the header is one line again:
+     brand on the left, the avatar and theme toggle on the right — not the
+     860px layout's stacked column with a full-width chip holding one avatar. */
+  .nav {
+    backdrop-filter: none;
+    background: var(--surface-solid);
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .nav-links,
+  .nav-meta {
+    width: auto;
+  }
+
+  .nav-meta .user-chip,
+  .user-chip {
+    flex: none;
+    width: auto;
+    padding: 0 6px;
   }
 
   .card {

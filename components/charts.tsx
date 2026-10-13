@@ -23,7 +23,7 @@ import {
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { scaleLinear } from "d3-scale";
-import { T_BASE, T_DRAW, T_FAST, stagger } from "@/lib/motion";
+import { T_DRAW, T_FAST, stagger } from "@/lib/motion";
 import { shareWidths } from "@/lib/chart";
 import styles from "./charts.module.css";
 
@@ -519,32 +519,6 @@ export function ShareBar({
         }
       />
     </div>
-  );
-}
-
-/* -------------------------------------------------------------- collapsible */
-
-/**
- * Height animation for the two collapsible cards (`/oversikt`'s category list,
- * `RecurringPanel`). Both used to swap the content in and out with no
- * transition, so the page below jumped by several hundred pixels.
- */
-export function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
-  return (
-    <AnimatePresence initial={false}>
-      {open ? (
-        <motion.div
-          key="content"
-          initial={{ height: 0, opacity: 0 }}
-          animate={{ height: "auto", opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
-          transition={T_BASE}
-          style={{ overflow: "hidden" }}
-        >
-          {children}
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
   );
 }
 

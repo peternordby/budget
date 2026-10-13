@@ -31,7 +31,12 @@ function LedgerErrorBanner() {
 // account settings rather than a view of the ledger at all — a period
 // selection has nothing to act on in either, and rendering the picker would
 // imply a filter that does not exist.
-const ROUTES_WITHOUT_PERIOD = new Set(["/sparing", "/profil"]);
+const ROUTES_WITHOUT_PERIOD = new Set([
+  "/sparing",
+  "/profil",
+  "/profil/kategorier",
+  "/profil/faste-utgifter",
+]);
 
 function AppChrome({ children, user }: { children: ReactNode; user: User }) {
   const pathname = usePathname();

@@ -1,0 +1,186 @@
+.calendar {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.weekday {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  padding-bottom: 2px;
+}
+
+.day {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 64px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+  outline-offset: 2px;
+}
+
+.day[data-empty="true"] {
+  background: transparent;
+}
+
+.day-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+}
+
+.day-number {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.day-amount {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .calendar {
+    gap: 3px;
+  }
+
+  .day {
+    min-height: 48px;
+    padding: 5px;
+    gap: 4px;
+  }
+
+  .day-amount {
+    font-size: 11px;
+  }
+
+  .dot {
+    width: 5px;
+    height: 5px;
+  }
+}
+
+/* --- several months: the week-by-weekday heatmap --- */
+
+.heatmap {
+  position: relative;
+  display: grid;
+  /* Shrinks to fit rather than scrolling: a year on a phone is 53 columns of
+     ~4px, still readable as a pattern, and a scroll box would clip the
+     tooltip. Capped so three months do not become giant tiles. */
+  grid-template-columns: 22px repeat(var(--weeks), minmax(0, 26px));
+  grid-template-rows: auto repeat(7, auto);
+  gap: 3px;
+}
+
+/* One block per calendar year, stacked. */
+.heatmap-year + .heatmap-year {
+  margin-top: 14px;
+}
+
+.heatmap-year-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.heatmap-month {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  padding-bottom: 2px;
+}
+
+.heatmap-weekday {
+  font-size: 10px;
+  color: var(--muted);
+  align-self: center;
+}
+
+.cell,
+.cell-off {
+  aspect-ratio: 1;
+  border-radius: 3px;
+}
+
+.cell {
+  border: 1px solid var(--border-soft);
+  outline-offset: 1px;
+}
+
+.cell-off {
+  opacity: 0;
+}
+
+.weekdays {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.weekday-bars {
+  display: grid;
+  gap: 6px;
+}
+
+.weekday-bar {
+  display: grid;
+  grid-template-columns: 28px 1fr 80px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.weekday-name {
+  color: var(--muted);
+}
+
+.weekday-bar[data-peak="true"] .weekday-name {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* A phone fits a year as 53 columns of ~5px: tighten the gap so the cells get
+   the room, and shrink the month labels so "sep" fits in its four weeks. */
+@media (max-width: 560px) {
+  .heatmap {
+    grid-template-columns: 16px repeat(var(--weeks), minmax(0, 26px));
+    gap: 1px;
+  }
+
+  .heatmap-month,
+  .heatmap-weekday {
+    font-size: 9px;
+  }
+
+  .cell,
+  .cell-off {
+    border-radius: 1px;
+  }
+
+  .cell {
+    border: 0;
+  }
+}
