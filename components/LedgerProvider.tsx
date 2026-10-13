@@ -115,9 +115,7 @@ export function toLedgerEntries(expenses: LedgerExpense[]): LedgerEntry[] {
   });
 }
 
-// detectAnomalies has no internal windowing — it treats these entries as the
-// complete history for its averages and "first seen" checks, and Anomalies.tsx
-// tells the user they cover the last 12 months. The provider's window is
+// The trailing twelve months ending at `anchor`. The provider's window is
 // deliberately wider (24+ months) so chart navigation is instant, so slice back
 // to twelve here rather than feeding the whole window through.
 export function useLedgerHistory(anchor: MonthRef): LedgerEntry[] {

@@ -12,26 +12,11 @@ import { usePeriod } from "@/lib/usePeriod";
 import { categorySeries } from "@/lib/trends";
 import { monthKey, type MonthRef } from "@/lib/insights";
 import { windowLabel as formatWindowLabel } from "@/lib/period";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { SHORT_MONTH_NAMES, formatCurrency, formatDate } from "@/lib/format";
 import { IconX } from "@/components/icons";
 import MonthColumns, { type MonthPoint } from "@/components/MonthColumns";
 import { T_BASE } from "@/lib/motion";
 import styles from "./CategoryDrilldown.module.css";
-
-const SHORT_MONTHS = [
-  "jan",
-  "feb",
-  "mar",
-  "apr",
-  "mai",
-  "jun",
-  "jul",
-  "aug",
-  "sep",
-  "okt",
-  "nov",
-  "des",
-];
 
 // Same twelve-month history /innsikt's category tiles use, so a tile and the
 // panel it opens report the same Snitt and Median.
@@ -192,12 +177,12 @@ export default function CategoryDrilldown({
         const value = points[index] ?? 0;
         return {
           key,
-          label: SHORT_MONTHS[ref.month - 1],
+          label: SHORT_MONTH_NAMES[ref.month - 1],
           yearLabel: ref.month === 1 || index === 0 ? String(ref.year) : undefined,
           values: [value],
           marker: budget,
           tooltip: {
-            title: `${SHORT_MONTHS[ref.month - 1]} ${ref.year}`,
+            title: `${SHORT_MONTH_NAMES[ref.month - 1]} ${ref.year}`,
             rows:
               budget === undefined
                 ? [{ value: formatCurrency(value) }]
@@ -225,7 +210,7 @@ export default function CategoryDrilldown({
         const actual = points[index] ?? 0;
         return {
           key,
-          label: `${SHORT_MONTHS[ref.month - 1]} ${ref.year}`,
+          label: `${SHORT_MONTH_NAMES[ref.month - 1]} ${ref.year}`,
           budget,
           actual,
           diff: actual - budget,

@@ -3,15 +3,12 @@ import { missingFixedRef, parseDismissals } from "./dismissals";
 
 describe("parseDismissals", () => {
   it("reads a stored map", () => {
-    const raw = JSON.stringify({ subscription: ["netflix"], "missing-fixed": ["7:2026-03"] });
-    expect(parseDismissals(raw)).toEqual({
-      subscription: ["netflix"],
-      "missing-fixed": ["7:2026-03"],
-    });
+    const raw = JSON.stringify({ "missing-fixed": ["7:2026-03"] });
+    expect(parseDismissals(raw)).toEqual({ "missing-fixed": ["7:2026-03"] });
   });
 
   it("treats missing, malformed and non-object values as nothing dismissed", () => {
-    const empty = { subscription: [], "missing-fixed": [] };
+    const empty = { "missing-fixed": [] };
     expect(parseDismissals(null)).toEqual(empty);
     expect(parseDismissals("{not json")).toEqual(empty);
     expect(parseDismissals("42")).toEqual(empty);
@@ -19,11 +16,8 @@ describe("parseDismissals", () => {
   });
 
   it("drops non-string entries rather than the whole list", () => {
-    const raw = JSON.stringify({ subscription: ["spotify", 3, null, "vipps"] });
-    expect(parseDismissals(raw)).toEqual({
-      subscription: ["spotify", "vipps"],
-      "missing-fixed": [],
-    });
+    const raw = JSON.stringify({ "missing-fixed": ["7:2026-03", 3, null, "8:2026-04"] });
+    expect(parseDismissals(raw)).toEqual({ "missing-fixed": ["7:2026-03", "8:2026-04"] });
   });
 });
 

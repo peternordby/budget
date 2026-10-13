@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import type { User } from "@supabase/supabase-js";
+import Link from "next/link";
 import Avatar from "@/components/Avatar";
 import { supabase } from "@/lib/supabaseClient";
 import { displayName, fullName } from "@/lib/profile";
@@ -261,6 +262,32 @@ export default function ProfilPage() {
             ) : null}
           </div>
         </div>
+      </section>
+
+      <section className="card section-gap">
+        <div className="card-head">
+          <h2 className="section-title">Kategorier</h2>
+          <Link href="/profil/kategorier" className="btn btn-ghost btn-small">
+            Endre kategorier
+          </Link>
+        </div>
+        <p className="helper">
+          Legg til, gi nytt navn, endre type eller slett kategoriene du fører
+          transaksjoner og budsjett på.
+        </p>
+      </section>
+
+      <section className="card section-gap">
+        <div className="card-head">
+          <h2 className="section-title">Faste utgifter</h2>
+          <Link href="/profil/faste-utgifter" className="btn btn-ghost btn-small">
+            Endre faste utgifter
+          </Link>
+        </div>
+        <p className="helper">
+          Husleie, strøm og abonnementer som går ut hver måned. De som ikke er
+          ført, dukker opp øverst i transaksjonslisten.
+        </p>
       </section>
 
       <section className="card section-gap">

@@ -7,15 +7,18 @@ import {
   useLedgerSelection,
   type LedgerExpense,
 } from "@/components/LedgerProvider";
-import RecurringPanel from "@/components/RecurringPanel";
+import MoreMenu from "@/components/MoreMenu";
+import DateRangePicker from "@/components/DateRangePicker";
 import ItemAutocomplete from "@/components/ItemAutocomplete";
 import Toast from "@/components/Toast";
 import { supabase } from "@/lib/supabaseClient";
-import { categoryInk, categoryTint, getCategorySlot } from "@/lib/categoryColor";
+import { categoryColor, categoryInk, categoryTint, getCategorySlot } from "@/lib/categoryColor";
 import {
   IconCheck,
   IconChevronDown,
   IconChevronUp,
+  IconFilter,
+  IconPencil,
   IconPlus,
   IconTrash,
   IconX,
@@ -30,7 +33,9 @@ import {
   toNumber,
 } from "@/lib/format";
 import { buildItemIndex, type ItemSuggestion } from "@/lib/autocomplete";
-import type { MonthRef } from "@/lib/insights";
+import { monthKey, type MonthRef } from "@/lib/insights";
+import { materializationDate, pendingTemplates, type RecurringTemplate } from "@/lib/recurring";
+import { missingFixedRef, useDismissals } from "@/lib/dismissals";
 import {
   isIncomeKind,
   toCategoryKind,
@@ -46,10 +51,27 @@ import {
 import { encField } from "@/lib/crypto";
 import styles from "./transaksjoner.module.css";
 
+// One filter per column, laid out in the table's own grid under its header,
+// so each control sits above what it narrows. Dates and amounts are ranges;
+// either end may be left open.
 type ActivityFilters = {
-  itemQuery: string;
+  dateFrom: string;
+  dateTo: string;
   tag: string;
+  itemQuery: string;
+  minAmount: string;
+  maxAmount: string;
   category: string;
+};
+
+const NO_FILTERS: ActivityFilters = {
+  dateFrom: "",
+  dateTo: "",
+  tag: "",
+  itemQuery: "",
+  minAmount: "",
+  maxAmount: "",
+  category: "",
 };
 
 type ActivitySortKey = "date" | "tag" | "item" | "amount" | "category";
@@ -58,15 +80,10 @@ type ActivitySortDirection = "asc" | "desc";
 
 type ColumnKey = ActivitySortKey;
 
-const DEFAULT_COLUMN_ORDER: ColumnKey[] = [
-  "date",
-  "tag",
-  "item",
-  "amount",
-  "category",
-];
-
-const COLUMN_STORAGE_KEY = "budget.column-order.v1";
+// Fixed. The order used to be a per-device preference (drag the headers, or
+// arrows in the phone form), which was more machinery than a five-column table
+// earns — and it put reorder arrows beside every label of the form used most.
+const columnOrder: ColumnKey[] = ["date", "tag", "item", "amount", "category"];
 
 const COLUMN_TRACKS: Record<ColumnKey, string> = {
   date: "minmax(88px, 0.82fr)",
@@ -76,6 +93,10 @@ const COLUMN_TRACKS: Record<ColumnKey, string> = {
   category: "minmax(106px, 1fr)",
 };
 
+const listColumnStyle = {
+  "--list-cols": columnOrder.map((key) => COLUMN_TRACKS[key]).join(" "),
+} as CSSProperties;
+
 const COLUMN_LABELS: Record<ColumnKey, string> = {
   date: "Dato",
   tag: "Merkelapp",
@@ -83,14 +104,6 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
   amount: "Beløp",
   category: "Kategori",
 };
-
-function isValidColumnOrder(value: unknown): value is ColumnKey[] {
-  return (
-    Array.isArray(value) &&
-    value.length === DEFAULT_COLUMN_ORDER.length &&
-    DEFAULT_COLUMN_ORDER.every((key) => value.includes(key))
-  );
-}
 
 type Category = {
   id: number;
@@ -156,16 +169,10 @@ export default function TransaksjonerPage() {
   });
   const [newRowSaving, setNewRowSaving] = useState(false);
   const newRowItemRef = useRef<HTMLInputElement | null>(null);
-  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(
-    DEFAULT_COLUMN_ORDER
-  );
-  const [dragColumn, setDragColumn] = useState<ColumnKey | null>(null);
-  const [dropTarget, setDropTarget] = useState<ColumnKey | null>(null);
-  const [activityFilters, setActivityFilters] = useState<ActivityFilters>({
-    itemQuery: "",
-    tag: "",
-    category: "",
-  });
+  // The filter row is closed by default: most visits are to add a purchase or
+  // glance at the month, and four controls above the list pushed it down.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [activityFilters, setActivityFilters] = useState<ActivityFilters>(NO_FILTERS);
   const [activitySort, setActivitySort] = useState<{
     key: ActivitySortKey;
     direction: ActivitySortDirection;
@@ -173,12 +180,6 @@ export default function TransaksjonerPage() {
     key: "date",
     direction: "desc",
   });
-  // Which months the activity table searches: the picker's selection, or every
-  // month that has ever had a transaction. "Alle" widens the provider's fetch
-  // window to the full span of availableMonths (see the effect below), so it
-  // really does mean all of history rather than the 24-month window the
-  // provider happens to have loaded.
-  const [searchAll, setSearchAll] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<ExpenseImport | null>(null);
   const [importName, setImportName] = useState("");
@@ -229,19 +230,73 @@ export default function TransaksjonerPage() {
     return value >= start && value <= end;
   }, [single, ledger.windowStart, ledger.windowEnd]);
 
-  // Hydrate the per-device column order preference after mount.
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(COLUMN_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (isValidColumnOrder(parsed)) {
-        setColumnOrder(parsed);
-      }
-    } catch {
-      // Ignore unreadable preferences and keep the default order.
+  // --- Fixed expenses, as rows in the list ---
+  //
+  // The month's active templates that have not been booked show up at the top
+  // of the list as dashed suggestion rows, each with a tick (book it) and a
+  // cross (not this month). This replaced a separate collapsible card whose
+  // one button booked every template at once — it could not say "not the
+  // gym this month" without pausing the template for every month.
+  const { isDismissed, dismiss, restoreAll } = useDismissals();
+  const periodKey = single ? monthKey(single.year, single.month) : "";
+  const allPendingFixed = useMemo(
+    () =>
+      single
+        ? pendingTemplates(
+            ledger.templates,
+            expenses,
+            single.year,
+            single.month,
+            // Unknown bookings must never read as "not booked": that would
+            // offer to book a month twice.
+            !ledger.error && !ledger.loading && covered
+          )
+        : [],
+    [single, ledger.templates, expenses, ledger.error, ledger.loading, covered]
+  );
+  const pendingFixed = allPendingFixed.filter(
+    (template) => !isDismissed("missing-fixed", missingFixedRef(template.id, periodKey))
+  );
+  const skippedFixed = allPendingFixed.length - pendingFixed.length;
+  const [bookingFixed, setBookingFixed] = useState(false);
+
+  async function bookFixed(templates: RecurringTemplate[]) {
+    if (!single || !templates.length) return;
+    setBookingFixed(true);
+    setStatus(null);
+    const rows = await Promise.all(
+      templates.map(async (template) => ({
+        item: await encField(template.item),
+        price: await encField(template.price),
+        category_id: template.category_id,
+        tag: await encField(template.tag),
+        user_id: ledger.userId,
+        date: materializationDate(template, single.year, single.month),
+        recurring_id: template.id,
+      }))
+    );
+    const { data, error } = await supabase
+      .from("expense")
+      .insert(rows)
+      .select("id, category_id, user_id, date, recurring_id");
+    if (error) {
+      setStatus(error.message);
+    } else {
+      // The rows come back as ciphertext; the plaintext is the template's.
+      (data ?? []).forEach((row: any) => {
+        const template = templates.find((t) => t.id === row.recurring_id);
+        if (!template) return;
+        ledger.upsertExpense({
+          ...row,
+          item: template.item,
+          price: template.price,
+          tag: template.tag,
+          category: ledger.categories.find((c) => c.id === row.category_id) ?? null,
+        });
+      });
     }
-  }, []);
+    setBookingFixed(false);
+  }
 
   // Keep the new-row date in sync with the viewed period so the value shown
   // in the input is also the value that gets saved.
@@ -249,48 +304,6 @@ export default function TransaksjonerPage() {
     setNewRowDraft((prev) => ({ ...prev, date: getDefaultNewRowDate() }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedKeys]);
-
-  const listColumnStyle = useMemo(
-    () =>
-      ({
-        "--list-cols": columnOrder
-          .map((key) => COLUMN_TRACKS[key])
-          .join(" "),
-      }) as CSSProperties,
-    [columnOrder]
-  );
-
-  function persistColumnOrder(next: ColumnKey[]) {
-    setColumnOrder(next);
-    try {
-      window.localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // Preference simply won't survive a reload if storage is unavailable.
-    }
-  }
-
-  function moveColumn(key: ColumnKey, offset: number) {
-    const index = columnOrder.indexOf(key);
-    const target = index + offset;
-    if (index < 0 || target < 0 || target >= columnOrder.length) return;
-    const next = [...columnOrder];
-    next.splice(index, 1);
-    next.splice(target, 0, key);
-    persistColumnOrder(next);
-  }
-
-  function handleColumnDrop(targetKey: ColumnKey) {
-    if (!dragColumn || dragColumn === targetKey) {
-      setDragColumn(null);
-      setDropTarget(null);
-      return;
-    }
-    const next = columnOrder.filter((key) => key !== dragColumn);
-    next.splice(columnOrder.indexOf(targetKey), 0, dragColumn);
-    persistColumnOrder(next);
-    setDragColumn(null);
-    setDropTarget(null);
-  }
 
   const categoryByName = useMemo(() => {
     const map = new Map<string, Category>();
@@ -306,22 +319,33 @@ export default function TransaksjonerPage() {
     [categoryByName]
   );
 
-  // The all-time scope widens the source array for every downstream view of
-  // the activity table (filter options, filtering/sorting, and the empty-state
-  // check) so the widened search isn't only half-widened.
-  const activitySource = searchAll ? ledger.expenses : expenses;
+  // A date range takes over from the period picker: the list then searches the
+  // whole ledger between those dates, whatever month is selected above. This
+  // replaced a "Valgt periode / Alle måneder" select — a range says the same
+  // thing and more. An open end runs to the edge of the user's history.
+  const rangeActive = Boolean(activityFilters.dateFrom || activityFilters.dateTo);
+  const activitySource = rangeActive ? ledger.expenses : expenses;
 
   // availableMonths is all-time by design, so its ends are the real bounds of
   // the user's history. ensureMonthCovered only ever widens, and returns the
   // identical state when nothing needs widening, so this settles after one
   // fetch instead of looping.
   useEffect(() => {
-    if (!searchAll || !ledger.availableMonths.length) return;
-    ledger.ensureMonthCovered(keyToRef(ledger.availableMonths[0]));
+    if (!rangeActive || !ledger.availableMonths.length) return;
+    const months = ledger.availableMonths;
     ledger.ensureMonthCovered(
-      keyToRef(ledger.availableMonths[ledger.availableMonths.length - 1])
+      keyToRef(activityFilters.dateFrom ? activityFilters.dateFrom.slice(0, 7) : months[0])
     );
-  }, [searchAll, ledger.availableMonths, ledger.ensureMonthCovered]);
+    ledger.ensureMonthCovered(
+      keyToRef(activityFilters.dateTo ? activityFilters.dateTo.slice(0, 7) : months[months.length - 1])
+    );
+  }, [
+    rangeActive,
+    activityFilters.dateFrom,
+    activityFilters.dateTo,
+    ledger.availableMonths,
+    ledger.ensureMonthCovered,
+  ]);
 
   const activityTagOptions = useMemo(() => {
     const tags = new Set<string>();
@@ -368,7 +392,15 @@ export default function TransaksjonerPage() {
       const tagValue = expense.tag?.trim() ?? "";
       const itemValue = expense.item.trim().toLowerCase();
       const itemQuery = activityFilters.itemQuery.trim().toLowerCase();
+      const date = expense.date ?? "";
+      const amount = Math.abs(toNumber(expense.price));
+      const min = activityFilters.minAmount.trim();
+      const max = activityFilters.maxAmount.trim();
 
+      if (activityFilters.dateFrom && date < activityFilters.dateFrom) return false;
+      if (activityFilters.dateTo && date > activityFilters.dateTo) return false;
+      if (min && amount < Number(min)) return false;
+      if (max && amount > Number(max)) return false;
       if (activityFilters.tag && tagValue !== activityFilters.tag) {
         return false;
       }
@@ -408,53 +440,23 @@ export default function TransaksjonerPage() {
       }
     });
   }, [activityFilters, activitySort, activitySource]);
-  const activityTotals = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-    let net = 0;
-
-    filteredAndSortedExpenses.forEach((entry) => {
-      const signedAmount = getSignedAmount(entry);
-      net += signedAmount;
-      if (signedAmount >= 0) {
-        income += signedAmount;
-      } else {
-        expense += Math.abs(signedAmount);
-      }
-    });
-
-    return {
-      income,
-      expense,
-      net,
-      count: filteredAndSortedExpenses.length,
-    };
-  }, [filteredAndSortedExpenses]);
-  const hasActivityFilters = Boolean(
-    activityFilters.itemQuery || activityFilters.tag || activityFilters.category
-  );
-  const activityTotalLabel = activityFilters.tag
-    ? `Total for merkelapp «${activityFilters.tag}»`
-    : "Total for filtrert utvalg";
-  // The two scope options, named by what they actually cover: the picker's
-  // selection, or every month that has data. Stating the month count is what
-  // makes the second one trustworthy — the old wording ("Søk i hele perioden")
-  // promised all of history while searching only the fetched window.
-  const scopeLabel = useMemo(
-    () => (single ? `${selectedMonthLabel} ${single.year}` : "Valgt periode"),
-    [selectedMonthLabel, single]
-  );
-  const allScopeLabel = `Alle måneder (${ledger.availableMonths.length})`;
+  // Counted for the closed toggle, so a filter left on is never invisible.
+  // A range counts once, not once per end.
+  const activeFilterCount = [
+    rangeActive,
+    activityFilters.tag,
+    activityFilters.itemQuery.trim(),
+    activityFilters.minAmount.trim() || activityFilters.maxAmount.trim(),
+    activityFilters.category,
+  ].filter(Boolean).length;
+  const hasActivityFilters = activeFilterCount > 0;
 
   const exportFilename = useMemo(() => {
     const sanitize = (key: string) => key.replace(/[^0-9A-Za-z_-]/g, "");
-    if (searchAll) {
-      const months = ledger.availableMonths;
-      if (months.length) {
-        const start = sanitize(months[0]);
-        const end = sanitize(months[months.length - 1]);
-        return `transaksjoner-${start}-til-${end}.csv`;
-      }
+    if (rangeActive) {
+      const start = sanitize(activityFilters.dateFrom) || "start";
+      const end = sanitize(activityFilters.dateTo) || "slutt";
+      return `transaksjoner-${start}-til-${end}.csv`;
     }
     if (single) {
       return `transaksjoner-${sanitize(refToKey(single))}.csv`;
@@ -469,7 +471,7 @@ export default function TransaksjonerPage() {
     const first = sanitize(sortedKeys[0]);
     const last = sanitize(sortedKeys[sortedKeys.length - 1]);
     return `transaksjoner-${first}-til-${last}.csv`;
-  }, [anchor, ledger.availableMonths, searchAll, selectedKeys, single]);
+  }, [anchor, rangeActive, activityFilters.dateFrom, activityFilters.dateTo, selectedKeys, single]);
 
   function handleExportCsv() {
     if (filteredAndSortedExpenses.length === 0) return;
@@ -833,7 +835,11 @@ export default function TransaksjonerPage() {
       if (event.key === "n") {
         newRowItemRef.current?.focus();
       } else {
-        document.getElementById("activity-item-query")?.focus();
+        // The search box only exists while the filter row is open.
+        setFiltersOpen(true);
+        requestAnimationFrame(() =>
+          document.getElementById("activity-item-query")?.focus()
+        );
       }
     }
 
@@ -930,11 +936,7 @@ export default function TransaksjonerPage() {
   }
 
   function clearActivityFilters() {
-    setActivityFilters({
-      itemQuery: "",
-      tag: "",
-      category: "",
-    });
+    setActivityFilters(NO_FILTERS);
   }
 
   function handleStartEdit(expense: Expense) {
@@ -1072,6 +1074,14 @@ export default function TransaksjonerPage() {
         category,
       };
       ledger.upsertExpense(normalized);
+      // On a phone the list is a screen or two below the form, so the row
+      // appearing there is no confirmation at all.
+      showToast({
+        message: `La til ${item}, ${formatCurrency(price)}.`,
+        tone: "info",
+        actionLabel: "Angre",
+        onAction: () => handleDelete(normalized as Expense),
+      });
       setNewRowDraft({
         item: "",
         price: "",
@@ -1117,6 +1127,102 @@ export default function TransaksjonerPage() {
     return activitySort.direction === "asc" ? <IconChevronUp /> : <IconChevronDown />;
   }
 
+  const categoriesByUse = useMemo(() => {
+    const uses = new Map<number, number>();
+    ledger.expenses.forEach((expense) =>
+      uses.set(expense.category_id, (uses.get(expense.category_id) ?? 0) + 1)
+    );
+    return [...ledger.categories].sort(
+      (a, b) =>
+        (uses.get(b.id) ?? 0) - (uses.get(a.id) ?? 0) ||
+        a.category.localeCompare(b.category, "nb")
+    );
+  }, [ledger.categories, ledger.expenses]);
+
+  function setFilter(key: keyof ActivityFilters, value: string) {
+    setActivityFilters((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function renderFilterCell(key: ColumnKey) {
+    switch (key) {
+      case "date":
+        return (
+          <DateRangePicker
+            from={activityFilters.dateFrom}
+            to={activityFilters.dateTo}
+            onChange={(dateFrom, dateTo) =>
+              setActivityFilters((prev) => ({ ...prev, dateFrom, dateTo }))
+            }
+          />
+        );
+      case "tag":
+        return (
+          <select
+            aria-label="Merkelapp"
+            value={activityFilters.tag}
+            onChange={(e) => setFilter("tag", e.target.value)}
+          >
+            <option value="">Alle merkelapper</option>
+            {activityTagOptions.map((tag) => (
+              <option key={tag} value={tag}>
+                {tag}
+              </option>
+            ))}
+          </select>
+        );
+      case "item":
+        return (
+          <input
+            id="activity-item-query"
+            aria-label="Søk i beskrivelse"
+            placeholder="Søk i beskrivelse"
+            value={activityFilters.itemQuery}
+            onChange={(e) => setFilter("itemQuery", e.target.value)}
+          />
+        );
+      case "amount":
+        return (
+          <>
+            <input
+              type="number"
+              inputMode="numeric"
+              min="0"
+              className="num"
+              aria-label="Minste beløp"
+              placeholder="Fra"
+              value={activityFilters.minAmount}
+              onChange={(e) => setFilter("minAmount", e.target.value)}
+            />
+            <input
+              type="number"
+              inputMode="numeric"
+              min="0"
+              className="num"
+              aria-label="Største beløp"
+              placeholder="Til"
+              value={activityFilters.maxAmount}
+              onChange={(e) => setFilter("maxAmount", e.target.value)}
+            />
+          </>
+        );
+      case "category":
+        return (
+          <select
+            aria-label="Kategori"
+            value={activityFilters.category}
+            onChange={(e) => setFilter("category", e.target.value)}
+          >
+            <option value="">Alle kategorier</option>
+            {activityCategoryOptions.map((categoryName) => (
+              <option key={categoryName} value={categoryName}>
+                {categoryName}
+              </option>
+            ))}
+          </select>
+        );
+    }
+  }
+
   function renderMobileFieldInput(key: ColumnKey) {
     // Matches the htmlFor the label beside it uses.
     const id = `mobile-new-${key}`;
@@ -1139,30 +1245,54 @@ export default function TransaksjonerPage() {
         return (
           <input
             id={id}
+            className={styles["mobile-amount"]}
             type="number"
+            inputMode="decimal"
+            enterKeyHint="done"
             value={newRowDraft.price}
             onChange={(e) =>
               setNewRowDraft((prev) => ({ ...prev, price: e.target.value }))
             }
-            placeholder="0"
+            placeholder="0 kr"
           />
         );
       case "category":
+        // Chips rather than a <select>: one tap instead of open, scroll, tap,
+        // and every option visible at once. Most-used first, so the usual
+        // two or three sit at the start of the first line.
         return (
-          <select
+          <div
             id={id}
-            value={newRowDraft.categoryId}
-            onChange={(e) =>
-              setNewRowDraft((prev) => ({ ...prev, categoryId: e.target.value }))
-            }
+            className={styles["category-chips"]}
+            role="radiogroup"
+            aria-label="Kategori"
           >
-            <option value="">Velg kategori...</option>
-            {ledger.categories.map((c) => (
-              <option key={c.id} value={String(c.id)}>
-                {c.category}
-              </option>
-            ))}
-          </select>
+            {categoriesByUse.map((c) => {
+              const slot = getCategorySlot(c.category);
+              const on = newRowDraft.categoryId === String(c.id);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  className={styles["category-chip"]}
+                  style={
+                    {
+                      "--cat-bg": categoryTint(slot),
+                      "--cat-ink": categoryInk(slot),
+                      "--cat": categoryColor(slot),
+                    } as CSSProperties
+                  }
+                  onClick={() =>
+                    setNewRowDraft((prev) => ({ ...prev, categoryId: String(c.id) }))
+                  }
+                >
+                  {c.category}
+                </button>
+              );
+            })}
+          </div>
         );
       case "date":
         return (
@@ -1368,43 +1498,20 @@ export default function TransaksjonerPage() {
       >
         <h2 className="section-title">Ny transaksjon</h2>
         <div className={styles["mobile-new-row-grid"]}>
-          {columnOrder.map((key, index) => (
-            <div className="field" key={key}>
-              <div className="field-label-row">
-                <label htmlFor={`mobile-new-${key}`}>
-                  {COLUMN_LABELS[key]}
-                </label>
-                <div className="field-move">
-                  <button
-                    className="icon-btn icon-btn-sm"
-                    type="button"
-                    onClick={() => moveColumn(key, -1)}
-                    disabled={index === 0}
-                    aria-label={`Flytt ${COLUMN_LABELS[key]} tidligere`}
-                    title="Flytt tidligere"
-                  >
-                    <IconChevronUp />
-                  </button>
-                  <button
-                    className="icon-btn icon-btn-sm"
-                    type="button"
-                    onClick={() => moveColumn(key, 1)}
-                    disabled={index === columnOrder.length - 1}
-                    aria-label={`Flytt ${COLUMN_LABELS[key]} senere`}
-                    title="Flytt senere"
-                  >
-                    <IconChevronDown />
-                  </button>
-                </div>
-              </div>
+          {columnOrder.map((key) => (
+            <div
+              className={`field ${styles["mobile-field"]}`}
+              data-col={key}
+              key={key}
+            >
+              <label htmlFor={`mobile-new-${key}`}>{COLUMN_LABELS[key]}</label>
               {renderMobileFieldInput(key)}
             </div>
           ))}
         </div>
-        <div className="form-actions" style={{ marginTop: 12 }}>
+        <div className={styles["mobile-new-row-actions"]}>
           <button
             className="btn btn-primary"
-            style={{ flex: 1 }}
             type="button"
             onClick={handleSaveNewRow}
             disabled={newRowSaving || !newRowDraft.item.trim() || !newRowDraft.categoryId || !newRowDraft.price}
@@ -1414,151 +1521,45 @@ export default function TransaksjonerPage() {
         </div>
       </section>
 
-      <RecurringPanel
-        userId={ledger.userId}
-        month={single}
-        monthLabel={`${selectedMonthLabel} ${single?.year ?? ""}`.trim()}
-        bookedExpenses={expenses}
-        bookedLoading={ledger.loading}
-        bookedKnown={!ledger.error && covered}
-        categories={ledger.categories}
-        onGenerated={() => {
-          ledger.refetch();
-        }}
-      />
-
       <section className="card section-gap">
         <div className="card-head">
           <h2 className="section-title">Aktivitet</h2>
           <div className="toolbar-actions">
             <button
-              className={`btn btn-ghost btn-small${importOpen ? " is-on" : ""}`}
+              className={`btn btn-ghost btn-small${filtersOpen ? " is-on" : ""}`}
               type="button"
-              aria-expanded={importOpen}
-              onClick={() => {
-                if (importOpen) cancelImport();
-                setImportOpen((open) => !open);
-              }}
+              aria-expanded={filtersOpen}
+              onClick={() => setFiltersOpen((open) => !open)}
+              title="Søk og filtrer (/)"
             >
-              Importer CSV
+              <IconFilter />
+              Filtrer
+              {activeFilterCount ? (
+                <span className={styles["filter-count"]}>{activeFilterCount}</span>
+              ) : null}
             </button>
-            <button
-              className="btn btn-ghost btn-small"
-              type="button"
-              onClick={handleExportCsv}
-              disabled={filteredAndSortedExpenses.length === 0}
-            >
-              Eksporter CSV
-            </button>
+            <MoreMenu
+              label="Flere valg"
+              items={[
+                {
+                  label: importOpen ? "Lukk import" : "Importer CSV",
+                  onSelect: () => {
+                    if (importOpen) cancelImport();
+                    setImportOpen((open) => !open);
+                  },
+                },
+                {
+                  label: "Eksporter CSV",
+                  onSelect: handleExportCsv,
+                  disabled: filteredAndSortedExpenses.length === 0,
+                },
+                { label: "Endre faste utgifter", href: "/profil/faste-utgifter" },
+              ]}
+            />
           </div>
         </div>
         {status ? <div className="status">{status}</div> : null}
         {importOpen ? importPanel : null}
-        <div className="toolbar">
-          <div className="field field-wide">
-            <input
-              id="activity-item-query"
-              aria-label="Søk i beskrivelse"
-              value={activityFilters.itemQuery}
-              onChange={(event) =>
-                setActivityFilters((prev) => ({
-                  ...prev,
-                  itemQuery: event.target.value,
-                }))
-              }
-              placeholder="Søk i beskrivelse"
-            />
-          </div>
-          <div className="field">
-            <select
-              id="activity-tag-filter"
-              aria-label="Merkelapp"
-              value={activityFilters.tag}
-              onChange={(event) =>
-                setActivityFilters((prev) => ({
-                  ...prev,
-                  tag: event.target.value,
-                }))
-              }
-            >
-              <option value="">Alle merkelapper</option>
-              {activityTagOptions.map((tag) => (
-                <option key={tag} value={tag}>
-                  {tag}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <select
-              id="activity-category-filter"
-              aria-label="Kategori"
-              value={activityFilters.category}
-              onChange={(event) =>
-                setActivityFilters((prev) => ({
-                  ...prev,
-                  category: event.target.value,
-                }))
-              }
-            >
-              <option value="">Alle kategorier</option>
-              {activityCategoryOptions.map((categoryName) => (
-                <option key={categoryName} value={categoryName}>
-                  {categoryName}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <select
-              id="activity-scope"
-              aria-label="Hvilke måneder søket dekker"
-              value={searchAll ? "all" : "period"}
-              onChange={(event) => setSearchAll(event.target.value === "all")}
-            >
-              <option value="period">{scopeLabel}</option>
-              <option value="all">{allScopeLabel}</option>
-            </select>
-          </div>
-          {hasActivityFilters ? (
-            <button
-              className="icon-btn icon-btn-sm"
-              type="button"
-              title="Nullstill filtre"
-              aria-label="Nullstill filtre"
-              onClick={clearActivityFilters}
-            >
-              <IconX />
-            </button>
-          ) : null}
-        </div>
-        <div className={`stat-row ${styles["activity-total-row"]}`}>
-          <div className="stat">
-            <span className="stat-label">{activityTotalLabel}</span>
-            <strong
-              className={`stat-value ${activityTotals.net >= 0 ? "is-good" : "is-bad"}`}
-            >
-              {activityTotals.net >= 0 ? "+" : "-"}
-              {formatCurrency(Math.abs(activityTotals.net))}
-            </strong>
-          </div>
-          <div className="stat stat-small">
-            <span className="stat-label">Inntekter</span>
-            <strong className="stat-value">
-              {formatCurrency(activityTotals.income)}
-            </strong>
-          </div>
-          <div className="stat stat-small">
-            <span className="stat-label">Utgifter</span>
-            <strong className="stat-value">
-              {formatCurrency(activityTotals.expense)}
-            </strong>
-          </div>
-          <div className="stat stat-small">
-            <span className="stat-label">Transaksjoner</span>
-            <strong className="stat-value">{activityTotals.count}</strong>
-          </div>
-        </div>
         {loading ? <div className="helper">Laster transaksjoner...</div> : null}
         {!loading ? (
           <div className={styles["list"]} style={listColumnStyle}>
@@ -1566,39 +1567,12 @@ export default function TransaksjonerPage() {
               {columnOrder.map((key) => (
                 <button
                   key={key}
-                  className={`${styles["list-sort"]} ${styles["draggable"]} ${
+                  className={`${styles["list-sort"]} ${
                     key === "amount" ? styles["align-end"] : ""
-                  } ${activitySort.key === key ? styles["active"] : ""} ${
-                    dragColumn === key ? styles["dragging"] : ""
-                  } ${
-                    dropTarget === key && dragColumn && dragColumn !== key
-                      ? styles["drop-target"]
-                      : ""
-                  }`}
+                  } ${activitySort.key === key ? styles["active"] : ""}`}
                   type="button"
-                  draggable
-                  onDragStart={(e) => {
-                    setDragColumn(key);
-                    e.dataTransfer.effectAllowed = "move";
-                  }}
-                  onDragEnd={() => {
-                    setDragColumn(null);
-                    setDropTarget(null);
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = "move";
-                    setDropTarget(key);
-                  }}
-                  onDragLeave={() =>
-                    setDropTarget((prev) => (prev === key ? null : prev))
-                  }
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    handleColumnDrop(key);
-                  }}
                   onClick={() => handleActivitySort(key)}
-                  title="Klikk for å sortere, dra for å flytte kolonnen"
+                  title="Klikk for å sortere"
                 >
                   {COLUMN_LABELS[key]}
                   <span className={styles["list-sort-indicator"]}>
@@ -1608,6 +1582,28 @@ export default function TransaksjonerPage() {
               ))}
               <span className={`${styles["list-sort"]} ${styles["empty"]}`} aria-hidden="true" />
             </div>
+            {filtersOpen ? (
+              <div className={styles["filter-row"]} role="search">
+                {columnOrder.map((key) => (
+                  <div key={key} className={styles["filter-cell"]} data-col={key}>
+                    {renderFilterCell(key)}
+                  </div>
+                ))}
+                <span className={styles["filter-reset"]}>
+                  {hasActivityFilters ? (
+                    <button
+                      className="icon-btn"
+                      type="button"
+                      title="Nullstill filtre"
+                      aria-label="Nullstill filtre"
+                      onClick={clearActivityFilters}
+                    >
+                      <IconX />
+                    </button>
+                  ) : null}
+                </span>
+              </div>
+            ) : null}
             <div
               className={`${styles["list-row"]} ${styles["new-row"]}`}
               onKeyDown={(e) =>
@@ -1634,6 +1630,109 @@ export default function TransaksjonerPage() {
                 {newRowSaving ? "..." : <IconPlus />}
               </button>
             </div>
+            {!hasActivityFilters && (pendingFixed.length || skippedFixed) ? (
+              <div className={styles["fixed-head"]}>
+                <span className="helper">
+                  {pendingFixed.length
+                    ? `${pendingFixed.length} ${pendingFixed.length === 1 ? "fast utgift er" : "faste utgifter er"} ikke ført for ${selectedMonthLabel}`
+                    : `Alle faste utgifter er ført eller hoppet over for ${selectedMonthLabel}`}
+                </span>
+                {skippedFixed ? (
+                  <button
+                    className="btn btn-ghost btn-small"
+                    type="button"
+                    onClick={() => restoreAll("missing-fixed")}
+                  >
+                    Vis {skippedFixed} hoppet over
+                  </button>
+                ) : null}
+                {pendingFixed.length > 1 ? (
+                  <button
+                    className="btn btn-primary btn-small"
+                    type="button"
+                    onClick={() => bookFixed(pendingFixed)}
+                    disabled={bookingFixed}
+                  >
+                    Før alle {pendingFixed.length}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            {!hasActivityFilters
+              ? pendingFixed.map((template) => {
+                  const categoryName =
+                    ledger.categories.find((c) => c.id === template.category_id)?.category ??
+                    "Ukategorisert";
+                  const slot = getCategorySlot(categoryName);
+                  return (
+                    <div
+                      key={`fixed-${template.id}`}
+                      className={`${styles["list-row"]} ${styles["fixed-row"]}`}
+                      role="row"
+                    >
+                      {columnOrder.map((key) => {
+                        switch (key) {
+                          case "date":
+                            return (
+                              <span key={key} data-col="date">
+                                {formatDate(materializationDate(template, single!.year, single!.month))}
+                              </span>
+                            );
+                          case "tag":
+                            return <span key={key} data-col="tag">{template.tag ?? ""}</span>;
+                          case "item":
+                            return <strong key={key} data-col="item">{template.item}</strong>;
+                          case "amount":
+                            return (
+                              <strong key={key} data-col="amount" className="num">
+                                -{formatCurrency(template.price)}
+                              </strong>
+                            );
+                          case "category":
+                            return (
+                              <span
+                                key={key}
+                                data-col="category"
+                                className={styles["category-pill"]}
+                                style={
+                                  {
+                                    "--cat-bg": categoryTint(slot),
+                                    "--cat-ink": categoryInk(slot),
+                                  } as CSSProperties
+                                }
+                              >
+                                {categoryName}
+                              </span>
+                            );
+                        }
+                      })}
+                      <span className={styles["fixed-actions"]}>
+                        <button
+                          className="icon-btn icon-btn-confirm"
+                          type="button"
+                          onClick={() => bookFixed([template])}
+                          disabled={bookingFixed}
+                          aria-label={`Før ${template.item} for ${selectedMonthLabel}`}
+                          title="Før denne måneden"
+                        >
+                          <IconCheck />
+                        </button>
+                        <button
+                          className="icon-btn"
+                          type="button"
+                          onClick={() =>
+                            dismiss("missing-fixed", missingFixedRef(template.id, periodKey))
+                          }
+                          aria-label={`Hopp over ${template.item} for ${selectedMonthLabel}`}
+                          title="Gjelder ikke denne måneden"
+                        >
+                          <IconX />
+                        </button>
+                      </span>
+                    </div>
+                  );
+                })
+              : null}
             {!emptyState && filteredAndSortedExpenses.length === 0 ? (
               <div className="empty">
                 Ingen transaksjoner matcher filtrene i aktivitetstabellen.
@@ -1707,15 +1806,16 @@ export default function TransaksjonerPage() {
                   {columnOrder.map((key) => {
                     switch (key) {
                       case "date":
-                        return <span key={key}>{formatDate(expense.date)}</span>;
+                        return <span key={key} data-col="date">{formatDate(expense.date)}</span>;
                       case "tag":
-                        return <span key={key}>{expense.tag ?? ""}</span>;
+                        return <span key={key} data-col="tag">{expense.tag ?? ""}</span>;
                       case "item":
-                        return <strong key={key}>{expense.item}</strong>;
+                        return <strong key={key} data-col="item">{expense.item}</strong>;
                       case "amount":
                         return (
                           <strong
                             key={key}
+                            data-col="amount"
                             className={`num ${isIncome ? "text-income" : ""}`}
                           >
                             {isIncome ? `+${amount}` : `-${amount}`}
@@ -1725,6 +1825,7 @@ export default function TransaksjonerPage() {
                         return (
                           <span
                             key={key}
+                            data-col="category"
                             className={styles["category-pill"]}
                             style={categoryStyle}
                           >
@@ -1733,24 +1834,30 @@ export default function TransaksjonerPage() {
                         );
                     }
                   })}
-                  <button
-                    className={styles["edit-button"]}
-                    type="button"
-                    onClick={() => handleStartEdit(expense)}
-                    aria-label={`Rediger ${expense.item}`}
-                  >
-                    Rediger
-                  </button>
-                  <button
-                    className={`icon-btn icon-btn-danger ${styles["row-delete"]}`}
-                    type="button"
-                    onClick={() => handleDelete(expense)}
-                    disabled={deletingId === expense.id}
-                    aria-label={`Slett ${expense.item}`}
-                    title="Slett"
-                  >
-                    <IconTrash />
-                  </button>
+                  {/* Visible, not only a double-click: a touch screen has no
+                      double-click, so on a phone a row could not be edited
+                      at all. */}
+                  <span className={styles["row-buttons"]}>
+                    <button
+                      className="icon-btn"
+                      type="button"
+                      onClick={() => handleStartEdit(expense)}
+                      aria-label={`Rediger ${expense.item}`}
+                      title="Rediger"
+                    >
+                      <IconPencil />
+                    </button>
+                    <button
+                      className="icon-btn icon-btn-danger"
+                      type="button"
+                      onClick={() => handleDelete(expense)}
+                      disabled={deletingId === expense.id}
+                      aria-label={`Slett ${expense.item}`}
+                      title="Slett"
+                    >
+                      <IconTrash />
+                    </button>
+                  </span>
                 </div>
               );
             })}

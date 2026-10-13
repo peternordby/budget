@@ -22,17 +22,12 @@
   gap: 4px;
 }
 
-.mom-nav :global(.btn) {
-  font-size: 16px;
-  line-height: 1;
-  padding-inline: 10px;
-}
-
 .mom-years {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin: 12px 0 2px;
+  align-items: center;
 }
 
 /* Shape only. The year chips are .btn btn-ghost btn-small like the controls
@@ -42,8 +37,13 @@
    agree. */
 .mom-year {
   border-radius: 999px;
-  padding: 3px 12px;
-  font-size: 12px;
+}
+
+/* Some but not all of the year's months are selected — a single month shows
+   which year it sits in. Dashed, so it never reads as the solid "on". */
+.mom-year[data-partial="true"] {
+  border-style: dashed;
+  border-color: var(--accent);
 }
 
 .mom-legend {

@@ -9,6 +9,10 @@ import {
   parsePeriod,
   monthRangeLabel,
   periodLabel,
+  selectionSpan,
+  spanUnit,
+  toggleYear,
+  yearKeys,
   refToKey,
   windowLabel,
   yearAnchor,
@@ -146,13 +150,28 @@ describe("periodLabel", () => {
     ).toBe("3 måneder 2026");
   });
 
-  it("drops the year when the selection spans more than one", () => {
+  it("names a run of months across a year end by its range", () => {
     expect(
       periodLabel([
         { year: 2025, month: 12 },
         { year: 2026, month: 1 },
       ])
+    ).toBe("des 2025–jan 2026");
+  });
+
+  it("counts a gappy selection across years", () => {
+    expect(
+      periodLabel([
+        { year: 2025, month: 3 },
+        { year: 2026, month: 1 },
+      ])
     ).toBe("2 måneder valgt");
+  });
+
+  it("names several whole years", () => {
+    const year = (y: number) => Array.from({ length: 12 }, (_, i) => ({ year: y, month: i + 1 }));
+    expect(periodLabel([...year(2025), ...year(2026)])).toBe("2025–2026");
+    expect(periodLabel([...year(2023), ...year(2025)])).toBe("2023 og 2025");
   });
 
   it("says so when nothing is selected", () => {
@@ -224,5 +243,35 @@ describe("windowLabel", () => {
   it("collapses a single month and survives an empty window", () => {
     expect(monthRangeLabel(monthList([[2026, 5]]))).toBe("mai 2026");
     expect(windowLabel([])).toBe("");
+  });
+});
+
+describe("toggleYear", () => {
+  it("selects just the year from a month selection", () => {
+    expect(toggleYear(["2026-03"], 2025)).toEqual(yearKeys(2025));
+  });
+
+  it("adds and removes years while the selection is whole years", () => {
+    const both = toggleYear(yearKeys(2026), 2025);
+    expect(both).toEqual([...yearKeys(2025), ...yearKeys(2026)]);
+    expect(toggleYear(both, 2026)).toEqual(yearKeys(2025));
+  });
+
+  it("never empties the selection", () => {
+    expect(toggleYear(yearKeys(2026), 2026)).toEqual(yearKeys(2026));
+  });
+});
+
+describe("selectionSpan and spanUnit", () => {
+  it("steps a month, a year or two years", () => {
+    expect(selectionSpan(["2026-03"])).toBe(1);
+    expect(spanUnit(["2026-03"])).toBe("måned");
+    expect(selectionSpan(yearKeys(2026))).toBe(12);
+    expect(spanUnit(yearKeys(2026))).toBe("år");
+    const two = [...yearKeys(2025), ...yearKeys(2026)];
+    expect(selectionSpan(two)).toBe(24);
+    expect(spanUnit(two)).toBe("2 år");
+    expect(spanUnit(["2026-01", "2026-03"])).toBe("periode");
+    expect(selectionSpan(["2026-01", "2026-03"])).toBe(3);
   });
 });

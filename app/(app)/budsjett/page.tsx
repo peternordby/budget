@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useLedger, useLedgerSelection } from "@/components/LedgerProvider";
 import { usePeriod } from "@/lib/usePeriod";
 import { supabase } from "@/lib/supabaseClient";
 import { categoryColor, getCategorySlot } from "@/lib/categoryColor";
-import { IconCheck, IconPencil, IconPlus, IconTrash, IconX } from "@/components/icons";
+import { IconCheck, IconPencil, IconX } from "@/components/icons";
 import { BulletBar } from "@/components/charts";
 import { formatCurrency, monthLabel, monthName, toNumber } from "@/lib/format";
 import { monthKey, type MonthRef } from "@/lib/insights";
 import { decNumber, encField } from "@/lib/crypto";
 import {
-  CATEGORY_KINDS,
   KIND_LABELS,
   isIncomeKind,
   isSpendingKind,
@@ -46,17 +46,9 @@ export default function BudsjettPage() {
   // click, because the button's label has to state how many it would copy
   // before anyone presses it.
   const [previousBudgets, setPreviousBudgets] = useState<Record<number, number>>({});
-  const [newName, setNewName] = useState("");
-  const [newKind, setNewKind] = useState<CategoryKind>("variable");
-  const [adding, setAdding] = useState(false);
-  // The row currently open for editing, and its pending kind. Budget edits go
-  // into `drafts` like every other pending figure; the kind is held separately
-  // because it writes to `category` rather than `budget`, and holding it means
-  // the row's cancel button can actually cancel it.
+  // The row whose budget is open for editing. Names, kinds and deleting live
+  // on /profil/kategorier.
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [nameDraft, setNameDraft] = useState<string | null>(null);
-  const [kindDraft, setKindDraft] = useState<CategoryKind | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const periodKey = single ? monthKey(single.year, single.month) : "";
 
@@ -129,20 +121,6 @@ export default function BudsjettPage() {
     });
     return map;
   }, [ledger.budgets, single]);
-
-  // Which categories can never be deleted, because something still points at
-  // them. `category.id` is referenced by expense, budget and recurring_expense
-  // with no cascade, so the delete would fail at the database anyway — this
-  // just says so before the click instead of after it.
-  const usedCategoryIds = useMemo(() => {
-    const used = new Set<number>();
-    ledger.expenses.forEach((expense) => {
-      if (expense.category_id != null) used.add(expense.category_id);
-    });
-    ledger.budgets.forEach((entry) => used.add(entry.category_id));
-    ledger.templates.forEach((template) => used.add(template.category_id));
-    return used;
-  }, [ledger.expenses, ledger.budgets, ledger.templates]);
 
   const rows = useMemo(() => {
     return ledger.categories
@@ -280,31 +258,9 @@ export default function BudsjettPage() {
     return saveRows(dirtyRows);
   }
 
-  /** Commit one row: whichever of its name, kind and budget actually changed. */
+  /** Commit one row's budget, if it changed. */
   async function commitRow(row: (typeof rows)[number]) {
-    const name = (nameDraft ?? row.name).trim();
-    // Blanking the name is a mistake, not an instruction: every form in the app
-    // needs a category, and a nameless one would render as an empty pill
-    // everywhere. Stay in edit mode and say so rather than silently keeping the
-    // old name, which looks like the save was ignored.
-    if (!name) {
-      setStatus("Kategorien må ha et navn.");
-      return;
-    }
-
-    const patch: { category?: string; kind?: CategoryKind } = {};
-    if (name !== row.name) patch.category = name;
-    if (kindDraft && kindDraft !== row.kind) patch.kind = kindDraft;
-    const wrotePatch = Object.keys(patch).length > 0;
-
-    if (wrotePatch && !(await writeCategory(row.id, patch))) return;
-
-    if (isDirty(row)) {
-      // saveRows refetches, so it covers the patch above too.
-      await saveRows([row]);
-    } else if (wrotePatch) {
-      await ledger.refetch();
-    }
+    if (isDirty(row)) await saveRows([row]);
     closeRow(row);
   }
 
@@ -319,8 +275,6 @@ export default function BudsjettPage() {
 
   function closeRow(_row: { id: number }) {
     setEditingId(null);
-    setNameDraft(null);
-    setKindDraft(null);
   }
 
   /**
@@ -343,63 +297,6 @@ export default function BudsjettPage() {
     });
   }
 
-  async function handleAddCategory() {
-    const name = newName.trim();
-    if (!name) return;
-    setAdding(true);
-    setStatus(null);
-    const { error } = await supabase
-      .from("category")
-      .insert({ category: name, kind: newKind, user_id: ledger.userId });
-    if (error) {
-      setStatus(error.message);
-    } else {
-      await ledger.refetch();
-      setNewName("");
-      setNewKind("variable");
-    }
-    setAdding(false);
-  }
-
-  async function handleDelete(id: number) {
-    setStatus(null);
-    const { error } = await supabase
-      .from("category")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", ledger.userId);
-    if (error) {
-      setStatus(error.message);
-      return;
-    }
-    setConfirmDeleteId(null);
-    await ledger.refetch();
-  }
-
-  /**
-   * The category row's own columns, in one update — the name and the kind both
-   * live on `category`, so editing both is one statement rather than two.
-   *
-   * No refetch of its own: commitRow may also be writing a budget, and two
-   * sequential refetches of the whole ledger for one row's edit is a waste.
-   */
-  async function writeCategory(
-    id: number,
-    patch: { category?: string; kind?: CategoryKind }
-  ) {
-    setStatus(null);
-    const { error } = await supabase
-      .from("category")
-      .update(patch)
-      .eq("id", id)
-      .eq("user_id", ledger.userId);
-    if (error) {
-      setStatus(error.message);
-      return false;
-    }
-    return true;
-  }
-
   const previous = single ? previousPeriod(single.year, single.month) : null;
 
   return (
@@ -407,8 +304,13 @@ export default function BudsjettPage() {
       <section className="card section-gap">
         <div className="card-head">
           <h2 className="section-title">Budsjett</h2>
-          <span className="helper">
-            {single ? monthLabel(single.year, single.month) : "Ingen måned valgt"}
+          <span className="card-head-meta">
+            <span className="helper">
+              {single ? monthLabel(single.year, single.month) : "Ingen måned valgt"}
+            </span>
+            <Link href="/profil/kategorier" className="btn btn-ghost btn-small">
+              Endre kategorier
+            </Link>
           </span>
         </div>
 
@@ -482,9 +384,7 @@ export default function BudsjettPage() {
                 // the track is the spend and the budget is marked inside.
                 const barScale = !hasBudget ? 0 : exceeded ? row.spent : budgetValue;
                 const catColor = categoryColor(getCategorySlot(row.name));
-                const inUse = usedCategoryIds.has(row.id);
                 const isEditing = editingId === row.id;
-                const isConfirming = confirmDeleteId === row.id;
 
                 return (
                   <div key={row.id} className={styles["budget-row"]}>
@@ -497,45 +397,14 @@ export default function BudsjettPage() {
                             : catColor,
                         }}
                       />
-                      {isEditing ? (
-                        <input
-                          className={styles["budget-name-input"]}
-                          value={nameDraft ?? row.name}
-                          onChange={(event) => setNameDraft(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") commitRow(row);
-                            if (event.key === "Escape") cancelRow(row);
-                          }}
-                          aria-label={`Navn på ${row.name}`}
-                          autoFocus
-                        />
-                      ) : (
-                        <strong className={income ? "text-income" : ""}>
-                          {row.name}
-                        </strong>
-                      )}
+                      <strong className={income ? "text-income" : ""}>
+                        {row.name}
+                      </strong>
                     </div>
 
-                    {isEditing ? (
-                      <select
-                        className={styles["budget-kind"]}
-                        value={kindDraft ?? row.kind}
-                        onChange={(event) =>
-                          setKindDraft(event.target.value as CategoryKind)
-                        }
-                        aria-label={`Type for ${row.name}`}
-                      >
-                        {CATEGORY_KINDS.map((kind) => (
-                          <option key={kind} value={kind}>
-                            {KIND_LABELS[kind]}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className={styles["budget-kind-text"]}>
-                        {KIND_LABELS[row.kind]}
-                      </span>
-                    )}
+                    <span className={styles["budget-kind-text"]}>
+                      {KIND_LABELS[row.kind]}
+                    </span>
 
                     {isEditing ? (
                       <input
@@ -557,6 +426,7 @@ export default function BudsjettPage() {
                           if (event.key === "Escape") cancelRow(row);
                         }}
                         aria-label={`Budsjett for ${row.name}`}
+                        autoFocus
                       />
                     ) : (
                       // The draft rather than the stored value, so what
@@ -597,57 +467,16 @@ export default function BudsjettPage() {
                             <IconX />
                           </button>
                         </>
-                      ) : isConfirming ? (
-                        <>
-                          <button
-                            className="icon-btn icon-btn-confirm"
-                            type="button"
-                            onClick={() => handleDelete(row.id)}
-                            aria-label={`Bekreft sletting av ${row.name}`}
-                          >
-                            <IconCheck />
-                          </button>
-                          <button
-                            className="icon-btn icon-btn-dismiss"
-                            type="button"
-                            onClick={() => setConfirmDeleteId(null)}
-                            aria-label="Avbryt"
-                          >
-                            <IconX />
-                          </button>
-                        </>
                       ) : (
                         <>
                           <button
                             className="icon-btn"
                             type="button"
-                            onClick={() => {
-                              setConfirmDeleteId(null);
-                              setNameDraft(row.name);
-                              setKindDraft(row.kind);
-                              setEditingId(row.id);
-                            }}
-                            aria-label={`Endre ${row.name}`}
-                            title="Endre navn, type og budsjett"
+                            onClick={() => setEditingId(row.id)}
+                            aria-label={`Endre budsjett for ${row.name}`}
+                            title="Endre budsjett"
                           >
                             <IconPencil />
-                          </button>
-                          <button
-                            className="icon-btn icon-btn-danger"
-                            type="button"
-                            disabled={inUse}
-                            onClick={() => {
-                              closeRow(row);
-                              setConfirmDeleteId(row.id);
-                            }}
-                            aria-label={`Slett ${row.name}`}
-                            title={
-                              inUse
-                                ? "Kan ikke slettes: kategorien er i bruk av transaksjoner, budsjetter eller faste utgifter"
-                                : "Slett kategori"
-                            }
-                          >
-                            <IconTrash />
                           </button>
                         </>
                       )}
@@ -691,54 +520,6 @@ export default function BudsjettPage() {
         )}
       </section>
 
-      <section className="card section-gap">
-        <div className="card-head">
-          <h2 className="section-title">Ny kategori</h2>
-        </div>
-        <div className="toolbar">
-          <div className="field">
-            <label htmlFor="new-category-name">navn</label>
-            <input
-              id="new-category-name"
-              value={newName}
-              onChange={(event) => setNewName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") handleAddCategory();
-              }}
-              placeholder="Mat"
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="new-category-kind">type</label>
-            <select
-              id="new-category-kind"
-              value={newKind}
-              onChange={(event) => setNewKind(event.target.value as CategoryKind)}
-            >
-              {CATEGORY_KINDS.map((kind) => (
-                <option key={kind} value={kind}>
-                  {KIND_LABELS[kind]}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="toolbar-actions">
-            <button
-              className="btn btn-primary"
-              type="button"
-              onClick={handleAddCategory}
-              disabled={adding || !newName.trim()}
-            >
-              <IconPlus />
-              {adding ? "Legger til..." : "Legg til"}
-            </button>
-          </div>
-        </div>
-        <p className="helper">
-          Typen bestemmer hvor kategorien teller: inntekt, fast eller variabel
-          utgift, eller sparing. Den kan endres per rad over.
-        </p>
-      </section>
     </>
   );
 }

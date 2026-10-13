@@ -7,7 +7,10 @@ import {
   keyToRef,
   parsePeriod,
   refToKey,
+  selectionSpan,
   serializePeriod,
+  toggleYear,
+  wholeYears,
   yearAnchor,
   type PeriodState,
 } from "@/lib/period";
@@ -21,11 +24,12 @@ export type PeriodApi = {
   /** False until the URL carries an explicit selection. */
   ready: boolean;
   selectMonth: (ref: MonthRef, additive: boolean) => void;
+  /** A year chip: just that year, or add/remove it while whole years are selected. */
   selectYear: (year: number) => void;
   /** Select an explicit set of month keys (the picker's "Alle"). */
   selectMonths: (keys: string[]) => void;
-  /** Move the selection *and* the window by whole months. */
-  shiftPeriod: (delta: number) => void;
+  /** Move the selection *and* the window back (-1) or forward (1) by its own span. */
+  shiftPeriod: (direction: -1 | 1) => void;
   /** Select this month and scroll the window back to it. */
   goToToday: () => void;
   bootstrap: (ref: MonthRef) => void;
@@ -75,16 +79,16 @@ export function usePeriod(fallback: MonthRef): PeriodApi {
 
   const selectYear = useCallback(
     (year: number) => {
-      const months: string[] = [];
-      for (let month = 1; month <= 12; month += 1) {
-        months.push(refToKey({ year, month }));
-      }
+      const selected = toggleYear(state.selected, year);
+      const years = wholeYears(selected) ?? [year];
       // yearAnchor, not December: the picker's window overhangs its anchor, so
       // anchoring at December would draw April–March and hide a third of the
-      // year that was just selected.
-      write({ selected: months, anchor: yearAnchor(year) });
+      // year that was just selected. The year pressed is the one shown, unless
+      // pressing it took it away — then the newest year left.
+      const shown = years.includes(year) ? year : years[years.length - 1];
+      write({ selected, anchor: yearAnchor(shown) });
     },
-    [write]
+    [state.selected, write]
   );
 
   const selectMonths = useCallback(
@@ -100,10 +104,12 @@ export function usePeriod(fallback: MonthRef): PeriodApi {
   // The arrows move the period, not just the view: pressing ‹ used to scroll
   // the chart a month into the past and leave the selection where it was, so
   // every figure on the page stayed put and the button looked like it had done
-  // nothing. Each selected month moves by the same delta, so a multi-month
-  // selection keeps its size and a single month behaves as "previous/next".
+  // nothing. The step is the selection's own span (lib/period.ts,
+  // selectionSpan): a month steps a month, a year a year — a one-month step
+  // turned January–December into February–January.
   const shiftPeriod = useCallback(
-    (delta: number) => {
+    (direction: -1 | 1) => {
+      const delta = direction * selectionSpan(state.selected);
       write({
         selected: state.selected
           .map((key) => refToKey(addMonths(keyToRef(key), delta)))

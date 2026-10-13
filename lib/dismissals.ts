@@ -2,13 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-// Two things in the app are suggestions rather than facts, and both need a way
-// to say "no, not this one":
+// A suggestion rather than a fact needs a way to say "no, not this one":
 //
-//   subscription   — a recurring charge /innsikt spotted that was deliberately
-//                    never registered as a fixed expense. Keyed by the
-//                    normalised item name, since that is what the detection
-//                    groups on.
 //   missing-fixed  — a fixed expense that has not been booked this month and
 //                    genuinely does not belong to it (an annual fee, a service
 //                    that was paused). Keyed by template id *and* month: the
@@ -20,11 +15,11 @@ import { useCallback, useEffect, useState } from "react";
 // suggestion reappearing on the phone.
 export const DISMISSALS_KEY = "budget.dismissals.v1";
 
-export type DismissalKind = "subscription" | "missing-fixed";
+export type DismissalKind = "missing-fixed";
 
 export type Dismissals = Record<DismissalKind, string[]>;
 
-const EMPTY: Dismissals = { subscription: [], "missing-fixed": [] };
+const EMPTY: Dismissals = { "missing-fixed": [] };
 
 export function missingFixedRef(templateId: number, monthKey: string) {
   return `${templateId}:${monthKey}`;
@@ -44,7 +39,7 @@ export function parseDismissals(raw: string | null): Dismissals {
         ? value.filter((item): item is string => typeof item === "string")
         : [];
     };
-    return { subscription: read("subscription"), "missing-fixed": read("missing-fixed") };
+    return { "missing-fixed": read("missing-fixed") };
   } catch {
     return EMPTY;
   }

@@ -25,6 +25,40 @@ export function IconChevronUp() {
   );
 }
 
+export function IconChevronLeft() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24">
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  );
+}
+
+export function IconChevronRight() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24">
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}
+
+export function IconFilter() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24">
+      <path d="M3 5h18M6 12h12M10 19h4" />
+    </svg>
+  );
+}
+
+export function IconMore() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24">
+      <circle cx="12" cy="5" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="12" cy="19" r="1" />
+    </svg>
+  );
+}
+
 export function IconPencil() {
   return (
     <svg className="icon" viewBox="0 0 24 24">

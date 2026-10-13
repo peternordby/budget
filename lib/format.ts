@@ -69,3 +69,6 @@ export function monthName(month: number) {
 export function monthLabel(year: number, month: number) {
   return `${monthName(month)} ${year}`;
 }
+
+// "jan".."des", for axis labels and compact dates.
+export const SHORT_MONTH_NAMES = MONTH_NAMES.map((name) => name.slice(0, 3));

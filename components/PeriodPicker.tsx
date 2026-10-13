@@ -4,30 +4,21 @@ import { useEffect, useMemo, type MouseEvent } from "react";
 import MonthColumns, { type MonthPoint } from "@/components/MonthColumns";
 import { useLedger, useLedgerHistory } from "@/components/LedgerProvider";
 import { usePeriod } from "@/lib/usePeriod";
-import { MONTH_NAMES, formatCurrency, formatSignedCurrency } from "@/lib/format";
+import {
+  MONTH_NAMES,
+  SHORT_MONTH_NAMES,
+  formatCurrency,
+  formatSignedCurrency,
+} from "@/lib/format";
 import {
   addMonths,
   aggregateByMonth,
   monthKey,
   type MonthRef,
 } from "@/lib/insights";
-import { WINDOW_AFTER, chartWindow } from "@/lib/period";
+import { WINDOW_AFTER, chartWindow, spanUnit } from "@/lib/period";
+import { IconChevronLeft, IconChevronRight } from "@/components/icons";
 import styles from "./PeriodPicker.module.css";
-
-const SHORT_MONTHS = [
-  "jan",
-  "feb",
-  "mar",
-  "apr",
-  "mai",
-  "jun",
-  "jul",
-  "aug",
-  "sep",
-  "okt",
-  "nov",
-  "des",
-];
 
 export default function PeriodPicker() {
   const fallback = useMemo<MonthRef>(
@@ -115,7 +106,7 @@ export default function PeriodPicker() {
     () =>
       monthly.map((month, index) => ({
         key: month.key,
-        label: SHORT_MONTHS[month.month - 1],
+        label: SHORT_MONTH_NAMES[month.month - 1],
         yearLabel:
           month.month === 1 || index === 0 ? String(month.year) : undefined,
         values: [month.income, month.expenses],
@@ -149,18 +140,24 @@ export default function PeriodPicker() {
   const windowRangeLabel = useMemo(() => {
     const first = months[0];
     const last = months[months.length - 1];
-    return `${SHORT_MONTHS[first.month - 1]} ${first.year} – ${SHORT_MONTHS[last.month - 1]} ${last.year}`;
+    return `${SHORT_MONTH_NAMES[first.month - 1]} ${first.year} – ${SHORT_MONTH_NAMES[last.month - 1]} ${last.year}`;
   }, [months]);
 
-  // A year button is "active" when the current selection is exactly that
-  // year's twelve months.
-  function isWholeYearSelected(year: number) {
-    if (selectedKeys.size !== 12) return false;
+  // A year chip is "on" when all twelve of its months are selected (alone or
+  // together with other whole years), and "partial" when some are — so a
+  // single month still shows which year it belongs to.
+  function yearState(year: number) {
+    let count = 0;
     for (let m = 1; m <= 12; m += 1) {
-      if (!selectedKeys.has(monthKey(year, m))) return false;
+      if (selectedKeys.has(monthKey(year, m))) count += 1;
     }
-    return true;
+    return count === 12 ? "on" : count > 0 ? "partial" : "off";
   }
+  const unit = spanUnit(selectedList.map((ref) => monthKey(ref.year, ref.month)));
+  const allSelected =
+    availableMonths.length > 0 &&
+    selectedKeys.size === availableMonths.length &&
+    availableMonths.every((key) => selectedKeys.has(key));
 
   function handleColClick(point: MonthPoint, event: MouseEvent) {
     const month = monthly.find((candidate) => candidate.key === point.key);
@@ -190,22 +187,22 @@ export default function PeriodPicker() {
           </button>
           <div className={styles["mom-nav"]}>
             <button
-              className="btn btn-ghost btn-small"
+              className="icon-btn"
               type="button"
               onClick={() => shiftPeriod(-1)}
-              aria-label="Forrige måned"
-              title="Forrige måned"
+              aria-label={`Forrige ${unit}`}
+              title={`Forrige ${unit}`}
             >
-              ‹
+              <IconChevronLeft />
             </button>
             <button
-              className="btn btn-ghost btn-small"
+              className="icon-btn"
               type="button"
               onClick={() => shiftPeriod(1)}
-              aria-label="Neste måned"
-              title="Neste måned"
+              aria-label={`Neste ${unit}`}
+              title={`Neste ${unit}`}
             >
-              ›
+              <IconChevronRight />
             </button>
           </div>
         </div>
@@ -216,31 +213,34 @@ export default function PeriodPicker() {
           {availableMonths.length ? (
             <button
               type="button"
-              className={`btn btn-ghost btn-small ${styles["mom-year"]} ${
-                selectedKeys.size === availableMonths.length &&
-                availableMonths.every((key) => selectedKeys.has(key))
-                  ? "is-on"
-                  : ""
-              }`}
+              className={`btn btn-ghost btn-small ${styles["mom-year"]} ${allSelected ? "is-on" : ""}`}
+              aria-pressed={allSelected}
               onClick={() => selectMonths(availableMonths)}
               title="Velg alle måneder med data"
             >
               Alle
             </button>
           ) : null}
-          {yearButtons.map((year) => (
-            <button
-              key={year}
-              type="button"
-              className={`btn btn-ghost btn-small ${styles["mom-year"]} ${
-                isWholeYearSelected(year) ? "is-on" : ""
-              }`}
-              onClick={() => selectYear(year)}
-              title={`Velg hele ${year}`}
-            >
-              {year}
-            </button>
-          ))}
+          {yearButtons.map((year) => {
+            const state = yearState(year);
+            return (
+              <button
+                key={year}
+                type="button"
+                className={`btn btn-ghost btn-small ${styles["mom-year"]} ${state === "on" ? "is-on" : ""}`}
+                data-partial={state === "partial" ? "true" : undefined}
+                aria-pressed={state === "on"}
+                onClick={() => selectYear(year)}
+                title={
+                  state === "on" && !allSelected
+                    ? `Fjern ${year} fra utvalget`
+                    : `Velg hele ${year} — trykk flere år for å kombinere dem`
+                }
+              >
+                {year}
+              </button>
+            );
+          })}
         </div>
       ) : null}
 
@@ -270,7 +270,7 @@ export default function PeriodPicker() {
           Utgifter
         </span>
         <span className={`${styles["mom-legend-item"]} helper`}>
-          Klikk på en måned · hold Ctrl/⌘ for å velge flere
+          Klikk på en måned · Ctrl/⌘ for flere måneder · trykk flere år for å kombinere
         </span>
       </div>
     </section>

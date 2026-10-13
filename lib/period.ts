@@ -72,13 +72,87 @@ export function periodLabel(selected: MonthRef[]) {
   if (selected.length === 1) {
     return monthLabel(selected[0].year, selected[0].month);
   }
-  const years = new Set(selected.map((ref) => ref.year));
-  if (years.size === 1) {
-    const year = selected[0].year;
-    if (selected.length === 12) return String(year);
-    return `${selected.length} måneder ${year}`;
+  const years = wholeYears(selected.map(refToKey));
+  if (years) return yearsLabel(years);
+  const distinct = new Set(selected.map((ref) => ref.year));
+  if (distinct.size === 1) {
+    return `${selected.length} måneder ${selected[0].year}`;
   }
-  return `${selected.length} måneder valgt`;
+  return isContiguous(selected)
+    ? monthRangeLabel(selected)
+    : `${selected.length} måneder valgt`;
+}
+
+/** "2026", "2025–2026", "2023 og 2025", "2022, 2024 og 2026". */
+function yearsLabel(years: number[]) {
+  if (years.length === 1) return String(years[0]);
+  if (years[years.length - 1] - years[0] === years.length - 1) {
+    return `${years[0]}–${years[years.length - 1]}`;
+  }
+  return `${years.slice(0, -1).join(", ")} og ${years[years.length - 1]}`;
+}
+
+function monthIndex(ref: MonthRef) {
+  return ref.year * 12 + ref.month - 1;
+}
+
+function isContiguous(sorted: MonthRef[]) {
+  return sorted.every((ref, i) => i === 0 || monthIndex(ref) === monthIndex(sorted[i - 1]) + 1);
+}
+
+/**
+ * The years a selection is made of, ascending, when it is nothing but whole
+ * years — January to December of each — and null otherwise.
+ */
+export function wholeYears(selected: string[]): number[] | null {
+  if (!selected.length || selected.length % 12 !== 0) return null;
+  const years = Array.from(new Set(selected.map((key) => Number(key.slice(0, 4))))).sort(
+    (a, b) => a - b
+  );
+  return years.length * 12 === selected.length ? years : null;
+}
+
+/** January–December of `year` as month keys. */
+export function yearKeys(year: number): string[] {
+  return Array.from({ length: 12 }, (_, i) => monthKey(year, i + 1));
+}
+
+/**
+ * What pressing a year chip selects. Years combine: while the selection is
+ * whole years, a chip adds its year or takes it away again (never down to
+ * nothing). From any other selection — a month, a few months, "Alle" — the
+ * chip selects just that year. No modifier key, so it works the same on a
+ * phone.
+ */
+export function toggleYear(selected: string[], year: number): string[] {
+  const years = wholeYears(selected);
+  if (!years) return yearKeys(year);
+  const next = years.includes(year)
+    ? years.filter((candidate) => candidate !== year)
+    : [...years, year].sort((a, b) => a - b);
+  return next.length ? next.flatMap(yearKeys) : selected;
+}
+
+/**
+ * How far the ‹ › arrows move a selection: by its own span, so one month steps
+ * a month, a year steps a year, and two years step two. Stepping one month at
+ * a time turned a January–December selection into February–January.
+ */
+export function selectionSpan(selected: string[]): number {
+  if (!selected.length) return 1;
+  const first = keyToRef(selected[0]);
+  const last = keyToRef(selected[selected.length - 1]);
+  return monthIndex(last) - monthIndex(first) + 1;
+}
+
+/** "måned", "år", "2 år", "periode" — what the arrows step by, for their labels. */
+export function spanUnit(selected: string[]): string {
+  if (selected.length === 1) return "måned";
+  const years = wholeYears(selected);
+  if (years && selectionSpan(selected) === years.length * 12) {
+    return years.length === 1 ? "år" : `${years.length} år`;
+  }
+  return "periode";
 }
 
 /**

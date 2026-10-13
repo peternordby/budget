@@ -1,0 +1,98 @@
+/* --- Inntekt mot utgift, Faste og variable --- */
+
+.mix-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin-bottom: 4px;
+}
+
+/* Label, amount and share on one baseline, so the four rows can be compared
+   down the column when they wrap on a narrow screen. */
+.mix-legend-item[data-dim="true"] {
+  opacity: 0.4;
+}
+
+.mix-legend-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  transition: opacity 140ms ease;
+}
+
+.mix-legend-name {
+  font-weight: 600;
+}
+
+.mix-trend {
+  display: grid;
+  gap: 4px;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border-soft);
+}
+
+/* --- Section 3: Kategorier over tid --- */
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.category-tile {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.category-tile:hover {
+  box-shadow: var(--shadow-soft);
+}
+
+.category-tile.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.category-tile-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* The sparkline plus its hover layer. Position context for both, so the
+   percentage the tooltip is placed at lines up with the SVG's own 0..100
+   viewBox. */
+.tile-chart {
+  position: relative;
+  display: block;
+}
+
+.category-tile-stats {
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+
+/* Label left, amount flush right, so the three figures form a column that
+   can be compared tile to tile. */
+.tile-stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tile-stat .num {
+  font-weight: 600;
+}

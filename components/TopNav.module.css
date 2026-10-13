@@ -36,11 +36,15 @@
     border-top: 1px solid var(--border);
   }
 
+  /* Six tabs share a 375px screen: ~58px each, so the padding is nearly all
+     given up to the label and the label may not push its neighbour. */
   .nav-route {
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;
     text-align: center;
-    padding: 10px 8px;
-    font-size: 13px;
+    padding: 10px 2px;
+    font-size: 12px;
+    white-space: nowrap;
   }
 }
 
