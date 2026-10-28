@@ -10,6 +10,7 @@ import {
 import MoreMenu from "@/components/MoreMenu";
 import DateRangePicker from "@/components/DateRangePicker";
 import ItemAutocomplete from "@/components/ItemAutocomplete";
+import TagSelect from "@/components/TagSelect";
 import Toast from "@/components/Toast";
 import { supabase } from "@/lib/supabaseClient";
 import { categoryColor, categoryInk, categoryTint, getCategorySlot } from "@/lib/categoryColor";
@@ -49,6 +50,7 @@ import {
   type ExpenseImport,
 } from "@/lib/importExpenses";
 import { encField } from "@/lib/crypto";
+import { findTagByName, tagForDate } from "@/lib/tags";
 import styles from "./transaksjoner.module.css";
 
 // One filter per column, laid out in the table's own grid under its header,
@@ -160,11 +162,14 @@ export default function TransaksjonerPage() {
     date: "",
   });
   const [editSaving, setEditSaving] = useState(false);
+  // `tag` is a tag id; until one is picked by hand (`tagPicked`), the
+  // merkelapp whose dates hold the draft's date is used instead.
   const [newRowDraft, setNewRowDraft] = useState({
     item: "",
     price: "",
     categoryId: "",
     tag: "",
+    tagPicked: false,
     date: "",
   });
   const [newRowSaving, setNewRowSaving] = useState(false);
@@ -269,7 +274,6 @@ export default function TransaksjonerPage() {
         item: await encField(template.item),
         price: await encField(template.price),
         category_id: template.category_id,
-        tag: await encField(template.tag),
         user_id: ledger.userId,
         date: materializationDate(template, single.year, single.month),
         recurring_id: template.id,
@@ -290,7 +294,8 @@ export default function TransaksjonerPage() {
           ...row,
           item: template.item,
           price: template.price,
-          tag: template.tag,
+          tag_id: null,
+          tag: null,
           category: ledger.categories.find((c) => c.id === row.category_id) ?? null,
         });
       });
@@ -348,13 +353,9 @@ export default function TransaksjonerPage() {
   ]);
 
   const activityTagOptions = useMemo(() => {
-    const tags = new Set<string>();
-    activitySource.forEach((expense) => {
-      const value = expense.tag?.trim();
-      if (value) tags.add(value);
-    });
-    return Array.from(tags).sort(compareTextValues);
-  }, [activitySource]);
+    const used = new Set(activitySource.map((expense) => expense.tag?.trim()));
+    return ledger.tags.map((tag) => tag.name.trim()).filter((name) => used.has(name));
+  }, [activitySource, ledger.tags]);
   const activityCategoryOptions = useMemo(() => {
     const categoryNames = new Set<string>();
     activitySource.forEach((expense) => {
@@ -380,7 +381,6 @@ export default function TransaksjonerPage() {
           item: entry.item,
           price: entry.amount,
           category_id: categoryByName.get(entry.category)?.id ?? 0,
-          tag: entry.tag,
           date: entry.date,
         }))
       ),
@@ -559,12 +559,19 @@ export default function TransaksjonerPage() {
     });
 
     const dates = rows.map((row) => row.date).sort();
+    const tagNames = new Map<string, string>();
+    rows.forEach((row) => {
+      if (row.tag && !findTagByName(ledger.tags, row.tag)) {
+        tagNames.set(row.tag.toLowerCase(), row.tag);
+      }
+    });
     return {
       rows,
       duplicates: named.length - rows.length,
       missing: importPreview.categories.filter(
         (name) => !categoryIdByName.has(name.toLowerCase())
       ),
+      missingTags: [...tagNames.values()],
       from: dates[0] ?? null,
       to: dates[dates.length - 1] ?? null,
     };
@@ -574,6 +581,7 @@ export default function TransaksjonerPage() {
     importCategoryId,
     importPreview,
     ledger.categories,
+    ledger.tags,
   ]);
 
   // Only asked for when the file left a category blank; until it is answered
@@ -619,13 +627,24 @@ export default function TransaksjonerPage() {
       ids.set(name.trim().toLowerCase(), data[0].id);
     }
 
+    const tagIds = new Map(ledger.tags.map((tag) => [tag.name.trim().toLowerCase(), tag.id]));
+    for (const name of importPlan.missingTags) {
+      try {
+        tagIds.set(name.trim().toLowerCase(), (await ledger.createTag(name)).id);
+      } catch (cause) {
+        setStatus(cause instanceof Error ? cause.message : `Kunne ikke opprette merkelappen ${name}.`);
+        setImporting(false);
+        return;
+      }
+    }
+
     // Encrypted at the call site, like every other write on this page.
     const payload = await Promise.all(
       importPlan.rows.map(async (row) => ({
         item: await encField(row.item),
         price: await encField(row.price),
         category_id: ids.get(row.name.trim().toLowerCase()) as number,
-        tag: await encField(row.tag),
+        tag_id: row.tag ? tagIds.get(row.tag.trim().toLowerCase()) ?? null : null,
         user_id: ledger.userId,
         date: row.date,
       }))
@@ -664,7 +683,7 @@ export default function TransaksjonerPage() {
         <strong>Importer fra CSV</strong>
         <span className="helper">
           Trenger kolonnene dato, beskrivelse og beløp; kategori og merkelapp
-          brukes hvis filen har dem. Semikolon, komma og tab fungerer alle, og
+          brukes hvis filen har dem, og en ukjent merkelapp opprettes uten datoer. Semikolon, komma og tab fungerer alle, og
           en fil eksportert herfra leses rett inn igjen.
         </span>
       </div>
@@ -758,6 +777,13 @@ export default function TransaksjonerPage() {
                     })`
                 )
                 .join(", ")}
+            </p>
+          ) : null}
+
+          {importPlan.missingTags.length ? (
+            <p className="helper">
+              Nye merkelapper som opprettes, uten datoer:{" "}
+              {importPlan.missingTags.join(", ")}
             </p>
           ) : null}
 
@@ -856,13 +882,13 @@ export default function TransaksjonerPage() {
         item: await encField(expense.item),
         price: await encField(toNumber(expense.price)),
         category_id: expense.category_id,
-        tag: await encField(expense.tag),
+        tag_id: expense.tag_id,
         user_id: ledger.userId,
         date: expense.date,
         recurring_id: expense.recurring_id,
       })
       .select(
-        "id, item, price, category_id, tag, user_id, date, recurring_id, category(id, category, kind)"
+        "id, item, price, category_id, tag_id, user_id, date, recurring_id, category(id, category, kind)"
       );
 
     if (error) {
@@ -881,10 +907,9 @@ export default function TransaksjonerPage() {
       const normalized: LedgerExpense = {
         ...entry,
         // The row comes back encrypted, and there is nothing to learn from
-        // decrypting it: these three values are the ones just sent.
+        // decrypting it: these values are the ones just sent.
         item: expense.item,
         price: toNumber(expense.price),
-        tag: expense.tag,
         category,
       };
       ledger.upsertExpense(normalized);
@@ -945,7 +970,7 @@ export default function TransaksjonerPage() {
       item: expense.item,
       price: String(toNumber(expense.price)),
       categoryId: String(expense.category_id),
-      tag: expense.tag ?? "",
+      tag: expense.tag_id != null ? String(expense.tag_id) : "",
       date: expense.date ?? "",
     });
   }
@@ -985,7 +1010,7 @@ export default function TransaksjonerPage() {
         item: await encField(editDraft.item.trim()),
         price: await encField(Math.round(parsed)),
         category_id: Number(editDraft.categoryId),
-        tag: await encField(editDraft.tag.trim() || null),
+        tag_id: editDraft.tag ? Number(editDraft.tag) : null,
         date: editDraft.date || null,
       })
       .eq("id", editingExpenseId)
@@ -1004,7 +1029,7 @@ export default function TransaksjonerPage() {
           item: editDraft.item.trim(),
           price: Math.round(parsed),
           category_id: Number(editDraft.categoryId),
-          tag: editDraft.tag.trim() || null,
+          tag_id: editDraft.tag ? Number(editDraft.tag) : null,
           date: editDraft.date || null,
           category: updatedCategory,
         });
@@ -1028,6 +1053,14 @@ export default function TransaksjonerPage() {
     return formatDateParts(now.getFullYear(), now.getMonth() + 1, now.getDate());
   }
 
+  const newRowTag = newRowDraft.tagPicked
+    ? newRowDraft.tag
+    : String(tagForDate(ledger.tags, newRowDraft.date || getDefaultNewRowDate())?.id ?? "");
+
+  function pickNewRowTag(tag: string) {
+    setNewRowDraft((prev) => ({ ...prev, tag, tagPicked: true }));
+  }
+
   async function handleSaveNewRow() {
     const parsed = Number(newRowDraft.price);
     if (!newRowDraft.item.trim() || !newRowDraft.categoryId || !Number.isFinite(parsed) || parsed === 0) return;
@@ -1037,13 +1070,13 @@ export default function TransaksjonerPage() {
 
     const item = newRowDraft.item.trim();
     const price = Math.round(Math.abs(parsed));
-    const tag = newRowDraft.tag.trim() || null;
+    const tagId = newRowTag ? Number(newRowTag) : null;
 
     const payload = {
       item: await encField(item),
       price: await encField(price),
       category_id: Number(newRowDraft.categoryId),
-      tag: await encField(tag),
+      tag_id: tagId,
       user_id: ledger.userId,
       // Fall back to the default so the date shown in the input is what gets saved.
       date: newRowDraft.date || getDefaultNewRowDate(),
@@ -1052,7 +1085,7 @@ export default function TransaksjonerPage() {
     const { data, error } = await supabase
       .from("expense")
       .insert(payload)
-      .select("id, item, price, category_id, tag, user_id, date, recurring_id, category(id, category, kind)");
+      .select("id, item, price, category_id, tag_id, user_id, date, recurring_id, category(id, category, kind)");
 
     if (error) {
       setStatus(error.message);
@@ -1070,7 +1103,6 @@ export default function TransaksjonerPage() {
         // back is ciphertext.
         item,
         price,
-        tag,
         category,
       };
       ledger.upsertExpense(normalized);
@@ -1087,6 +1119,7 @@ export default function TransaksjonerPage() {
         price: "",
         categoryId: newRowDraft.categoryId,
         tag: newRowDraft.tag,
+        tagPicked: newRowDraft.tagPicked,
         date: newRowDraft.date,
       });
       newRowItemRef.current?.focus();
@@ -1104,7 +1137,6 @@ export default function TransaksjonerPage() {
         ? String(suggestion.categoryId)
         : prev.categoryId,
       price: String(suggestion.price),
-      tag: suggestion.tag ?? prev.tag,
     }));
   }
 
@@ -1306,17 +1338,7 @@ export default function TransaksjonerPage() {
           />
         );
       case "tag":
-        return (
-          <input
-            id={id}
-            type="text"
-            value={newRowDraft.tag}
-            onChange={(e) =>
-              setNewRowDraft((prev) => ({ ...prev, tag: e.target.value }))
-            }
-            placeholder="Valgfritt"
-          />
-        );
+        return <TagSelect id={id} value={newRowTag} onChange={pickNewRowTag} />;
     }
   }
 
@@ -1337,16 +1359,11 @@ export default function TransaksjonerPage() {
         );
       case "tag":
         return (
-          <input
+          <TagSelect
             key={key}
             className={styles["cell-input"]}
-            type="text"
-            value={newRowDraft.tag}
-            onChange={(e) =>
-              setNewRowDraft((prev) => ({ ...prev, tag: e.target.value }))
-            }
-            placeholder="Merkelapp"
-            aria-label="Merkelapp"
+            value={newRowTag}
+            onChange={pickNewRowTag}
           />
         );
       case "item":
@@ -1418,16 +1435,11 @@ export default function TransaksjonerPage() {
         );
       case "tag":
         return (
-          <input
+          <TagSelect
             key={key}
             className={styles["cell-input"]}
-            type="text"
             value={editDraft.tag}
-            onChange={(e) =>
-              setEditDraft((prev) => ({ ...prev, tag: e.target.value }))
-            }
-            placeholder="Merkelapp"
-            aria-label="Merkelapp"
+            onChange={(tag) => setEditDraft((prev) => ({ ...prev, tag }))}
           />
         );
       case "item":
@@ -1491,6 +1503,7 @@ export default function TransaksjonerPage() {
             price: "",
             categoryId: "",
             tag: "",
+            tagPicked: false,
             date: getDefaultNewRowDate(),
           })
           )
@@ -1554,6 +1567,7 @@ export default function TransaksjonerPage() {
                   disabled: filteredAndSortedExpenses.length === 0,
                 },
                 { label: "Endre faste utgifter", href: "/profil/faste-utgifter" },
+                { label: "Endre merkelapper", href: "/profil/merkelapper" },
               ]}
             />
           </div>
@@ -1613,6 +1627,7 @@ export default function TransaksjonerPage() {
             price: "",
             categoryId: "",
             tag: "",
+            tagPicked: false,
             date: getDefaultNewRowDate(),
           })
                 )
@@ -1679,7 +1694,7 @@ export default function TransaksjonerPage() {
                               </span>
                             );
                           case "tag":
-                            return <span key={key} data-col="tag">{template.tag ?? ""}</span>;
+                            return <span key={key} data-col="tag" />;
                           case "item":
                             return <strong key={key} data-col="item">{template.item}</strong>;
                           case "amount":

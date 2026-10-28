@@ -9,7 +9,6 @@ export type RecurringTemplate = {
   item: string;
   price: number;
   category_id: number;
-  tag: string | null;
   day_of_month: number;
   active: boolean;
 };

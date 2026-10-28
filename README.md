@@ -45,7 +45,7 @@ create table public.expense (
   item text not null,        -- now ciphertext
   price bigint not null,     -- now text; see 0009_encrypted_fields.sql
   category_id integer not null,
-  tag text null,
+  tag text null,             -- dropped in 0011; see tag_id (0010_tag.sql)
   user_id uuid null,
   date date null,
   constraint expenses_pkey primary key (id),

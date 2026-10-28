@@ -140,7 +140,6 @@ export default function ItemAutocomplete({
                 <span className={styles["autocomplete-item"]}>{suggestion.item}</span>
                 <span className={`${styles["autocomplete-meta"]} helper`}>
                   {formatCurrency(suggestion.price)}
-                  {suggestion.tag ? ` · ${suggestion.tag}` : ""}
                 </span>
               </button>
             </li>
