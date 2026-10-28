@@ -10,7 +10,6 @@ function expense(overrides: Partial<IndexableExpense> = {}): IndexableExpense {
     item: "Rema 1000",
     price: 400,
     category_id: 2,
-    tag: null,
     date: "2026-08-01",
     ...overrides,
   };
@@ -62,22 +61,6 @@ describe("buildItemIndex", () => {
     ]);
 
     expect(index[0].price).toBe(103);
-  });
-
-  it("picks the most frequent tag", () => {
-    const index = buildItemIndex([
-      expense({ tag: "ferie" }),
-      expense({ tag: "mat" }),
-      expense({ tag: "mat" }),
-    ]);
-
-    expect(index[0].tag).toBe("mat");
-  });
-
-  it("reports a null tag when no entry has one", () => {
-    const index = buildItemIndex([expense({ tag: null }), expense({ tag: "" })]);
-
-    expect(index[0].tag).toBeNull();
   });
 
   it("orders the most-used items first", () => {

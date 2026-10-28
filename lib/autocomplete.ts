@@ -1,12 +1,12 @@
 // Builds description suggestions out of the user's own transaction history.
-// Choosing a suggestion prefills category, amount and tag, so a repeat purchase
-// is one keystroke rather than four fields.
+// Choosing a suggestion prefills category and amount, so a repeat purchase is
+// one keystroke rather than three fields. Not the merkelapp: that belongs to a
+// trip, and the date preselects it.
 
 export type IndexableExpense = {
   item: string;
   price: number;
   category_id: number;
-  tag: string | null;
   date: string | null;
 };
 
@@ -14,7 +14,6 @@ export type ItemSuggestion = {
   item: string;
   categoryId: number;
   price: number;
-  tag: string | null;
   lastDate: string;
   count: number;
 };
@@ -25,22 +24,6 @@ function median(values: number[]) {
   const value =
     sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
   return Math.round(value);
-}
-
-function mostFrequentTag(tags: string[]) {
-  if (!tags.length) return null;
-  const counts = new Map<string, number>();
-  tags.forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1));
-
-  let best: string | null = null;
-  let bestCount = 0;
-  counts.forEach((count, tag) => {
-    if (count > bestCount) {
-      best = tag;
-      bestCount = count;
-    }
-  });
-  return best;
 }
 
 export function buildItemIndex(expenses: IndexableExpense[]): ItemSuggestion[] {
@@ -62,15 +45,11 @@ export function buildItemIndex(expenses: IndexableExpense[]): ItemSuggestion[] {
       (a.date ?? "").localeCompare(b.date ?? "")
     );
     const latest = sorted[sorted.length - 1];
-    const tags = group
-      .map((entry) => entry.tag?.trim() ?? "")
-      .filter((tag) => tag.length > 0);
 
     suggestions.push({
       item: latest.item.trim(),
       categoryId: latest.category_id,
       price: median(group.map((entry) => entry.price)),
-      tag: mostFrequentTag(tags),
       lastDate: latest.date ?? "",
       count: group.length,
     });

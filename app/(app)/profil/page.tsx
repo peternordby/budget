@@ -300,6 +300,19 @@ export default function ProfilPage() {
 
       <section className="card section-gap">
         <div className="card-head">
+          <h2 className="section-title">Merkelapper</h2>
+          <Link href="/profil/merkelapper" className="btn btn-ghost btn-small">
+            Endre merkelapper
+          </Link>
+        </div>
+        <p className="helper">
+          Turer og prosjekter: første og siste dag, og et budsjett. Kostnaden
+          per dag ser du under Innsikt.
+        </p>
+      </section>
+
+      <section className="card section-gap">
+        <div className="card-head">
           <h2 className="section-title">Navn</h2>
         </div>
         <form className="form-grid" onSubmit={handleSaveName}>

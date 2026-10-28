@@ -13,7 +13,6 @@ function template(overrides: Partial<RecurringTemplate> = {}): RecurringTemplate
     item: "Husleie",
     price: 12000,
     category_id: 3,
-    tag: null,
     day_of_month: 1,
     active: true,
     ...overrides,

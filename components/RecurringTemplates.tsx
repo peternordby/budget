@@ -13,7 +13,6 @@ const emptyDraft = {
   item: "",
   price: "",
   categoryId: "",
-  tag: "",
   dayOfMonth: "1",
 };
 
@@ -48,7 +47,6 @@ export default function RecurringTemplates() {
       item: await encField(draft.item.trim()),
       price: await encField(Math.round(Math.abs(parsed))),
       category_id: Number(draft.categoryId),
-      tag: await encField(draft.tag.trim() || null),
       day_of_month: day,
       user_id: userId,
     });
@@ -256,17 +254,6 @@ export default function RecurringTemplates() {
                       dayOfMonth: event.target.value,
                     }))
                   }
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="recurring-tag">Merkelapp</label>
-                <input
-                  id="recurring-tag"
-                  value={draft.tag}
-                  onChange={(event) =>
-                    setDraft((prev) => ({ ...prev, tag: event.target.value }))
-                  }
-                  placeholder="Valgfritt"
                 />
               </div>
               <div className="form-actions">

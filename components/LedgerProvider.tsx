@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -20,7 +21,9 @@ import {
   type MonthRef,
 } from "@/lib/insights";
 import type { RecurringTemplate } from "@/lib/recurring";
-import { decField, decNumber } from "@/lib/crypto";
+import { decField, decNumber, encField } from "@/lib/crypto";
+import { isoDate } from "@/lib/periodStats";
+import { findTagByName, orderTags, planTagMerge, type Tag } from "@/lib/tags";
 
 export type LedgerCategory = {
   id: number;
@@ -33,6 +36,8 @@ export type LedgerExpense = {
   item: string;
   price: number;
   category_id: number;
+  tag_id: number | null;
+  /** The merkelapp's name, resolved from `tag_id` by the provider. */
   tag: string | null;
   date: string | null;
   recurring_id: number | null;
@@ -53,6 +58,8 @@ export type LedgerContextValue = {
   categories: LedgerCategory[];
   budgets: LedgerBudget[];
   templates: RecurringTemplate[];
+  /** Merkelapper, in orderTags' order: current, upcoming, past, undated. */
+  tags: Tag[];
   /** Every YYYY-MM that has at least one transaction, all time, ascending. */
   availableMonths: string[];
   windowStart: MonthRef;
@@ -68,6 +75,11 @@ export type LedgerContextValue = {
   ensureMonthCovered: (ref: MonthRef) => void;
   upsertExpense: (expense: LedgerExpense) => void;
   removeExpense: (id: number) => void;
+  upsertTag: (tag: Tag) => void;
+  /** Also clears the tag from local expenses, as `on delete set null` does. */
+  removeTag: (id: number) => void;
+  /** The merkelapp with this name (ignoring case), created undated if missing. */
+  createTag: (name: string) => Promise<Tag>;
 };
 
 const WINDOW_MONTHS = 24;
@@ -111,6 +123,7 @@ export function toLedgerEntries(expenses: LedgerExpense[]): LedgerEntry[] {
       kind: entry.category?.kind ?? "variable",
       date: entry.date as string,
       tag: entry.tag ?? null,
+      tagId: entry.tag_id,
     };
   });
 }
@@ -171,6 +184,33 @@ function normalizeCategory(raw: any): LedgerCategory | null {
   };
 }
 
+// 0010 created one tag per tagged expense, since the database cannot tell two
+// ciphertexts of "Roma" apart; this folds them back together once the names
+// are readable. Expenses move first, because deleting a tag sets theirs null.
+async function mergeTags(tags: Tag[], userId: string) {
+  for (const { keep, drop } of planTagMerge(tags)) {
+    const moved = await supabase
+      .from("expense")
+      .update({ tag_id: keep.id })
+      .in("tag_id", drop)
+      .eq("user_id", userId);
+    if (moved.error) throw new Error(moved.error.message);
+    const kept = await supabase
+      .from("tag")
+      .update({
+        name: await encField(keep.name),
+        start_date: keep.start,
+        end_date: keep.end,
+        budget: await encField(keep.budget),
+      })
+      .eq("id", keep.id)
+      .eq("user_id", userId);
+    if (kept.error) throw new Error(kept.error.message);
+    const dropped = await supabase.from("tag").delete().in("id", drop).eq("user_id", userId);
+    if (dropped.error) throw new Error(dropped.error.message);
+  }
+}
+
 function lastDayOf(ref: MonthRef) {
   return new Date(ref.year, ref.month, 0).getDate();
 }
@@ -224,7 +264,11 @@ export default function LedgerProvider({
   // next year's budgets). Initialised to the current month, not a fixed
   // derived value, so it can move.
   const [windowEnd, setWindowEnd] = useState<MonthRef>(() => today);
-  const [expenses, setExpenses] = useState<LedgerExpense[]>([]);
+  const [rows, setExpenses] = useState<LedgerExpense[]>([]);
+  const [tagRows, setTags] = useState<Tag[]>([]);
+  // Once per mount: a merge whose writes silently did nothing (RLS) would
+  // otherwise plan itself again on every reload.
+  const merged = useRef(false);
   const [categories, setCategories] = useState<LedgerCategory[]>([]);
   const [budgets, setBudgets] = useState<LedgerBudget[]>([]);
   const [templates, setTemplates] = useState<RecurringTemplate[]>([]);
@@ -264,6 +308,46 @@ export default function LedgerProvider({
     setExpenses((prev) => prev.filter((entry) => entry.id !== id));
   }, []);
 
+  const upsertTag = useCallback((tag: Tag) => {
+    setTags((prev) => [...prev.filter((entry) => entry.id !== tag.id), tag]);
+  }, []);
+
+  const removeTag = useCallback((id: number) => {
+    setTags((prev) => prev.filter((entry) => entry.id !== id));
+    setExpenses((prev) =>
+      prev.map((entry) => (entry.tag_id === id ? { ...entry, tag_id: null } : entry))
+    );
+  }, []);
+
+  const tags = useMemo(() => orderTags(tagRows, isoDate(new Date())), [tagRows]);
+
+  const createTag = useCallback(
+    async (name: string) => {
+      const existing = findTagByName(tags, name);
+      if (existing) return existing;
+      const { data, error } = await supabase
+        .from("tag")
+        .insert({ name: await encField(name.trim()), user_id: userId })
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      const tag: Tag = { id: data.id, name: name.trim(), start: null, end: null, budget: null };
+      upsertTag(tag);
+      return tag;
+    },
+    [tags, userId, upsertTag]
+  );
+
+  // Names come from the tag list rather than being stored on the row, so a
+  // rename or a delete on /profil/merkelapper shows everywhere at once.
+  const expenses = useMemo(() => {
+    const names = new Map(tagRows.map((tag) => [tag.id, tag.name]));
+    return rows.map((row) => ({
+      ...row,
+      tag: row.tag_id != null ? names.get(row.tag_id) ?? null : null,
+    }));
+  }, [rows, tagRows]);
+
   useEffect(() => {
     let active = true;
 
@@ -278,12 +362,12 @@ export default function LedgerProvider({
         years.push(year);
       }
 
-      const [expenseResult, categoryResult, budgetResult, metaResult, templateResult] =
+      const [expenseResult, categoryResult, budgetResult, metaResult, templateResult, tagResult] =
         await Promise.all([
           supabase
             .from("expense")
             .select(
-              "id, item, price, category_id, tag, date, recurring_id, category(id, category, kind)"
+              "id, item, price, category_id, tag_id, date, recurring_id, category(id, category, kind)"
             )
             .eq("user_id", userId)
             .gte("date", start)
@@ -305,9 +389,13 @@ export default function LedgerProvider({
           supabase.from("expense").select("date").eq("user_id", userId),
           supabase
             .from("recurring_expense")
-            .select("id, item, price, category_id, tag, day_of_month, active")
+            .select("id, item, price, category_id, day_of_month, active")
             .eq("user_id", userId)
             .order("day_of_month", { ascending: true }),
+          supabase
+            .from("tag")
+            .select("id, name, start_date, end_date, budget")
+            .eq("user_id", userId),
         ]);
 
       if (!active) return;
@@ -317,11 +405,30 @@ export default function LedgerProvider({
         categoryResult.error ??
         budgetResult.error ??
         metaResult.error ??
-        templateResult.error;
+        templateResult.error ??
+        tagResult.error;
 
       if (failure) {
         setError(failure.message);
         setLoading(false);
+        return;
+      }
+
+      const decryptedTags = await Promise.all(
+        (tagResult.data ?? []).map(async (row: any) => ({
+          id: row.id,
+          name: (await decField(row.name)) ?? "",
+          start: row.start_date ?? null,
+          end: row.end_date ?? null,
+          budget: row.budget == null ? null : await decNumber(row.budget),
+        }))
+      );
+
+      if (!active) return;
+      if (!merged.current && planTagMerge(decryptedTags).length) {
+        merged.current = true;
+        await mergeTags(decryptedTags, userId);
+        if (active) setReloadToken((token) => token + 1);
         return;
       }
 
@@ -338,7 +445,8 @@ export default function LedgerProvider({
           item: (await decField(row.item)) ?? "",
           price: await decNumber(row.price),
           category_id: row.category_id,
-          tag: await decField(row.tag ?? null),
+          tag_id: row.tag_id ?? null,
+          tag: null,
           date: row.date ?? null,
           recurring_id: row.recurring_id ?? null,
           category: normalizeCategory(row.category),
@@ -362,7 +470,6 @@ export default function LedgerProvider({
           item: (await decField(row.item)) ?? "",
           price: await decNumber(row.price),
           category_id: row.category_id,
-          tag: await decField(row.tag ?? null),
           day_of_month: row.day_of_month,
           active: row.active,
         }))
@@ -373,6 +480,7 @@ export default function LedgerProvider({
       setExpenses(decryptedExpenses);
       setBudgets(decryptedBudgets);
       setTemplates(decryptedTemplates);
+      setTags(decryptedTags);
 
       setCategories(
         (categoryResult.data ?? []).map((row: any) => ({
@@ -413,6 +521,7 @@ export default function LedgerProvider({
       categories,
       budgets,
       templates,
+      tags,
       availableMonths,
       windowStart,
       windowEnd,
@@ -423,12 +532,16 @@ export default function LedgerProvider({
       ensureMonthCovered,
       upsertExpense,
       removeExpense,
+      upsertTag,
+      removeTag,
+      createTag,
     }),
     [
       expenses,
       categories,
       budgets,
       templates,
+      tags,
       availableMonths,
       windowStart,
       windowEnd,
@@ -439,6 +552,9 @@ export default function LedgerProvider({
       ensureMonthCovered,
       upsertExpense,
       removeExpense,
+      upsertTag,
+      removeTag,
+      createTag,
     ]
   );
 

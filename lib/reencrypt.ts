@@ -13,8 +13,9 @@ import { encField, isPlaintext } from "@/lib/crypto";
  *  category names and kinds, `savings_snapshot.category` (it is inside a unique
  *  constraint), and the foreign keys. */
 const TARGETS = [
-  { table: "expense", columns: ["item", "price", "tag"] },
-  { table: "recurring_expense", columns: ["item", "price", "tag"] },
+  { table: "expense", columns: ["item", "price"] },
+  { table: "recurring_expense", columns: ["item", "price"] },
+  { table: "tag", columns: ["name", "budget"] },
   { table: "budget", columns: ["budget"] },
   { table: "savings_snapshot", columns: ["amount"] },
 ] as const;

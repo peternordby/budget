@@ -96,3 +96,18 @@
     font-size: 18px;
   }
 }
+
+/* Total against the merkelapp's budget: one line of figures over a bullet bar. */
+.budget {
+  display: grid;
+  gap: 6px;
+}
+
+.budget-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}

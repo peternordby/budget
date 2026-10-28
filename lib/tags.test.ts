@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LedgerEntry } from "@/lib/insights";
-import { tagSummaries } from "@/lib/tags";
+import { orderTags, planTagMerge, tagForDate, tagSummaries, type Tag } from "@/lib/tags";
 
 let nextId = 1;
 function entry(overrides: Partial<LedgerEntry> = {}): LedgerEntry {
@@ -12,20 +12,30 @@ function entry(overrides: Partial<LedgerEntry> = {}): LedgerEntry {
     kind: "variable",
     date: "2026-07-01",
     tag: "Roma",
+    tagId: 1,
     ...overrides,
   };
 }
 
+function tag(overrides: Partial<Tag> = {}): Tag {
+  return { id: 1, name: "Roma", start: null, end: null, budget: null, ...overrides };
+}
+
 describe("tagSummaries", () => {
-  it("sums a tag's spending over every day from first to last", () => {
-    const [roma] = tagSummaries([
-      entry({ date: "2026-07-01", amount: 300 }),
-      entry({ date: "2026-07-03", amount: 1200, category: "Reise" }),
-      entry({ date: "2026-07-03", amount: 50 }),
-    ]);
+  it("spans an undated tag from first to last purchase", () => {
+    const [roma] = tagSummaries(
+      [
+        entry({ date: "2026-07-01", amount: 300 }),
+        entry({ date: "2026-07-03", amount: 1200, category: "Reise" }),
+        entry({ date: "2026-07-03", amount: 50 }),
+      ],
+      [tag()]
+    );
     expect(roma.total).toBe(1550);
     expect(roma.count).toBe(3);
     expect(roma.days).toBe(3);
+    expect(roma.before).toBe(0);
+    expect(roma.during).toBe(1550);
     expect(roma.daily.map((day) => day.spent)).toEqual([300, 0, 1250]);
     expect(roma.byCategory).toEqual([
       { category: "Reise", value: 1200 },
@@ -34,24 +44,97 @@ describe("tagSummaries", () => {
     expect(roma.top[0].amount).toBe(1200);
   });
 
+  it("counts tickets bought ahead in the total but not in the trip's days", () => {
+    const [roma] = tagSummaries(
+      [
+        entry({ date: "2026-03-10", amount: 4000 }),
+        entry({ date: "2026-07-02", amount: 600 }),
+        entry({ date: "2026-07-20", amount: 200 }),
+      ],
+      [tag({ start: "2026-07-01", end: "2026-07-07" })]
+    );
+    expect(roma.dated).toBe(true);
+    expect(roma.days).toBe(7);
+    expect(roma.total).toBe(4800);
+    expect([roma.before, roma.during, roma.after]).toEqual([4000, 600, 200]);
+    expect(roma.daily).toHaveLength(7);
+    expect(roma.daily[1].spent).toBe(600);
+  });
+
   it("crosses a month end, and leaves out untagged rows, income and savings", () => {
-    const [roma] = tagSummaries([
-      entry({ date: "2026-06-30" }),
-      entry({ date: "2026-07-01" }),
-      entry({ tag: null, amount: 9999 }),
-      entry({ tag: "  ", amount: 9999 }),
-      entry({ kind: "income", amount: 9999 }),
-      entry({ kind: "savings", amount: 9999 }),
-    ]);
+    const [roma] = tagSummaries(
+      [
+        entry({ date: "2026-06-30" }),
+        entry({ date: "2026-07-01" }),
+        entry({ tagId: null, amount: 9999 }),
+        entry({ kind: "income", amount: 9999 }),
+        entry({ kind: "savings", amount: 9999 }),
+      ],
+      [tag()]
+    );
     expect(roma.total).toBe(200);
     expect(roma.days).toBe(2);
   });
 
-  it("puts the most recent trip first", () => {
-    const tags = tagSummaries([
-      entry({ tag: "Roma", date: "2025-07-01" }),
-      entry({ tag: "Berlin", date: "2026-03-01" }),
+  it("keeps the order of the tags it is given, and skips tags with no spending", () => {
+    const summaries = tagSummaries(
+      [entry({ tagId: 1 }), entry({ tagId: 2 })],
+      [tag({ id: 2, name: "Berlin" }), tag({ id: 3, name: "Tom" }), tag()]
+    );
+    expect(summaries.map((summary) => summary.tag.name)).toEqual(["Berlin", "Roma"]);
+  });
+});
+
+describe("orderTags", () => {
+  it("puts current, then upcoming, then past, then undated", () => {
+    const ordered = orderTags(
+      [
+        tag({ id: 1, name: "Udatert" }),
+        tag({ id: 2, name: "Gammel", start: "2025-01-01", end: "2025-01-05" }),
+        tag({ id: 3, name: "Nylig", start: "2026-09-01", end: "2026-09-05" }),
+        tag({ id: 4, name: "Senere", start: "2027-05-01", end: "2027-05-05" }),
+        tag({ id: 5, name: "Snart", start: "2026-12-01", end: "2026-12-05" }),
+        tag({ id: 6, name: "Nå", start: "2026-10-20", end: "2026-10-30" }),
+      ],
+      "2026-10-28"
+    );
+    expect(ordered.map((t) => t.name)).toEqual([
+      "Nå",
+      "Snart",
+      "Senere",
+      "Nylig",
+      "Gammel",
+      "Udatert",
     ]);
-    expect(tags.map((tag) => tag.tag)).toEqual(["Berlin", "Roma"]);
+  });
+});
+
+describe("tagForDate", () => {
+  it("finds the tag whose dates hold the day, ends included", () => {
+    const tags = [tag({ start: "2026-07-01", end: "2026-07-07" })];
+    expect(tagForDate(tags, "2026-07-07")?.id).toBe(1);
+    expect(tagForDate(tags, "2026-07-08")).toBeUndefined();
+    expect(tagForDate([tag()], "2026-07-01")).toBeUndefined();
+  });
+});
+
+describe("planTagMerge", () => {
+  it("folds same-named tags into the oldest, with the commonest spelling and widest dates", () => {
+    const plan = planTagMerge([
+      tag({ id: 4, name: "roma ", start: "2026-07-03", end: "2026-07-03" }),
+      tag({ id: 2, name: "Roma", start: "2026-03-10", end: "2026-03-10" }),
+      tag({ id: 3, name: "Roma", start: "2026-07-05", end: "2026-07-05", budget: 15000 }),
+      tag({ id: 5, name: "Berlin", start: "2026-01-01", end: "2026-01-01" }),
+    ]);
+    expect(plan).toEqual([
+      {
+        keep: { id: 2, name: "Roma", start: "2026-03-10", end: "2026-07-05", budget: 15000 },
+        drop: [3, 4],
+      },
+    ]);
+  });
+
+  it("does nothing when every name is distinct", () => {
+    expect(planTagMerge([tag({ id: 1 }), tag({ id: 2, name: "Berlin" })])).toEqual([]);
   });
 });

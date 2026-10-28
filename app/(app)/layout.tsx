@@ -36,6 +36,7 @@ const ROUTES_WITHOUT_PERIOD = new Set([
   "/profil",
   "/profil/kategorier",
   "/profil/faste-utgifter",
+  "/profil/merkelapper",
 ]);
 
 function AppChrome({ children, user }: { children: ReactNode; user: User }) {

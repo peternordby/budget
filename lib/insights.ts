@@ -15,7 +15,9 @@ export type LedgerEntry = {
   category: string;
   kind: CategoryKind;
   date: string; // YYYY-MM-DD
+  /** The merkelapp's name, and its id (`expense.tag_id`). */
   tag: string | null;
+  tagId?: number | null;
 };
 
 export type MonthRef = { year: number; month: number };
