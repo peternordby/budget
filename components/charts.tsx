@@ -19,10 +19,13 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { scaleLinear } from "d3-scale";
+import { curveLinear, curveMonotoneX, type CurveFactory } from "d3-shape";
 import { T_DRAW, T_FAST, stagger } from "@/lib/motion";
 import { shareWidths } from "@/lib/chart";
 import styles from "./charts.module.css";
@@ -34,6 +37,41 @@ import styles from "./charts.module.css";
  * callers render nothing (or a fixed-height placeholder) at 0, which is also
  * what happens for one frame on mount.
  */
+/**
+ * A bar's corners: the style's --radius-bar (0 in Ark, rounder in Glass and
+ * Neumorphism), never more than `max` — pass half the bar's thinner side, or a
+ * two-pixel bar renders as a lozenge. Set as the CSS `rx` property so a style
+ * change applies without a re-render; the attribute is the fallback where CSS
+ * geometry properties are unsupported. Spread onto the <rect>.
+ */
+export function barCorner(max: number): { rx: number; style: CSSProperties } {
+  const cap = Math.max(0, max);
+  return {
+    rx: Math.min(4, cap),
+    style: { rx: `min(var(--radius-bar), ${cap}px)` } as CSSProperties,
+  };
+}
+
+function subscribeStyle(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributeFilter: ["data-style"] });
+  return () => observer.disconnect();
+}
+
+/**
+ * The curve a line or area chart draws with: smoothed everywhere except Ark,
+ * where a sheet's chart joins its points with straight segments. Follows
+ * data-style live, since a curve is a path string and not a CSS property.
+ */
+export function useChartCurve(): CurveFactory {
+  const style = useSyncExternalStore(
+    subscribeStyle,
+    () => document.documentElement.dataset.style,
+    () => undefined
+  );
+  return style === "ark" ? curveLinear : curveMonotoneX;
+}
+
 export function useMeasure<T extends HTMLElement>() {
   const [width, setWidth] = useState(0);
   const node = useRef<T | null>(null);
@@ -270,12 +308,12 @@ export function BulletBar({
             y={0}
             width={width}
             height={height}
-            rx={height / 2}
+            {...barCorner(height / 2)}
           />
           <motion.rect
             y={0}
             height={height}
-            rx={height / 2}
+            {...barCorner(height / 2)}
             fill={color}
             initial={{ width: 0 }}
             animate={{ width: filled * width }}
@@ -351,7 +389,7 @@ export function GaugeArc({
             fill="none"
             stroke={color}
             strokeWidth={thickness}
-            strokeLinecap="round"
+            className={styles["gauge-cap"]}
             strokeDasharray={circumference}
             initial={{ strokeDashoffset: circumference }}
             animate={{ strokeDashoffset: circumference * (1 - filled) }}
@@ -368,7 +406,7 @@ export function GaugeArc({
               fill="none"
               stroke={color}
               strokeWidth={thickness * 0.4}
-              strokeLinecap="round"
+              className={styles["gauge-cap"]}
               strokeDasharray={2 * Math.PI * (radius - thickness * 0.75)}
               initial={{
                 strokeDashoffset: 2 * Math.PI * (radius - thickness * 0.75),
@@ -464,7 +502,7 @@ export function ShareBar({
           onMouseLeave={() => setActive(null)}
         >
           <clipPath id={`share-clip-${clipId}`}>
-            <rect x={0} y={0} width={width} height={height} rx={height / 2} />
+            <rect x={0} y={0} width={width} height={height} {...barCorner(height / 2)} />
           </clipPath>
           <g clipPath={`url(#share-clip-${clipId})`}>
             {laid.map((segment, index) => (

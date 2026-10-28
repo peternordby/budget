@@ -5,6 +5,15 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { hasSupabaseEnv, supabase } from "@/lib/supabaseClient";
 import { lock } from "@/lib/crypto";
+import { applyAppearance, toAppearance } from "@/lib/appearance";
+
+// The account's saved look, applied whenever a session arrives: on load and at
+// sign-in, not on USER_UPDATED — that event is /profil's own write echoing
+// back, and applying it could undo a newer pick made while it was in flight.
+function applyAccountAppearance(session: Session | null) {
+  const saved = session?.user.user_metadata?.appearance;
+  if (saved) applyAppearance(toAppearance(saved));
+}
 
 
 type AuthGateProps = {
@@ -28,6 +37,7 @@ export default function AuthGate({ children }: AuthGateProps) {
       .getSession()
       .then(({ data }) => {
         if (!active) return;
+        applyAccountAppearance(data.session);
         setSession(data.session ?? null);
         setLoading(false);
       })
@@ -40,6 +50,7 @@ export default function AuthGate({ children }: AuthGateProps) {
       // Clear the unlocked DEK when the user signs out so a subsequent login in
       // the same tab does not silently reuse the previous tab's key.
       if (event === "SIGNED_OUT") lock();
+      if (event === "SIGNED_IN") applyAccountAppearance(updated);
       setSession(updated);
     });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChartTooltip, bandLayout, scaleLinear, useMeasure } from "@/components/charts";
+import { ChartTooltip, bandLayout, barCorner, scaleLinear, useMeasure } from "@/components/charts";
 import { categoryColor } from "@/lib/categoryColor";
 import { formatCurrency } from "@/lib/format";
 import type { LedgerEntry } from "@/lib/insights";
@@ -65,7 +65,7 @@ export default function Waterfall({
                   y={top}
                   width={band.bar}
                   height={Math.max(bottom - top, 2)}
-                  rx={4}
+                  {...barCorner(Math.min(band.bar, Math.max(bottom - top, 2)) / 2)}
                   fill={colorOf(index)}
                 />
                 {next ? (

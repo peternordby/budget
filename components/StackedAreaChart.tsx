@@ -15,20 +15,20 @@
  * the carry-forward anchors) in `lib/savings.ts`.
  */
 
-import { useId, useMemo, type CSSProperties } from "react";
-import { motion } from "motion/react";
+import { useId, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { Reorder, motion, useDragControls } from "motion/react";
 import { scaleLinear } from "d3-scale";
-import { area, curveMonotoneX, line } from "d3-shape";
+import { area, line } from "d3-shape";
 import {
   formatCurrency,
   formatDate,
   formatSignedCurrency,
 } from "@/lib/format";
 import { categoryColor, categorySlots } from "@/lib/categoryColor";
-import { IconChevronDown, IconChevronUp } from "@/components/icons";
+import { IconGrip } from "@/components/icons";
 import { bandShapes, datePositions, type StackedChart } from "@/lib/savings";
-import { axisTicks, labelledDates, shortAmount } from "@/lib/chart";
-import { ChartTooltip, GridLines, useMeasure } from "@/components/charts";
+import { DATE_LABEL_PX, axisTicks, edgeAnchor, labelledDates, shortAmount } from "@/lib/chart";
+import { ChartTooltip, GridLines, useChartCurve, useMeasure } from "@/components/charts";
 import { T_DRAW, T_FAST } from "@/lib/motion";
 import kit from "@/components/charts.module.css";
 import styles from "./StackedAreaChart.module.css";
@@ -50,6 +50,7 @@ export default function StackedAreaChart({
 }: StackedAreaChartProps) {
   const gradientId = useId().replace(/[^\w-]/g, "");
   const [ref, width] = useMeasure<HTMLDivElement>();
+  const curve = useChartCurve();
   const { dates, bands, totals, max } = chart;
 
   const slots = useMemo(
@@ -79,7 +80,13 @@ export default function StackedAreaChart({
     () => scaleLinear().domain([0, scaleMax]).range([HEIGHT, 0]),
     [scaleMax]
   );
-  const labelled = useMemo(() => labelledDates(fractions), [fractions]);
+  const labelled = useMemo(
+    () =>
+      width
+        ? labelledDates(fractions, DATE_LABEL_PX / width, DATE_LABEL_PX / 2 / width)
+        : [],
+    [fractions, width]
+  );
 
   // A single date has no width to fill, so bands are drawn as marks rather
   // than as zero-width polygons.
@@ -101,11 +108,11 @@ export default function StackedAreaChart({
     .x((point) => xs[point.index])
     .y0((point) => y(point.lower))
     .y1((point) => y(point.upper))
-    .curve(curveMonotoneX);
+    .curve(curve);
   const edgeLine = line<{ index: number; upper: number }>()
     .x((point) => xs[point.index])
     .y((point) => y(point.upper))
-    .curve(curveMonotoneX);
+    .curve(curve);
 
   return (
     <div className={styles["wrap"]}>
@@ -214,7 +221,7 @@ export default function StackedAreaChart({
                   line<number>()
                     .x((_, index) => xs[index])
                     .y((total) => y(total))
-                    .curve(curveMonotoneX)(totals) ?? ""
+                    .curve(curve)(totals) ?? ""
                 }
                 initial={{ pathLength: 0 }}
                 animate={{ pathLength: 1 }}
@@ -250,13 +257,10 @@ export default function StackedAreaChart({
                 }`}
                 x={xs[index]}
                 y={HEIGHT + 14}
-                textAnchor={
-                  index === 0 && fractions[index] < 0.02
-                    ? "start"
-                    : index === dates.length - 1 && fractions[index] > 0.98
-                      ? "end"
-                      : "middle"
-                }
+                // As style, not the attribute: `.axis-label` sets text-anchor in CSS,
+                // which outranks a presentation attribute — the edge labels
+                // stayed centred and hung off the chart.
+                style={{ textAnchor: edgeAnchor(xs[index], width) }}
               >
                 {formatDate(dates[index])}
               </text>
@@ -322,28 +326,21 @@ export default function StackedAreaChart({
 
 /**
  * The legend, which doubles as the readout: it shows each category's value at
- * the hovered date (or its latest value when nothing is hovered), and owns the
- * controls that reorder the stack.
+ * the hovered date (or its latest value when nothing is hovered), and is where
+ * the stack is reordered — by dragging a row's grip (mouse or touch, via
+ * motion's Reorder, since HTML5 drag-and-drop does nothing on iOS), or with
+ * ↑/↓ on the focused grip.
  */
 type LegendProps = {
   chart: StackedChart;
   hoverIndex: number | null;
-  onMove: (category: string, direction: -1 | 1) => void;
-  onDrop: (dragged: string, target: string) => void;
-  dragging: string | null;
-  dragTarget: string | null;
-  onDragState: (dragging: string | null, target: string | null) => void;
+  /** Mid-drag: the order so far, bottom first, for the chart to follow live. */
+  onPreview: (order: string[]) => void;
+  /** On release (or a keyboard step): the new stack order, bottom first. */
+  onReorder: (order: string[]) => void;
 };
 
-export function StackedAreaLegend({
-  chart,
-  hoverIndex,
-  onMove,
-  onDrop,
-  dragging,
-  dragTarget,
-  onDragState,
-}: LegendProps) {
+export function StackedAreaLegend({ chart, hoverIndex, onPreview, onReorder }: LegendProps) {
   const slots = useMemo(
     () => categorySlots(chart.bands.map((band) => band.category)),
     [chart.bands]
@@ -351,129 +348,172 @@ export function StackedAreaLegend({
 
   // Bottom-of-stack first in the data; the legend lists top-of-stack first so
   // its rows run in the same direction as the chart reads from the top down.
-  const rows = useMemo(() => [...chart.bands].reverse(), [chart.bands]);
+  const committed = useMemo(() => [...chart.bands].reverse(), [chart.bands]);
+  const reorder = (topFirst: string[]) => onReorder([...topFirst].reverse());
+
+  // While a row is being dragged the legend owns the order, so its rows
+  // never wait on the page; the chart follows through onPreview (a low-
+  // priority update on the page's side), and the order is stored once, on
+  // release. Committing every swap re-rendered and stored synchronously, and
+  // made the drag crawl.
+  const [draft, setDraft] = useState<string[] | null>(null);
+  const draftRef = useRef<string[] | null>(null);
+  const updateDraft = (next: string[] | null) => {
+    draftRef.current = next;
+    setDraft(next);
+    if (next) onPreview([...next].reverse());
+  };
+  const commitDraft = () => {
+    if (draftRef.current) reorder(draftRef.current);
+    updateDraft(null);
+  };
+  const byName = useMemo(
+    () => new Map(committed.map((band) => [band.category, band])),
+    [committed]
+  );
+  const rows = draft
+    ? draft.flatMap((name) => byName.get(name) ?? [])
+    : committed;
+  const names = rows.map((band) => band.category);
+  // Rows are held inside the list: dragged out past it, a row was left
+  // stranded over the page when the pointer let go somewhere else.
+  const listRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className={styles["legend"]}>
       <div className={styles["legend-head"]}>
+        <span />
         <span />
         <span>Kategori</span>
         <span className="num">
           {hoverIndex !== null ? formatDate(chart.dates[hoverIndex]) : "Nå"}
         </span>
         <span className="num">Endring</span>
-        {/* "Rekkefølge" was wider than its 52px column and ran past the card. */}
-        <span>Flytt</span>
       </div>
 
-      {rows.map((band, rowIndex) => {
-        const value =
-          hoverIndex !== null ? band.values[hoverIndex] : band.latest;
-        // At a hovered date, the change is against the previous timeline date —
-        // which is what the guide is sitting between. Null when either side is
-        // missing, rather than treating an absent category as 0.
-        const change =
-          hoverIndex !== null
-            ? hoverIndex > 0 &&
-              band.values[hoverIndex] !== null &&
-              band.values[hoverIndex - 1] !== null
-              ? (band.values[hoverIndex] as number) -
-                (band.values[hoverIndex - 1] as number)
-              : null
-            : band.change;
-
-        return (
-          <div
-            key={band.category}
-            className={`${styles["legend-row"]} ${
-              dragging === band.category ? styles["is-dragging"] : ""
-            } ${
-              dragTarget === band.category &&
-              dragging &&
-              dragging !== band.category
-                ? styles["is-drop-target"]
-                : ""
-            }`}
-            draggable
-            onDragStart={(event) => {
-              onDragState(band.category, null);
-              event.dataTransfer.effectAllowed = "move";
-            }}
-            onDragEnd={() => onDragState(null, null)}
-            onDragOver={(event) => {
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "move";
-              onDragState(dragging, band.category);
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              if (dragging) onDrop(dragging, band.category);
-              onDragState(null, null);
-            }}
-            title="Dra for å endre rekkefølgen i grafen"
-          >
-            <span
-              className={styles["swatch"]}
-              style={
-                {
-                  background: categoryColor(slots.get(band.category) ?? 0),
-                } as CSSProperties
-              }
+      <Reorder.Group
+        ref={listRef}
+        as="div"
+        axis="y"
+        values={names}
+        onReorder={updateDraft}
+        className={styles["legend-rows"]}
+      >
+        {rows.map((band, rowIndex) => {
+          const value = hoverIndex !== null ? band.values[hoverIndex] : band.latest;
+          // At a hovered date, the change is against the previous timeline
+          // date — which is what the guide is sitting between. Null when
+          // either side is missing, rather than treating an absent category as 0.
+          const change =
+            hoverIndex !== null
+              ? hoverIndex > 0 &&
+                band.values[hoverIndex] !== null &&
+                band.values[hoverIndex - 1] !== null
+                ? (band.values[hoverIndex] as number) - (band.values[hoverIndex - 1] as number)
+                : null
+              : band.change;
+          return (
+            <LegendRow
+              key={band.category}
+              category={band.category}
+              color={categoryColor(slots.get(band.category) ?? 0)}
+              stale={band.stale}
+              lastObserved={band.lastObserved}
+              value={value}
+              change={change}
+              constraints={listRef}
+              onDragEnd={commitDraft}
+              onStep={(direction) => {
+                const to = rowIndex + direction;
+                if (to < 0 || to >= names.length) return;
+                const next = [...names];
+                next.splice(to, 0, next.splice(rowIndex, 1)[0]);
+                reorder(next);
+              }}
             />
-            <span className={styles["legend-name"]}>
-              <span className={styles["legend-name-text"]}>
-                {band.category}
-              </span>
-              {band.stale ? (
-                <span
-                  className={styles["stale"]}
-                  title={`Sist registrert ${formatDate(band.lastObserved)}. Verdien videreføres i grafen fram til i dag.`}
-                >
-                  sist {formatDate(band.lastObserved)}
-                </span>
-              ) : null}
-            </span>
-            <strong className="num">
-              {value === null ? "—" : formatCurrency(value)}
-            </strong>
-            <span
-              className={`num ${
-                change === null
-                  ? "helper"
-                  : change >= 0
-                    ? "text-income"
-                    : "text-expense"
-              }`}
-            >
-              {change === null
-                ? "—"
-                : `${change >= 0 ? "+" : "-"}${formatCurrency(Math.abs(change))}`}
-            </span>
-            <span className={`field-move ${styles["legend-move"]}`}>
-              <button
-                className="icon-btn icon-btn-sm"
-                type="button"
-                onClick={() => onMove(band.category, -1)}
-                disabled={rowIndex === 0}
-                aria-label={`Flytt ${band.category} opp`}
-                title="Flytt opp"
-              >
-<IconChevronUp />
-              </button>
-              <button
-                className="icon-btn icon-btn-sm"
-                type="button"
-                onClick={() => onMove(band.category, 1)}
-                disabled={rowIndex === rows.length - 1}
-                aria-label={`Flytt ${band.category} ned`}
-                title="Flytt ned"
-              >
-<IconChevronDown />
-              </button>
-            </span>
-          </div>
-        );
-      })}
+          );
+        })}
+      </Reorder.Group>
     </div>
+  );
+}
+
+function LegendRow({
+  category,
+  color,
+  stale,
+  lastObserved,
+  value,
+  change,
+  constraints,
+  onDragEnd,
+  onStep,
+}: {
+  category: string;
+  color: string;
+  stale: boolean;
+  lastObserved: string;
+  value: number | null;
+  change: number | null;
+  constraints: RefObject<HTMLDivElement | null>;
+  onDragEnd: () => void;
+  /** Keyboard reorder: -1 is up the list (towards the top of the stack). */
+  onStep: (direction: -1 | 1) => void;
+}) {
+  // Dragging starts only from the grip, so on a phone the rest of the row
+  // still scrolls the page instead of picking the row up.
+  const controls = useDragControls();
+  return (
+    <Reorder.Item
+      as="div"
+      value={category}
+      dragListener={false}
+      dragControls={controls}
+      dragConstraints={constraints}
+      // No overshoot: a row stretched past the list gave its scroll
+      // container (see .legend) something to scroll, and a scrollbar flashed.
+      dragElastic={0}
+      onDragEnd={onDragEnd}
+      className={styles["legend-row"]}
+      whileDrag={{ zIndex: 2 }}
+    >
+      <button
+        type="button"
+        className={styles["grip"]}
+        onPointerDown={(event) => controls.start(event)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+            event.preventDefault();
+            onStep(event.key === "ArrowUp" ? -1 : 1);
+          }
+        }}
+        aria-label={`Flytt ${category}. Dra, eller bruk piltastene.`}
+        title="Dra for å endre rekkefølgen i grafen"
+      >
+        <IconGrip />
+      </button>
+      <span className={styles["swatch"]} style={{ background: color } as CSSProperties} />
+      <span className={styles["legend-name"]}>
+        <span className={styles["legend-name-text"]}>{category}</span>
+        {stale ? (
+          <span
+            className={styles["stale"]}
+            title={`Sist registrert ${formatDate(lastObserved)}. Verdien videreføres i grafen fram til i dag.`}
+          >
+            sist {formatDate(lastObserved)}
+          </span>
+        ) : null}
+      </span>
+      <strong className="num">{value === null ? "—" : formatCurrency(value)}</strong>
+      <span
+        className={`num ${
+          change === null ? "helper" : change >= 0 ? "text-income" : "text-expense"
+        }`}
+      >
+        {change === null
+          ? "—"
+          : `${change >= 0 ? "+" : "-"}${formatCurrency(Math.abs(change))}`}
+      </span>
+    </Reorder.Item>
   );
 }

@@ -4,27 +4,56 @@
   --font-mono: "SF Mono", "Fira Code", ui-monospace, monospace;
 
   color-scheme: light;
-  --bg-base: #fafaf9;
-  --bg-alt: #f5f5f4;
-  --ink: #1c1917;
-  --muted: #78716c;
-  --accent: #d97706;
-  --accent-strong: #b45309;
-  --accent-soft: #fef3c7;
+  /* Neutral greys after Apple's system palette, not the warm stone that read
+     as washed out: text near black, secondary text dark enough to read, and
+     separators you can actually see. */
+  --bg-base: #f2f2f5;
+  --bg-alt: #ececf0;
+  --ink: #1d1d1f;
+  --muted: #5e5e66;
+  /* The accent is the user's (AppearanceSettings writes --accent and
+     --accent-contrast inline on <html>); every other accent token is derived
+     from it, so one colour re-themes the app. */
+  --accent: #3a73c4;
   --accent-contrast: #ffffff;
-  --income: #059669;
-  --expense: #dc2626;
-  --surface: rgba(255, 255, 255, 0.82);
-  --surface-popover: rgba(255, 255, 255, 0.96);
+  --accent-strong: color-mix(in oklab, var(--accent) 82%, var(--ink));
+  --accent-soft: color-mix(in oklab, var(--accent) 14%, var(--surface-solid));
+  --income: #2f7d4f;
+  --expense: #c4443c;
+  --surface: #ffffff;
+  --surface-popover: rgba(255, 255, 255, 0.98);
   --surface-solid: #ffffff;
   --card: var(--surface);
-  --border: rgba(0, 0, 0, 0.08);
-  --border-soft: rgba(0, 0, 0, 0.05);
-  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.04);
-  --shadow-tight: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --border: rgba(0, 0, 0, 0.13);
+  --border-soft: rgba(0, 0, 0, 0.07);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.06);
+  --shadow-tight: 0 1px 2px rgba(0, 0, 0, 0.06);
   --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  --radius-card: 16px;
-  --radius-soft: 12px;
+  /* A row or tile under the pointer. Lifted everywhere but neumorphism,
+     which presses it in: a raised shadow that size spills under the
+     neighbouring rows and gets cut off by them. */
+  --shadow-hover: var(--shadow-soft);
+  /* Everything that floats over a card — menus, the autocomplete list, the
+     date picker, tooltips, toasts, the drill-down panel — shares one shadow,
+     so each style can restyle them all at once. */
+  --shadow-popover: 0 12px 32px rgb(0 0 0 / 0.16);
+  /* Raised and sunken: only neumorphism draws controls this way; elsewhere
+     a control is a border, and these stay empty. */
+  --control-shadow: none;
+  --control-shadow-sunk: none;
+  --card-pad: 20px;
+  /* Corners: six tokens and nothing else, each style (data-style) setting its
+     own — a card, a panel or row inside one, a control, a small mark (a chip,
+     a delta, a menu item), what used to be a 999px pill, and a chart's bars
+     and columns (rx on SVG rects, clamped to the bar's own size in code). */
+  --radius-card: 14px;
+  --radius-soft: 10px;
+  --radius-control: 9px;
+  --radius-small: 6px;
+  --radius-chip: 8px;
+  --radius-bar: 4px;
+  /* The donut's arc ends: round, except in Ark. */
+  --bar-cap: round;
 
   --ok-bg: #d1fae5;
   --ok-ink: #065f46;
@@ -41,15 +70,15 @@
   --cancel-bg: #fef2f2;
   --cancel-bg-hover: #fee2e2;
   --cancel-border: rgba(220, 38, 38, 0.15);
-  --editing-bg: #fffbeb;
+  --editing-bg: color-mix(in oklab, var(--accent) 7%, var(--surface-solid));
 
   --track-bg: rgba(0, 0, 0, 0.04);
   --track-under: rgba(5, 150, 105, 0.06);
   --track-over: rgba(220, 38, 38, 0.06);
   --budget-mark: rgba(0, 0, 0, 0.2);
   --ring-bg: rgba(0, 0, 0, 0.06);
-  --focus-ring: rgba(217, 119, 6, 0.12);
-  --placeholder: #a8a29e;
+  --focus-ring: color-mix(in srgb, var(--accent) 28%, transparent);
+  --placeholder: #8e8e93;
 
   /* The categorical palette: eight fixed slots, in this order.
      The ORDER is the colour-vision-deficiency safety mechanism, not a
@@ -67,31 +96,31 @@
   --cat-7: #4a3aa7; /* violet */
   --cat-8: #e34948; /* red */
 
-  --ambient-a: rgba(217, 119, 6, 0.07);
-  --ambient-b: rgba(5, 150, 105, 0.05);
+  --ambient-a: color-mix(in srgb, var(--accent) 6%, transparent);
+  --ambient-b: transparent;
+  --ambient-c: transparent;
+  --ambient-d: transparent;
 }
 
 html[data-theme="dark"] {
   color-scheme: dark;
-  --bg-base: #141211;
-  --bg-alt: #1e1b19;
-  --ink: #ece9e6;
-  --muted: #a8a29c;
-  --accent: #f59e0b;
-  --accent-strong: #fbbf24;
-  --accent-soft: #3b2d10;
-  --accent-contrast: #1c1410;
-  --income: #34d399;
-  --expense: #f87171;
-  --surface: rgba(30, 27, 25, 0.82);
-  --surface-popover: rgba(36, 32, 30, 0.97);
-  --surface-solid: #211e1c;
-  --border: rgba(255, 255, 255, 0.1);
-  --border-soft: rgba(255, 255, 255, 0.06);
-  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.32);
+  --bg-base: #0b0b0d;
+  --bg-alt: #1f1f22;
+  --ink: #f5f5f7;
+  --muted: #a6a6ad;
+  --accent: #5b8fd9;
+  --accent-contrast: #ffffff;
+  --income: #4bb874;
+  --expense: #e8665e;
+  --surface: #1a1a1d;
+  --surface-popover: rgba(38, 38, 42, 0.98);
+  --surface-solid: #26262a;
+  --border: rgba(255, 255, 255, 0.14);
+  --border-soft: rgba(255, 255, 255, 0.08);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-tight: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-popover: 0 12px 32px rgb(0 0 0 / 0.5);
   --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-
   --ok-bg: rgba(52, 211, 153, 0.15);
   --ok-ink: #6ee7b7;
   --warn-bg: rgba(245, 158, 11, 0.16);
@@ -107,15 +136,13 @@ html[data-theme="dark"] {
   --cancel-bg: rgba(248, 113, 113, 0.1);
   --cancel-bg-hover: rgba(248, 113, 113, 0.2);
   --cancel-border: rgba(248, 113, 113, 0.25);
-  --editing-bg: #2b220c;
 
   --track-bg: rgba(255, 255, 255, 0.07);
   --track-under: rgba(52, 211, 153, 0.08);
   --track-over: rgba(248, 113, 113, 0.08);
   --budget-mark: rgba(255, 255, 255, 0.35);
   --ring-bg: rgba(255, 255, 255, 0.08);
-  --focus-ring: rgba(245, 158, 11, 0.22);
-  --placeholder: #6f6862;
+  --placeholder: #7c7c84;
 
   /* The same eight hues stepped for the dark surface — selected, not an
      automatic flip of the light values. Worst adjacent pair CVD ΔE 8.4,
@@ -129,8 +156,320 @@ html[data-theme="dark"] {
   --cat-7: #9085e9;
   --cat-8: #e66767;
 
-  --ambient-a: rgba(245, 158, 11, 0.06);
-  --ambient-b: rgba(52, 211, 153, 0.04);
+}
+
+/* ------------------------------------------------------------------ styles
+   Four looks, chosen on /profil and synced through the account
+   (lib/appearance.ts), set as data-style on <html> before first paint.
+   Standard is :root above plus its block here. Each block moves tokens —
+   corners, surfaces, borders, shadows — and adds the few rules a token cannot
+   express. Blocks come after the dark theme, and their dark variants after
+   them, so a style wins over the theme where both set a token. Each one has
+   to read as its own thing at a glance, not as Standard with other corners. */
+
+/* Standard: Apple's grouped look. Borderless white cards lifted off a grey
+   page by a soft shadow, moderately rounded. */
+html[data-style="standard"] .card,
+html[data-style="standard"] .nav {
+  border-color: transparent;
+}
+
+/* Ark: an accounting sheet. A cell grid behind everything, square corners,
+   gridlines between rows *and* columns, grey column headers, a tinted title
+   bar on every card, cells for inputs, a 2px "selected cell" focus, flat
+   ribbon buttons and Office's typeface where the machine has it. */
+html[data-style="ark"] {
+  --font-sans: "Aptos", "Calibri", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --radius-card: 0;
+  --radius-soft: 0;
+  --radius-control: 0;
+  --radius-small: 0;
+  --radius-chip: 0;
+  --radius-bar: 0;
+  --bar-cap: butt;
+  --bg-base: #ffffff;
+  --bg-alt: #f3f3f3;
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --border: #c6c6c6;
+  --border-soft: #e1e1e1;
+  --grid-line: #ececec;
+  --shadow-soft: none;
+  --shadow-tight: none;
+  --shadow-popover: 0 2px 6px rgb(0 0 0 / 0.2);
+  --ambient-a: transparent;
+  --card-pad: 16px;
+}
+
+html[data-style="ark"] body {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Excel's default cell: 64 × 20. */
+html[data-style="ark"] .bg-ambient {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 64px 20px;
+}
+
+html[data-style="ark"] :is(.card, .nav) {
+  backdrop-filter: none;
+}
+
+html[data-style="ark"] .card > .card-head:first-child {
+  margin: calc(-1 * var(--card-pad)) calc(-1 * var(--card-pad)) 14px;
+  padding: 7px var(--card-pad);
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+
+/* A collapsed card is only its head: the strip fills the card. */
+html[data-style="ark"] .card > .card-head:first-child:last-child {
+  margin-bottom: calc(-1 * var(--card-pad));
+  border-bottom: 0;
+}
+
+html[data-style="ark"] .section-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* Cell-height fields. Not the file, colour, checkbox or radio inputs: a file
+   picker squeezed to 30px clipped its button (the CSV import panel). */
+html[data-style="ark"] :is(input:not([type="file"], [type="color"], [type="checkbox"], [type="radio"]), select) {
+  height: 30px;
+  font-size: 13px;
+}
+
+/* A selected cell, not a glow. */
+html[data-style="ark"] :is(input:not([type="file"], [type="color"]), select):focus {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* Ribbon buttons: flat until hovered. */
+html[data-style="ark"] :is(.btn-ghost, .icon-btn):not(:hover) {
+  background: transparent;
+}
+
+html[data-style="ark"] :is(.btn, .icon-btn):active:not(:disabled) {
+  transform: none;
+}
+
+/* The ribbon's tabs: the current one underlined. */
+html[data-style="ark"] .nav [aria-current="page"] {
+  background: transparent;
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+
+html[data-style="ark"] :is(.empty, .import-preview) {
+  border-style: solid;
+}
+
+/* Glass: Apple's Liquid Glass. Everything is a pane of it — cards, buttons,
+   chips, fields, menus, tooltips — and the header (a phone's tab bar) is a
+   floating bar of it that the page scrolls under.
+
+   The glass is clear, with a soft inner glow for thickness and no white
+   border. Fixed at iOS 26's Klar: --glass-clear is 1 and --glass-tint
+   (how far toward Tonet) is 0; the formulas keep both, so a tinted variant
+   is one number away.
+
+   Deliberately cheap, after it made the app sluggish: no backdrop-filter
+   anywhere (the bars and menus are tinted instead of blurred), no masked
+   rim layers, no per-control gradients, no refraction filter, nothing
+   fixed to the viewport. Translucency over a soft wallpaper is composited
+   for free; a live blur is recomputed whenever anything moves beneath it. */
+html[data-style="glass"] {
+  --glass-clear: 1;
+  --glass-tint: calc((1 - var(--glass-clear)) * 0.65);
+  --glass: rgb(255 255 255 / calc(0.08 + var(--glass-tint)));
+  /* The navigation bars carry labels over moving content and get no blur,
+     so they are tinted more than a pane. */
+  --glass-bar: rgb(255 255 255 / calc(0.72 + var(--glass-tint) * 0.3));
+  /* Depth from a soft inner glow only — no white ring or hard white edge
+     around the pane. */
+  --glass-bevel: inset 0 0 12px 1px rgb(255 255 255 / 0.3);
+  --radius-card: 22px;
+  --radius-soft: 14px;
+  --radius-control: 12px;
+  --radius-small: 7px;
+  --radius-chip: 12px;
+  --radius-bar: 6px;
+  --bg-base: #e8ebf3;
+  /* The light comes from the top-left, as Apple's does: a glow in that
+     corner of each card. */
+  --light-glow: rgb(255 255 255 / 0.22);
+  --glass-light: radial-gradient(120% 140% at 0% 0%, var(--light-glow), transparent 60%);
+  --glass-card: rgb(255 255 255 / calc(0.2 + var(--glass-tint) * 0.9));
+  --surface: var(--glass-card);
+  --surface-solid: var(--glass);
+  /* Menus and panels are bigger glass, so thicker: more tint, a deeper shadow. */
+  --surface-popover: rgb(255 255 255 / calc(0.86 + var(--glass-tint) * 0.14));
+  --shadow-popover: var(--glass-bevel), 0 18px 48px rgb(20 30 70 / 0.24);
+  --bg-alt: rgb(120 130 160 / 0.08);
+  --border: rgb(0 0 0 / 0.08);
+  --border-soft: rgb(0 0 0 / 0.06);
+  --shadow-soft: var(--glass-bevel), 0 10px 34px rgb(20 30 70 / 0.1);
+  --shadow-tight: 0 1px 3px rgb(20 30 70 / 0.1);
+  --control-shadow: var(--glass-bevel), 0 2px 8px rgb(20 30 70 / 0.08);
+  --ambient-a: color-mix(in srgb, var(--accent) 45%, transparent);
+  --ambient-b: color-mix(in srgb, var(--cat-3) 34%, transparent);
+}
+
+/* A wallpaper with colour in it, for the glass to sit over. Two shapes. */
+html[data-style="glass"] .bg-ambient {
+  background:
+    radial-gradient(40vw 40vw at 88% 8%, var(--ambient-a), transparent 62%),
+    radial-gradient(40vw 40vw at 8% 70%, var(--ambient-b), transparent 62%);
+}
+
+/* Cards: the clear material with the bevel, and the glow from the light. */
+html[data-style="glass"] .card {
+  border-color: transparent;
+  background: var(--glass-light), var(--glass-card);
+}
+
+/* Controls: glass by fill and bevel. */
+html[data-style="glass"] :is(.btn-ghost, .icon-btn, input:not([type="range"], [type="color"]), select, .user-chip) {
+  background: var(--glass);
+  border-color: transparent;
+  box-shadow: var(--control-shadow);
+}
+
+/* Enabled only: on a disabled button the glow read as a stray shadow. */
+html[data-style="glass"] .btn-primary:not(:disabled) {
+  box-shadow:
+    inset 0 0 10px rgb(255 255 255 / 0.2),
+    0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* The current tab: a drop of brighter glass inside the bar. */
+html[data-style="glass"] .nav [aria-current="page"] {
+  background: rgb(20 30 70 / 0.07);
+  box-shadow: var(--glass-bevel);
+}
+
+/* A floating bar the page scrolls under. Desktop only: on a phone the tab
+   bar is the floating glass instead (TopNav.module.css). */
+@media (min-width: 641px) {
+  html[data-style="glass"] .nav {
+    border-radius: 26px;
+    border-color: transparent;
+    background: var(--glass-bar);
+    box-shadow: var(--glass-bevel), 0 10px 30px rgb(20 30 70 / 0.12);
+  }
+}
+
+/* Neumorphism: one surface colour, everything pressed out of it or into it
+   by a light and a dark shadow. No borders anywhere — the shadows are the
+   edge. Raised: cards, buttons, chips. Sunk: inputs, wells, and anything
+   that is on (the current tab, a pressed toggle, a held button). */
+html[data-style="neu"] {
+  --radius-card: 20px;
+  --radius-soft: 14px;
+  --radius-control: 12px;
+  --radius-small: 8px;
+  --radius-chip: 12px;
+  --radius-bar: 8px;
+  --bg-base: #e0e5ec;
+  --bg-alt: #e0e5ec;
+  --surface: #e0e5ec;
+  --surface-solid: #e0e5ec;
+  --surface-popover: #e6eaf0;
+  --border: transparent;
+  --border-soft: rgba(163, 177, 198, 0.35);
+  --neu-dark: rgba(163, 177, 198, 0.75);
+  --neu-light: rgba(255, 255, 255, 0.95);
+  --shadow-soft: 10px 10px 22px var(--neu-dark), -10px -10px 22px var(--neu-light);
+  --shadow-tight: 4px 4px 9px var(--neu-dark), -4px -4px 9px var(--neu-light);
+  --control-shadow: 4px 4px 9px var(--neu-dark), -4px -4px 9px var(--neu-light);
+  --control-shadow-sunk: inset 4px 4px 8px var(--neu-dark), inset -4px -4px 8px var(--neu-light);
+  --shadow-hover: var(--control-shadow-sunk);
+  --shadow-popover: var(--shadow-soft);
+  --ambient-a: transparent;
+}
+
+html[data-style="neu"] .section-gap {
+  margin-top: 28px;
+}
+
+html[data-style="neu"] :is(.card, .nav) {
+  backdrop-filter: none;
+}
+
+html[data-style="neu"] .btn-primary:not(:disabled) {
+  box-shadow: var(--control-shadow);
+}
+
+html[data-style="neu"] :is(.empty, .import-preview, .status) {
+  border-color: transparent;
+  box-shadow: var(--control-shadow-sunk);
+}
+
+/* Only real controls: the charts' hit areas are aria-pressed buttons too,
+   and a filled one would paint over the bar it sits on. */
+html[data-style="neu"] :is(
+    .btn:active:not(:disabled),
+    .icon-btn:active:not(:disabled),
+    .btn.is-on,
+    .icon-btn.is-on,
+    .btn[aria-pressed="true"],
+    .nav [aria-current="page"]
+  ) {
+  background: var(--surface-solid);
+  box-shadow: var(--control-shadow-sunk);
+  transform: none;
+}
+
+html[data-style="neu"] .btn-primary:active:not(:disabled) {
+  background: var(--accent);
+}
+
+html[data-style="ark"][data-theme="dark"] {
+  --bg-base: #1b1b1b;
+  --bg-alt: #2a2a2a;
+  --surface: #1f1f1f;
+  --surface-solid: #1f1f1f;
+  --border: #4a4a4a;
+  --border-soft: #333333;
+  --grid-line: #262626;
+}
+
+html[data-style="glass"][data-theme="dark"] {
+  --bg-base: #0b0c14;
+  --glass: rgb(60 60 72 / calc(0.12 + var(--glass-tint)));
+  --glass-bar: rgb(30 30 38 / calc(0.78 + var(--glass-tint) * 0.2));
+  --glass-bevel: inset 0 0 12px 1px rgb(255 255 255 / 0.06);
+  --light-glow: rgb(255 255 255 / 0.08);
+  --glass-card: rgb(40 40 50 / calc(0.25 + var(--glass-tint) * 0.9));
+  --surface: var(--glass-card);
+  --surface-popover: rgb(36 36 46 / calc(0.92 + var(--glass-tint) * 0.08));
+  --shadow-popover: var(--glass-bevel), 0 14px 36px rgb(0 0 0 / 0.5);
+  --bg-alt: rgb(255 255 255 / 0.06);
+  --border: rgb(255 255 255 / 0.1);
+  --border-soft: rgb(255 255 255 / 0.08);
+  --shadow-soft: var(--glass-bevel), 0 10px 34px rgb(0 0 0 / 0.4);
+  --control-shadow: var(--glass-bevel), 0 2px 8px rgb(0 0 0 / 0.3);
+  --ambient-a: color-mix(in srgb, var(--accent) 40%, transparent);
+  --ambient-b: color-mix(in srgb, var(--cat-3) 26%, transparent);
+}
+
+html[data-style="glass"][data-theme="dark"] .nav [aria-current="page"] {
+  background: rgb(255 255 255 / calc(0.12 + var(--glass-tint) * 0.3));
+}
+
+html[data-style="neu"][data-theme="dark"] {
+  --bg-base: #2a2d32;
+  --bg-alt: #2a2d32;
+  --surface: #2a2d32;
+  --surface-solid: #2a2d32;
+  --surface-popover: #30343a;
+  --border-soft: rgba(0, 0, 0, 0.3);
+  --neu-dark: rgba(0, 0, 0, 0.55);
+  --neu-light: rgba(255, 255, 255, 0.06);
 }
 
 *,
@@ -179,7 +518,9 @@ body {
   pointer-events: none;
   background:
     radial-gradient(1100px 500px at 85% -10%, var(--ambient-a), transparent 60%),
-    radial-gradient(900px 600px at -10% 30%, var(--ambient-b), transparent 55%);
+    radial-gradient(900px 600px at -10% 30%, var(--ambient-b), transparent 55%),
+    radial-gradient(800px 600px at 60% 110%, var(--ambient-c), transparent 60%);
+  background-color: var(--bg-base);
 }
 
 main {
@@ -258,10 +599,9 @@ a {
   padding: 12px 16px;
   margin-bottom: 20px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background: var(--surface);
   box-shadow: var(--shadow-tight);
-  backdrop-filter: blur(12px);
   position: sticky;
   top: 12px;
   z-index: 30;
@@ -312,7 +652,7 @@ a {
   gap: 8px;
   height: 36px;
   padding: 0 12px 0 6px;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   border: 1px solid var(--border);
   background: var(--surface-solid);
   font-size: 13px;
@@ -333,10 +673,11 @@ a {
   height: 30px;
   flex-shrink: 0;
   padding: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   border: 1px solid var(--border);
   background: var(--surface-solid);
   color: var(--muted);
+  box-shadow: var(--control-shadow);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -365,7 +706,7 @@ a {
 .icon-btn-sm {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--radius-small);
 }
 
 .icon-btn-sm .icon {
@@ -376,7 +717,7 @@ a {
 .icon-btn-lg {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 
 .icon-btn-lg .icon {
@@ -428,9 +769,13 @@ a {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  padding: 20px;
+  padding: var(--card-pad);
   box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(10px);
+  /* A stacking context, so a tooltip overflowing an earlier child cannot
+     escape under the next section (see CLAUDE.md). This used to come from a
+     backdrop-filter: blur(10px) — a live blur on every card, in every style,
+     paid for only to get the stacking context. */
+  isolation: isolate;
   transition: box-shadow 200ms ease, border-color 200ms ease;
 }
 
@@ -493,13 +838,29 @@ input,
 select {
   width: 100%;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   border: 1px solid var(--border);
   background: var(--surface-solid);
   font-size: 15px;
   font-family: inherit;
   color: var(--ink);
+  box-shadow: var(--control-shadow-sunk);
   transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+/* iOS Safari draws a date input as a centred button with an intrinsic minimum
+   width wider than half a phone, so in a two-column grid it pushed past its
+   cell. Dropping the native appearance lets `width` win; the value is then
+   left-aligned like every other field. */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  display: block;
+}
+
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
 }
 
 /* The native arrow sits a few pixels from the border and cannot be padded, so
@@ -540,7 +901,7 @@ select:focus {
   gap: 6px;
   height: 36px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   padding: 0 16px;
   font-weight: 600;
   font-size: 13px;
@@ -559,7 +920,7 @@ select:focus {
 .btn-small {
   height: 30px;
   padding: 0 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   font-size: 12px;
 }
 
@@ -578,10 +939,21 @@ select:focus {
   background: var(--accent-strong);
 }
 
+/* Disabled is a neutral fill, not the accent at half opacity: on glass or a
+   pale accent that faded to nearly nothing (the "Lagre" on /sparing). */
+.btn-primary:disabled {
+  opacity: 1;
+  background: var(--bg-alt);
+  border-color: var(--border);
+  color: var(--muted);
+  box-shadow: none;
+}
+
 .btn-ghost {
   background: var(--surface-solid);
   border-color: var(--border);
   color: var(--ink);
+  box-shadow: var(--control-shadow);
 }
 
 .btn-ghost:hover:not(:disabled) {
@@ -625,7 +997,7 @@ select:focus {
   gap: 6px;
   width: fit-content;
   padding: 4px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   border: 1px solid var(--border);
   background: var(--bg-alt);
   font-size: 11px;
@@ -747,7 +1119,7 @@ select:focus {
 .stat-delta {
   width: fit-content;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-small);
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -838,7 +1210,7 @@ select:focus {
   margin-right: 12px;
   padding: 6px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--surface-solid);
   color: var(--ink);
   font-family: inherit;
@@ -915,7 +1287,7 @@ select:focus {
   padding: 20px 14px;
   text-align: center;
   border: 1px dashed var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-soft);
   color: var(--muted);
   background: var(--bg-alt);
 }
@@ -1043,9 +1415,8 @@ select:focus {
     padding: 0 6px;
   }
 
-  .card {
-    border-radius: 14px;
-    padding: 16px;
+  :root {
+    --card-pad: 16px;
   }
 
   .section-title {

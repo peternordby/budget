@@ -3,8 +3,10 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  /* DiceBear paints a full-bleed background rect, so the circle is this clip. */
   overflow: hidden;
+  /* The accent, lightened so the drawing's black lines read on every pick —
+     a dark accent at full strength would swallow them. */
+  background: color-mix(in oklab, var(--accent) 45%, #ffffff);
   object-fit: cover;
   user-select: none;
 }

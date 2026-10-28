@@ -2,28 +2,85 @@
 
 ## Visual Direction
 
-The interface uses a warm "ledger journal" style:
+Apple-inspired and deliberately calm: neutral greys rather than warm stone,
+text near black, secondary text dark enough to read, separators you can see,
+and colours a step down from Apple's system palette so nothing shouts.
 
-- Light palette with sand and cream background tones.
-- Burnt orange as the primary action color.
-- Green for positive financial signals.
-- Soft card surfaces with subtle blur and layered depth.
+The user picks one of **four styles** and an **accent colour** on `/profil` (`components/AppearanceSettings.tsx`,
+`lib/appearance.ts`). The choice is **synced through the account**
+(`auth.users.user_metadata.appearance`, written debounced on every change and
+applied by `AuthGate` on load and at sign-in — not on `USER_UPDATED`, which is
+that write echoing back) and cached in `localStorage` (`budget-appearance`) so
+the pre-paint script in `app/layout.tsx` can apply it before a session exists.
+On `<html>` it becomes `data-style` plus inline `--accent` and
+`--accent-contrast`. Light/dark stays per device.
 
-The goal is high readability for daily use without feeling like a flat default dashboard.
+- **Standard** (`:root`): borderless white cards lifted off a grey page by a
+  soft shadow, 14px cards / 9px controls.
+- **Ark**: an accounting sheet. A 64×20 cell grid behind the page, no corners
+  anywhere (charts included), gridlines between rows *and* columns in the
+  activity table on desktop, grey centred column headers, the category cell
+  filled instead of a pill, a tinted title bar with an accent stripe on every
+  card whose first child is its `.card-head`, inputs as cells with a 2px
+  "selected cell" focus, flat ribbon buttons with an underlined current tab,
+  Office's typeface (Aptos/Calibri) where installed, tabular figures, straight
+  line segments in line/area charts, and square donut ends. `/sparing`'s
+  history is one sheet of rows too.
+- **Glass**: Apple's Liquid Glass, fixed at iOS 26's *Klar* (clearest). Every
+  surface is a clear translucent pane over a two-shape colour wallpaper, with
+  a soft inner glow for depth and no white border; the header is a floating
+  bar the page scrolls under (on a phone, the tab bar floats instead). Bars
+  and menus are tinted more than panes because nothing is blurred.
+  **Performance rules, learnt the hard way** — Glass made the app visibly
+  sluggish until all of these went: no `backdrop-filter` at all (it is
+  recomputed whenever anything moves beneath it), no masked rim layers, no
+  per-control gradients, no `background-attachment: fixed`, no SVG
+  refraction filter. Translucency over a soft wallpaper is composited for
+  free; keep it that way.
+- **Neumorphism** (`neu`): one surface colour, cards and buttons raised by a
+  light and a dark shadow, inputs and wells pressed in, and anything that is
+  *on* (current tab, `.is-on`, an `aria-pressed` `.btn`, a held button) pressed
+  in too. Rows press in on hover (`--shadow-hover`), because a raised shadow
+  that size is cut off by the next row. The pressed rule names `.btn` on
+  purpose: the charts' hit areas are `aria-pressed` buttons, and filling one
+  painted over the selected month's bars.
 
 ## Core Variables
 
-Color and shape variables are defined in `app/globals.css` under `:root`.
-
-Key variables:
+Color and shape variables are defined in `app/globals.css` under `:root`; the
+style blocks (`html[data-style="…"]`, then their `[data-theme="dark"]`
+variants) come after the dark theme so a style wins where both set a token.
 
 - `--bg-base`, `--bg-alt`: page background colors.
 - `--ink`, `--muted`: text hierarchy.
-- `--accent`, `--accent-strong`, `--accent-soft`: action and highlight colors.
+- `--accent`: the user's colour. `--accent-strong`, `--accent-soft`,
+  `--focus-ring`, `--editing-bg`, the Glass colour field and the avatar's
+  background are `color-mix()`ed from it. `--accent-contrast` (white or
+  near-black, `contrastInk`) is the text on it.
 - `--income`, `--expense`: semantic finance colors.
-- `--surface`, `--surface-popover`, `--border`: card and form structure.
-- `--radius-card`, `--radius-soft`: shape and corner radius.
-- `--shadow-soft`, `--shadow-tight`, `--shadow-inset`: depth system.
+- `--surface`, `--surface-solid`, `--surface-popover`, `--border`: card and form structure.
+- **Corners: six tokens and nothing else** — `--radius-card`, `--radius-soft`
+  (a panel or row inside a card), `--radius-control`, `--radius-small`,
+  `--radius-chip` (what used to be a 999px pill) and `--radius-bar` (chart
+  bars and columns, via `barCorner(max)` in `components/charts.tsx`, which sets
+  the CSS `rx` property capped at half the bar's thinner side). A literal
+  `border-radius` other than `50%` or a 1–3px mark, or a literal `rx`, is a bug.
+  `--bar-cap` is the donut's line cap (round; butt in Ark).
+- `--shadow-soft`, `--shadow-tight`, `--shadow-inset`, `--shadow-hover`,
+  `--control-shadow`, `--control-shadow-sunk`: depth.
+- `--shadow-popover`: everything that floats over a card
+  (menus, the autocomplete list, the date picker, chart tooltips, toasts, the
+  drill-down panel) shares it, so a style restyles them all at once.
+- `.card` gets its stacking context from `isolation: isolate`. It used to
+  come from `backdrop-filter: blur(10px)` — a live blur on every card in every
+  style, paid for only to get the stacking context.
+- `--card-pad`: card padding (20px, 16px on a phone), a token so Ark's header
+  strip can bleed to the card edge.
+- Things a token cannot carry: `useChartCurve()` in `components/charts.tsx`
+  returns `curveLinear` in Ark and `curveMonotoneX` elsewhere, following
+  `data-style` live (a curve is a path string, not CSS).
+- A disabled `.btn-primary` is a neutral fill with muted text, not the accent
+  at half opacity, which vanished on glass and pale accents.
 
 When adjusting theme behavior, update variables first before changing component rules.
 

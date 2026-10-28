@@ -11,8 +11,8 @@
   padding: 10px 12px 10px 16px;
   background: var(--surface-popover);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 16px 40px rgb(0 0 0 / 0.24);
+  border-radius: var(--radius-soft);
+  box-shadow: var(--shadow-popover);
 }
 
 .toast-error {

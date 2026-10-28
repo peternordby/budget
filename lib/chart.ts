@@ -69,24 +69,48 @@ const MIN_LABEL_GAP = 0.085;
  * without colliding. The last is non-negotiable, so anything too close to it
  * is dropped rather than allowed to overlap it.
  */
-export function labelledDates(fractions: number[]): number[] {
+/**
+ * Room one date label needs on the axis, in pixels: "05.10.26" at the axis
+ * label's 10px spaced caps is ~56px, plus a 16px gap. The thinning below has to be in
+ * pixels at render time — as a fixed fraction, a phone-width chart kept
+ * labels 30px apart and they ran into each other.
+ */
+export const DATE_LABEL_PX = 72;
+
+export function labelledDates(
+  fractions: number[],
+  minGap = MIN_LABEL_GAP,
+  /** Half a label, as a fraction: a label pinned flush to an edge (see
+   *  edgeAnchor) is centred this far in, so it is spaced from there. */
+  edge = 0
+): number[] {
   if (fractions.length <= 1) return fractions.map((_, index) => index);
 
+  const at = (index: number) => Math.min(Math.max(fractions[index], edge), 1 - edge);
   const kept = [0];
   const last = fractions.length - 1;
   for (let i = 1; i < last; i += 1) {
-    if (fractions[i] - fractions[kept[kept.length - 1]] >= MIN_LABEL_GAP) {
+    if (at(i) - at(kept[kept.length - 1]) >= minGap) {
       kept.push(i);
     }
   }
-  while (
-    kept.length &&
-    fractions[last] - fractions[kept[kept.length - 1]] < MIN_LABEL_GAP
-  ) {
+  while (kept.length && at(last) - at(kept[kept.length - 1]) < minGap) {
     kept.pop();
   }
   kept.push(last);
   return kept;
+}
+
+/**
+ * Which way a label centred on `x` should hang so it stays inside a plot
+ * `width` wide: centred where it fits, flush left or right where half of it
+ * would cross an edge. Going by the edges in pixels, not by "first" and
+ * "last" — the second label of a clustered series overflows too.
+ */
+export function edgeAnchor(x: number, width: number, half = DATE_LABEL_PX / 2) {
+  if (x - half < 0) return "start" as const;
+  if (x + half > width) return "end" as const;
+  return "middle" as const;
 }
 
 /**

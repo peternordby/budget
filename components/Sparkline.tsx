@@ -14,8 +14,8 @@
 import { useId, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { scaleLinear } from "d3-scale";
-import { area, curveMonotoneX, line } from "d3-shape";
-import { ChartTooltip, useMeasure } from "./charts";
+import { area, line } from "d3-shape";
+import { ChartTooltip, useChartCurve, useMeasure } from "./charts";
 import { T_DRAW, T_FAST } from "@/lib/motion";
 import styles from "./charts.module.css";
 
@@ -48,6 +48,7 @@ export default function Sparkline({
   const [ref, width] = useMeasure<HTMLSpanElement>();
   const gradientId = useId().replace(/[^\w-]/g, "");
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const curve = useChartCurve();
 
   const geometry = useMemo(() => {
     if (!width || points.length === 0) return null;
@@ -71,14 +72,14 @@ export default function Sparkline({
 
     return {
       coords,
-      linePath: line<[number, number]>().curve(curveMonotoneX)(coords) ?? "",
+      linePath: line<[number, number]>().curve(curve)(coords) ?? "",
       areaPath:
         area<[number, number]>()
           .y0(height)
           .y1((point) => point[1])
-          .curve(curveMonotoneX)(coords) ?? "",
+          .curve(curve)(coords) ?? "",
     };
-  }, [points, width, height]);
+  }, [points, width, height, curve]);
 
   const hoveredCoord =
     hoverIndex !== null && geometry ? geometry.coords[hoverIndex] : null;

@@ -15,7 +15,7 @@ import {
   totalSeries,
   type Snapshot,
 } from "./savings";
-import { axisTicks, labelledDates, shortAmount } from "./chart";
+import { axisTicks, edgeAnchor, labelledDates, shortAmount } from "./chart";
 
 let nextId = 1;
 function snap(category: string, date: string, amount: number): Snapshot {
@@ -882,5 +882,37 @@ describe("axisTicks (chart y-scale)", () => {
   it("handles a zero or negative max without looping", () => {
     expect(axisTicks(0)).toEqual([0]);
     expect(axisTicks(-5)).toEqual([0]);
+  });
+});
+
+describe("labelledDates with a pixel gap", () => {
+  it("keeps fewer labels on a narrow chart", () => {
+    const fractions = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+    expect(labelledDates(fractions, 60 / 1000)).toHaveLength(11);
+    // 320px: 60px is ~0.19 of the plot, so every other label at most.
+    const narrow = labelledDates(fractions, 60 / 320);
+    expect(narrow.length).toBeLessThanOrEqual(6);
+    narrow.slice(1).forEach((index, i) => {
+      expect(fractions[index] - fractions[narrow[i]]).toBeGreaterThanOrEqual(60 / 320);
+    });
+  });
+});
+
+describe("edgeAnchor", () => {
+  it("hangs a label inward wherever half of it would cross an edge", () => {
+    expect(edgeAnchor(0, 400)).toBe("start");
+    expect(edgeAnchor(20, 400)).toBe("start");
+    expect(edgeAnchor(200, 400)).toBe("middle");
+    expect(edgeAnchor(380, 400)).toBe("end");
+  });
+});
+
+describe("labelledDates with edge-pinned labels", () => {
+  it("spaces the second label from where the pinned first one ends", () => {
+    // 320px wide, 60px labels: the first is pinned flush left, so it is
+    // centred 30px in, and a date 70px in sits too close to it.
+    const fractions = [0, 70 / 320, 120 / 320, 1];
+    expect(labelledDates(fractions, 60 / 320, 30 / 320)).toEqual([0, 2, 3]);
+    expect(labelledDates(fractions, 60 / 320)).toEqual([0, 1, 3]);
   });
 });
