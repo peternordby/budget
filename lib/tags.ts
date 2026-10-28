@@ -4,7 +4,7 @@
 
 import { isSpendingKind } from "@/lib/categories";
 import type { LedgerEntry } from "@/lib/insights";
-import { isoDate } from "@/lib/periodStats";
+import { isoDate, shortDate } from "@/lib/periodStats";
 
 /** How many purchases the card lists. */
 export const TOP_PURCHASES = 5;
@@ -22,6 +22,8 @@ function sameName(a: string, b: string) {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
+/** The first match in the list's order — so with orderTags, a current or
+ *  upcoming trip wins over a past one of the same name (the CSV import). */
 export function findTagByName<T extends Tag>(tags: T[], name: string) {
   return tags.find((tag) => sameName(tag.name, name));
 }
@@ -52,41 +54,27 @@ export function tagForDate<T extends Tag>(tags: T[], date: string): T | undefine
   return tags.find((tag) => tag.start && tag.end && tag.start <= date && date <= tag.end);
 }
 
-export type TagMerge = { keep: Tag; drop: number[] };
-
 /**
- * Tags whose names match ignoring case and surrounding space, folded into one.
- * 0010 created one tag per tagged expense, so a group's row count is its
- * purchase count: the most frequent spelling wins (then the oldest), and the
- * dates widen to cover every member, i.e. the first and last purchase.
+ * What a list shows for each merkelapp: the name, plus its dates (or "uten
+ * datoer") when another merkelapp has the same name — "Hytta" every summer
+ * would otherwise be several identical options.
  */
-export function planTagMerge(tags: Tag[]): TagMerge[] {
-  const groups = new Map<string, Tag[]>();
+export function tagLabels(tags: Tag[]): Map<number, string> {
+  const counts = new Map<string, number>();
   tags.forEach((tag) => {
     const key = tag.name.trim().toLowerCase();
-    if (key) groups.set(key, [...(groups.get(key) ?? []), tag]);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   });
-
-  return [...groups.values()]
-    .filter((group) => group.length > 1)
-    .map((group) => {
-      const sorted = [...group].sort((a, b) => a.id - b.id);
-      const counts = new Map<string, number>();
-      sorted.forEach((tag) => counts.set(tag.name.trim(), (counts.get(tag.name.trim()) ?? 0) + 1));
-      const name = [...counts].reduce((best, next) => (next[1] > best[1] ? next : best))[0];
-      const starts = sorted.flatMap((tag) => (tag.start ? [tag.start] : [])).sort();
-      const ends = sorted.flatMap((tag) => (tag.end ? [tag.end] : [])).sort();
-      return {
-        keep: {
-          id: sorted[0].id,
-          name,
-          start: starts[0] ?? null,
-          end: ends[ends.length - 1] ?? null,
-          budget: sorted.find((tag) => tag.budget != null)?.budget ?? null,
-        },
-        drop: sorted.slice(1).map((tag) => tag.id),
-      };
-    });
+  return new Map(
+    tags.map((tag) => {
+      if ((counts.get(tag.name.trim().toLowerCase()) ?? 0) < 2) return [tag.id, tag.name];
+      const when =
+        tag.start && tag.end
+          ? `${shortDate(tag.start, true)} – ${shortDate(tag.end, true)}`
+          : "uten datoer";
+      return [tag.id, `${tag.name} (${when})`];
+    })
+  );
 }
 
 /** Days from start to end, both included. */
