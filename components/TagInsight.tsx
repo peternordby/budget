@@ -9,7 +9,7 @@ import { formatCurrency } from "@/lib/format";
 import { keyToRef } from "@/lib/period";
 import { shortDate } from "@/lib/periodStats";
 import { categoryColor, categorySlots } from "@/lib/categoryColor";
-import { tagSummaries } from "@/lib/tags";
+import { tagLabels, tagSummaries } from "@/lib/tags";
 import styles from "./TagInsight.module.css";
 
 /**
@@ -35,6 +35,7 @@ export default function TagInsight() {
     () => tagSummaries(toLedgerEntries(ledger.expenses), ledger.tags),
     [ledger.expenses, ledger.tags]
   );
+  const labels = useMemo(() => tagLabels(ledger.tags), [ledger.tags]);
   const [picked, setPicked] = useState<number | null>(null);
   const summary = tags.find((row) => row.tag.id === picked) ?? tags[0];
 
@@ -67,7 +68,7 @@ export default function TagInsight() {
       >
         {tags.map((row) => (
           <option key={row.tag.id} value={row.tag.id}>
-            {row.tag.name}
+            {labels.get(row.tag.id) ?? row.tag.name}
           </option>
         ))}
       </select>

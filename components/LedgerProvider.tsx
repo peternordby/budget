@@ -6,7 +6,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -23,7 +22,7 @@ import {
 import type { RecurringTemplate } from "@/lib/recurring";
 import { decField, decNumber, encField } from "@/lib/crypto";
 import { isoDate } from "@/lib/periodStats";
-import { findTagByName, orderTags, planTagMerge, type Tag } from "@/lib/tags";
+import { orderTags, type Tag } from "@/lib/tags";
 
 export type LedgerCategory = {
   id: number;
@@ -78,7 +77,7 @@ export type LedgerContextValue = {
   upsertTag: (tag: Tag) => void;
   /** Also clears the tag from local expenses, as `on delete set null` does. */
   removeTag: (id: number) => void;
-  /** The merkelapp with this name (ignoring case), created undated if missing. */
+  /** A new, undated merkelapp. Names may repeat ("Hytta" every year). */
   createTag: (name: string) => Promise<Tag>;
 };
 
@@ -184,33 +183,6 @@ function normalizeCategory(raw: any): LedgerCategory | null {
   };
 }
 
-// 0010 created one tag per tagged expense, since the database cannot tell two
-// ciphertexts of "Roma" apart; this folds them back together once the names
-// are readable. Expenses move first, because deleting a tag sets theirs null.
-async function mergeTags(tags: Tag[], userId: string) {
-  for (const { keep, drop } of planTagMerge(tags)) {
-    const moved = await supabase
-      .from("expense")
-      .update({ tag_id: keep.id })
-      .in("tag_id", drop)
-      .eq("user_id", userId);
-    if (moved.error) throw new Error(moved.error.message);
-    const kept = await supabase
-      .from("tag")
-      .update({
-        name: await encField(keep.name),
-        start_date: keep.start,
-        end_date: keep.end,
-        budget: await encField(keep.budget),
-      })
-      .eq("id", keep.id)
-      .eq("user_id", userId);
-    if (kept.error) throw new Error(kept.error.message);
-    const dropped = await supabase.from("tag").delete().in("id", drop).eq("user_id", userId);
-    if (dropped.error) throw new Error(dropped.error.message);
-  }
-}
-
 function lastDayOf(ref: MonthRef) {
   return new Date(ref.year, ref.month, 0).getDate();
 }
@@ -266,9 +238,6 @@ export default function LedgerProvider({
   const [windowEnd, setWindowEnd] = useState<MonthRef>(() => today);
   const [rows, setExpenses] = useState<LedgerExpense[]>([]);
   const [tagRows, setTags] = useState<Tag[]>([]);
-  // Once per mount: a merge whose writes silently did nothing (RLS) would
-  // otherwise plan itself again on every reload.
-  const merged = useRef(false);
   const [categories, setCategories] = useState<LedgerCategory[]>([]);
   const [budgets, setBudgets] = useState<LedgerBudget[]>([]);
   const [templates, setTemplates] = useState<RecurringTemplate[]>([]);
@@ -323,8 +292,6 @@ export default function LedgerProvider({
 
   const createTag = useCallback(
     async (name: string) => {
-      const existing = findTagByName(tags, name);
-      if (existing) return existing;
       const { data, error } = await supabase
         .from("tag")
         .insert({ name: await encField(name.trim()), user_id: userId })
@@ -335,7 +302,7 @@ export default function LedgerProvider({
       upsertTag(tag);
       return tag;
     },
-    [tags, userId, upsertTag]
+    [userId, upsertTag]
   );
 
   // Names come from the tag list rather than being stored on the row, so a
@@ -423,14 +390,6 @@ export default function LedgerProvider({
           budget: row.budget == null ? null : await decNumber(row.budget),
         }))
       );
-
-      if (!active) return;
-      if (!merged.current && planTagMerge(decryptedTags).length) {
-        merged.current = true;
-        await mergeTags(decryptedTags, userId);
-        if (active) setReloadToken((token) => token + 1);
-        return;
-      }
 
       // The one place the ledger is decrypted. Everything downstream — every
       // useMemo, the search box, the CSV export, insights.ts — receives plain

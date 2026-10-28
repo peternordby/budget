@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLedger } from "@/components/LedgerProvider";
+import { tagLabels } from "@/lib/tags";
 
 const NEW = "__new__";
 
@@ -27,6 +28,7 @@ export default function TagSelect({
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const labels = useMemo(() => tagLabels(ledger.tags), [ledger.tags]);
 
   async function commit() {
     const trimmed = name.trim();
@@ -89,7 +91,7 @@ export default function TagSelect({
       <option value="">Ingen</option>
       {ledger.tags.map((tag) => (
         <option key={tag.id} value={String(tag.id)}>
-          {tag.name}
+          {labels.get(tag.id) ?? tag.name}
         </option>
       ))}
       <option value={NEW}>+ Ny merkelapp…</option>

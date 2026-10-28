@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LedgerEntry } from "@/lib/insights";
-import { orderTags, planTagMerge, tagForDate, tagSummaries, type Tag } from "@/lib/tags";
+import { orderTags, tagForDate, tagLabels, tagSummaries, type Tag } from "@/lib/tags";
 
 let nextId = 1;
 function entry(overrides: Partial<LedgerEntry> = {}): LedgerEntry {
@@ -118,23 +118,15 @@ describe("tagForDate", () => {
   });
 });
 
-describe("planTagMerge", () => {
-  it("folds same-named tags into the oldest, with the commonest spelling and widest dates", () => {
-    const plan = planTagMerge([
-      tag({ id: 4, name: "roma ", start: "2026-07-03", end: "2026-07-03" }),
-      tag({ id: 2, name: "Roma", start: "2026-03-10", end: "2026-03-10" }),
-      tag({ id: 3, name: "Roma", start: "2026-07-05", end: "2026-07-05", budget: 15000 }),
-      tag({ id: 5, name: "Berlin", start: "2026-01-01", end: "2026-01-01" }),
+describe("tagLabels", () => {
+  it("adds the dates only where a name repeats", () => {
+    const labels = tagLabels([
+      tag({ id: 1, name: "Hytta", start: "2025-07-01", end: "2025-07-07" }),
+      tag({ id: 2, name: "hytta" }),
+      tag({ id: 3, name: "Roma" }),
     ]);
-    expect(plan).toEqual([
-      {
-        keep: { id: 2, name: "Roma", start: "2026-03-10", end: "2026-07-05", budget: 15000 },
-        drop: [3, 4],
-      },
-    ]);
-  });
-
-  it("does nothing when every name is distinct", () => {
-    expect(planTagMerge([tag({ id: 1 }), tag({ id: 2, name: "Berlin" })])).toEqual([]);
+    expect(labels.get(1)).toMatch(/^Hytta \(.+2025.+\)$/);
+    expect(labels.get(2)).toBe("hytta (uten datoer)");
+    expect(labels.get(3)).toBe("Roma");
   });
 });

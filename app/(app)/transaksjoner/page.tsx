@@ -50,7 +50,7 @@ import {
   type ExpenseImport,
 } from "@/lib/importExpenses";
 import { encField } from "@/lib/crypto";
-import { findTagByName, tagForDate } from "@/lib/tags";
+import { findTagByName, tagForDate, tagLabels } from "@/lib/tags";
 import styles from "./transaksjoner.module.css";
 
 // One filter per column, laid out in the table's own grid under its header,
@@ -352,9 +352,13 @@ export default function TransaksjonerPage() {
     ledger.ensureMonthCovered,
   ]);
 
+  // By id, not name: two trips may share a name, and the labels tell them apart.
   const activityTagOptions = useMemo(() => {
-    const used = new Set(activitySource.map((expense) => expense.tag?.trim()));
-    return ledger.tags.map((tag) => tag.name.trim()).filter((name) => used.has(name));
+    const used = new Set(activitySource.map((expense) => expense.tag_id));
+    const labels = tagLabels(ledger.tags);
+    return ledger.tags
+      .filter((tag) => used.has(tag.id))
+      .map((tag) => ({ value: String(tag.id), label: labels.get(tag.id) ?? tag.name }));
   }, [activitySource, ledger.tags]);
   const activityCategoryOptions = useMemo(() => {
     const categoryNames = new Set<string>();
@@ -389,7 +393,6 @@ export default function TransaksjonerPage() {
   const filteredAndSortedExpenses = useMemo(() => {
     const filtered = activitySource.filter((expense) => {
       const categoryName = getExpenseCategoryLabel(expense);
-      const tagValue = expense.tag?.trim() ?? "";
       const itemValue = expense.item.trim().toLowerCase();
       const itemQuery = activityFilters.itemQuery.trim().toLowerCase();
       const date = expense.date ?? "";
@@ -401,7 +404,7 @@ export default function TransaksjonerPage() {
       if (activityFilters.dateTo && date > activityFilters.dateTo) return false;
       if (min && amount < Number(min)) return false;
       if (max && amount > Number(max)) return false;
-      if (activityFilters.tag && tagValue !== activityFilters.tag) {
+      if (activityFilters.tag && String(expense.tag_id) !== activityFilters.tag) {
         return false;
       }
       if (activityFilters.category && categoryName !== activityFilters.category) {
@@ -834,7 +837,7 @@ export default function TransaksjonerPage() {
 
   useEffect(() => {
     if (!activityFilters.tag) return;
-    if (activityTagOptions.includes(activityFilters.tag)) return;
+    if (activityTagOptions.some((option) => option.value === activityFilters.tag)) return;
     setActivityFilters((prev) => ({ ...prev, tag: "" }));
   }, [activityFilters.tag, activityTagOptions]);
 
@@ -1195,9 +1198,9 @@ export default function TransaksjonerPage() {
             onChange={(e) => setFilter("tag", e.target.value)}
           >
             <option value="">Alle merkelapper</option>
-            {activityTagOptions.map((tag) => (
-              <option key={tag} value={tag}>
-                {tag}
+            {activityTagOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>

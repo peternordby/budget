@@ -8,7 +8,7 @@ import { encField } from "@/lib/crypto";
 import { formatCurrency } from "@/lib/format";
 import { keyToRef } from "@/lib/period";
 import { shortDate } from "@/lib/periodStats";
-import { daySpan, findTagByName, type Tag } from "@/lib/tags";
+import { daySpan, type Tag } from "@/lib/tags";
 import { IconCheck, IconChevronLeft, IconPencil, IconPlus, IconTrash, IconX } from "@/components/icons";
 import styles from "./merkelapper.module.css";
 
@@ -60,10 +60,6 @@ export default function MerkelapperPage() {
   async function handleAdd() {
     const name = newName.trim();
     if (!name) return;
-    if (findTagByName(ledger.tags, name)) {
-      setStatus(`Merkelappen «${name}» finnes allerede.`);
-      return;
-    }
     setBusy(true);
     setStatus(null);
     try {
@@ -90,14 +86,10 @@ export default function MerkelapperPage() {
   async function handleSave(id: number) {
     const name = draft.name.trim();
     const budget = draft.budget.trim() ? Math.round(Number(draft.budget)) : null;
-    const clash = findTagByName(ledger.tags, name);
-    // Checked here because the database cannot: it would be comparing
-    // ciphertexts, and both dates are readable but a pair.
+    // Names may repeat ("Hytta" every summer); the dates tell them apart.
     const problem = !name
       ? "Merkelappen må ha et navn."
-      : clash && clash.id !== id
-        ? `Merkelappen «${name}» finnes allerede.`
-        : Boolean(draft.start) !== Boolean(draft.end)
+      : Boolean(draft.start) !== Boolean(draft.end)
           ? "Sett både første og siste dag, eller ingen av dem."
           : draft.start && draft.end < draft.start
             ? "Siste dag kan ikke være før første."
