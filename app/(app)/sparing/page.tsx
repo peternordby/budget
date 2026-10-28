@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLedger } from "@/components/LedgerProvider";
 import StackedAreaChart, {
   StackedAreaLegend,
@@ -49,9 +49,10 @@ export default function SparingPage() {
 
   const [categoryFilter, setCategoryFilter] = useState("");
   const [order, setOrder] = useState<string[] | null>(null);
+  // The order mid-drag: the chart redraws from it live, as a transition so
+  // the dragged row never waits on the chart. Stored only on release.
+  const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [dragTarget, setDragTarget] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<ImportResult | null>(null);
   const [importName, setImportName] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
@@ -120,8 +121,8 @@ export default function SparingPage() {
   }, []);
 
   const chart = useMemo(
-    () => stackedSeries(snapshots, order ?? undefined),
-    [snapshots, order]
+    () => stackedSeries(snapshots, previewOrder ?? order ?? undefined),
+    [snapshots, previewOrder, order]
   );
 
   // The chart reconciles the order itself; mirror that here so the reorder
@@ -132,6 +133,7 @@ export default function SparingPage() {
   );
 
   const persistOrder = useCallback((next: string[]) => {
+    setPreviewOrder(null);
     setOrder(next);
     try {
       window.localStorage.setItem(ORDER_KEY, JSON.stringify(next));
@@ -139,34 +141,6 @@ export default function SparingPage() {
       // Order is a convenience; failing to store it must not break the page.
     }
   }, []);
-
-  // The legend lists top-of-stack first, so "up" there means "later in the
-  // stack order". Translating once here keeps the component presentational.
-  const moveCategory = useCallback(
-    (category: string, direction: -1 | 1) => {
-      const from = effectiveOrder.indexOf(category);
-      if (from === -1) return;
-      const to = from - direction;
-      if (to < 0 || to >= effectiveOrder.length) return;
-      const next = [...effectiveOrder];
-      next.splice(to, 0, next.splice(from, 1)[0]);
-      persistOrder(next);
-    },
-    [effectiveOrder, persistOrder]
-  );
-
-  const dropCategory = useCallback(
-    (dragged: string, target: string) => {
-      if (dragged === target) return;
-      const from = effectiveOrder.indexOf(dragged);
-      const to = effectiveOrder.indexOf(target);
-      if (from === -1 || to === -1) return;
-      const next = [...effectiveOrder];
-      next.splice(to, 0, next.splice(from, 1)[0]);
-      persistOrder(next);
-    },
-    [effectiveOrder, persistOrder]
-  );
 
   const orderIsCustom = useMemo(() => {
     const fallback = defaultOrder(snapshots);
@@ -393,29 +367,29 @@ export default function SparingPage() {
             <div className={styles["legend-head-row"]}>
               <span className="helper">
                 Rekkefølgen bestemmer hvilken kategori som ligger nederst i
-                grafen. Dra en rad, eller bruk pilene.
+                grafen. Dra i håndtaket for å flytte en rad.
               </span>
-              {orderIsCustom ? (
-                <button
-                  className="btn btn-ghost btn-small"
-                  type="button"
-                  onClick={() => persistOrder(defaultOrder(snapshots))}
-                >
-                  Nullstill rekkefølge
-                </button>
-              ) : null}
+              {/* Always in the layout, only hidden: it toggles as the order
+                  changes — mid-drag too, with the live preview — and coming
+                  and going it changed this row's height, the page scrolled to
+                  compensate, the row under the pointer moved, and the drag
+                  swapped again: the page flickered up and down. */}
+              <button
+                className="btn btn-ghost btn-small"
+                type="button"
+                onClick={() => persistOrder(defaultOrder(snapshots))}
+                style={orderIsCustom ? undefined : { visibility: "hidden" }}
+                aria-hidden={orderIsCustom ? undefined : true}
+                tabIndex={orderIsCustom ? undefined : -1}
+              >
+                Nullstill rekkefølge
+              </button>
             </div>
             <StackedAreaLegend
               chart={chart}
               hoverIndex={hoverIndex}
-              onMove={moveCategory}
-              onDrop={dropCategory}
-              dragging={dragging}
-              dragTarget={dragTarget}
-              onDragState={(next, target) => {
-                setDragging(next);
-                setDragTarget(target);
-              }}
+              onPreview={(next) => startTransition(() => setPreviewOrder(next))}
+              onReorder={persistOrder}
             />
           </>
         )}

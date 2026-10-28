@@ -5,7 +5,7 @@
 
 .nav-route {
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--muted);
   text-decoration: none;
   font-weight: 600;
@@ -34,6 +34,22 @@
     padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
     background: var(--surface-solid);
     border-top: 1px solid var(--border);
+  }
+
+  /* Glass: the tab bar floats — a bar of glass held off the screen edges,
+     which the page scrolls under. Tinted strongly rather than blurred: its
+     labels sit over rows scrolling past, and a live blur cost frame rate. */
+  :global(html[data-style="glass"]) .nav-routes {
+    inset: auto 10px calc(10px + env(safe-area-inset-bottom)) 10px;
+    padding: 5px;
+    border: 0;
+    border-radius: 26px;
+    background: var(--glass-bar);
+    box-shadow: var(--glass-bevel), 0 10px 30px rgb(20 30 70 / 0.18);
+  }
+
+  :global(html[data-style="glass"]) .nav-route {
+    border-radius: 21px;
   }
 
   /* Six tabs share a 375px screen: ~58px each, so the padding is nearly all

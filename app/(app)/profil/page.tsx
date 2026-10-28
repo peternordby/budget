@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
+import AppearanceSettings from "@/components/AppearanceSettings";
 import Avatar from "@/components/Avatar";
 import { supabase } from "@/lib/supabaseClient";
 import { displayName, fullName } from "@/lib/profile";
@@ -262,6 +263,13 @@ export default function ProfilPage() {
             ) : null}
           </div>
         </div>
+      </section>
+
+      <section className="card section-gap">
+        <div className="card-head">
+          <h2 className="section-title">Utseende</h2>
+        </div>
+        <AppearanceSettings />
       </section>
 
       <section className="card section-gap">

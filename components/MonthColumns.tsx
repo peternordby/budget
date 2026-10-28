@@ -35,6 +35,7 @@ import {
   ChartTooltip,
   GridLines,
   bandLayout,
+  barCorner,
   useMeasure,
   type TooltipRow,
 } from "./charts";
@@ -179,7 +180,7 @@ export default function MonthColumns({
                 y={0}
                 width={Math.max(band.step - 2, 1)}
                 height={height + LABEL_BAND - 2}
-                rx={8}
+                {...barCorner(6)}
               />
             );
           })}
@@ -210,7 +211,7 @@ export default function MonthColumns({
                   height={Math.max(size, value === 0 ? 0 : 2)}
                   // Bounded by the bar's own height too, or a two-pixel bar
                   // renders as a lozenge floating off the baseline.
-                  rx={Math.min(4, barWidth / 2, Math.max(size, 1) / 2)}
+                  {...barCorner(Math.min(barWidth / 2, Math.max(size, 1) / 2))}
                   fill={color}
                   opacity={point.empty ? 0.35 : 1}
                 />

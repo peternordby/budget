@@ -1,4 +1,4 @@
-/* The selected period: the four tiles, and the line under each section title. */
+/* The selected period: the four tiles. */
 
 .tiles {
   display: grid;
@@ -17,11 +17,6 @@
   font-weight: 600;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-}
-
-/* The one-line explanation under a section title. */
-.lede {
-  margin: -4px 0 14px;
 }
 
 @media (max-width: 760px) {

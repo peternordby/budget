@@ -55,7 +55,7 @@
 }
 
 .category-tile:hover {
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-hover);
 }
 
 .category-tile.active {

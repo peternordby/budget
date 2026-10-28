@@ -71,7 +71,7 @@
   gap: 8px;
   font-size: 13px;
   padding: 4px 0;
-  border-radius: 6px;
+  border-radius: var(--radius-small);
   transition: opacity 140ms ease, background 140ms ease;
 }
 
@@ -110,7 +110,7 @@
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   font-size: 12px;
   font-weight: 600;
 }

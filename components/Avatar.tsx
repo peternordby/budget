@@ -10,8 +10,6 @@ import styles from "./Avatar.module.css";
 // every nav re-render.
 const style = new Style(definition);
 
-const BACKGROUNDS = ["ff5d8f", "ffb703", "43aa8b", "4d96ff", "b57bff"];
-
 type AvatarProps = {
   name: string;
   size?: "sm" | "lg";
@@ -22,9 +20,9 @@ type AvatarProps = {
  *
  * Seeded rather than stored, for the same reason category colours are derived
  * from the category name: the picture exists the moment the account has a name,
- * with no storage bucket, no upload and nothing that can 404. DiceBear picks the
- * background from the list above off the same seed, so it is stable for as long
- * as the name is.
+ * with no storage bucket, no upload and nothing that can 404. The drawing is
+ * transparent; the circle behind it is a tint of the user's accent colour
+ * (Avatar.module.css), so it follows the accent picked on /profil.
  *
  * Rendered as an `<img>` off `toDataUri()` rather than as inline SVG: the markup
  * would otherwise have to go through `dangerouslySetInnerHTML`, and an `<img>`
@@ -38,10 +36,9 @@ type AvatarProps = {
 export default function Avatar({ name, size = "sm" }: AvatarProps) {
   const src = useMemo(
     () =>
-      new DicebearAvatar(style, {
-        backgroundColor: BACKGROUNDS,
-        seed: name,
-      }).toDataUri(),
+      // Transparent: the style file defaults to white, which would cover the
+      // accent tint behind the image.
+      new DicebearAvatar(style, { seed: name, backgroundColor: ["ffffff00"] }).toDataUri(),
     [name]
   );
 

@@ -12,7 +12,7 @@
   height: 30px;
   padding: 0 26px 0 8px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-small);
   background: var(--surface-solid);
   color: var(--ink);
   font: inherit;
@@ -42,7 +42,7 @@
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-small);
   background: none;
   color: var(--muted);
   cursor: pointer;
@@ -66,9 +66,9 @@
   width: 264px;
   padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-soft);
   background: var(--surface-popover);
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-popover);
 }
 
 .head {
@@ -95,7 +95,7 @@
 .day {
   height: 32px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-small);
   background: none;
   color: var(--ink);
   font: inherit;

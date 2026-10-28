@@ -36,7 +36,7 @@
    one toolbar expressed "on" through two code paths that only happened to
    agree. */
 .mom-year {
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
 }
 
 /* Some but not all of the year's months are selected — a single month shows

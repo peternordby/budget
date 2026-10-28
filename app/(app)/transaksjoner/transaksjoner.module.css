@@ -24,7 +24,7 @@
   gap: 12px;
   align-items: start;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-soft);
   background: var(--bg-alt);
 }
 
@@ -40,7 +40,7 @@
   width: 100%;
   height: 30px;
   padding: 0 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-small);
   font-size: 13px;
 }
 
@@ -85,7 +85,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-small);
   transition: color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
 }
 
@@ -99,7 +99,7 @@
 
 .list-sort-indicator {
   min-width: 14px;
-  color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .list-sort.empty {
@@ -113,12 +113,98 @@
   gap: 12px;
   align-items: center;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-soft);
   border: 1px solid var(--border);
   background: var(--surface-solid);
   position: relative;
   transition: box-shadow 200ms ease, background 200ms ease,
     border-color 200ms ease;
+}
+
+/* Ark: one sheet of cells. Rows share their gridlines, and on a desktop the
+   columns get them too — every cell padded and ruled on its right, the header
+   a grey band of centred column names, the category cell filled rather than
+   carrying a pill, inputs flush with their cell. A phone keeps its two-line
+   rows: there are no columns there to rule. */
+:global(html[data-style="ark"]) .list {
+  gap: 0;
+}
+
+:global(html[data-style="ark"]) .list-row {
+  margin-top: -1px;
+}
+
+:global(html[data-style="ark"]) .list-row:hover {
+  box-shadow: none;
+  background: var(--accent-soft);
+}
+
+@media (min-width: 861px) {
+  :global(html[data-style="ark"]) :is(.list-header, .filter-row, .list-row) {
+    column-gap: 0;
+    padding: 0;
+    align-items: stretch;
+  }
+
+  :global(html[data-style="ark"]) .list-header {
+    border: 1px solid var(--border);
+    background: var(--bg-alt);
+  }
+
+  :global(html[data-style="ark"]) .list-header > * {
+    justify-content: center;
+    padding: 4px 8px;
+    border-right: 1px solid var(--border);
+  }
+
+  :global(html[data-style="ark"]) .filter-row {
+    margin-top: -1px;
+    border: 1px solid var(--border);
+  }
+
+  :global(html[data-style="ark"]) .filter-row > * {
+    padding: 4px;
+    border-right: 1px solid var(--border-soft);
+  }
+
+  :global(html[data-style="ark"]) :is(.list-header, .filter-row) > :last-child {
+    border-right: 0;
+  }
+
+  :global(html[data-style="ark"]) .list-row > [data-col],
+  :global(html[data-style="ark"]) .list-row > .cell-input {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    padding: 6px 10px;
+    border-right: 1px solid var(--border-soft);
+  }
+
+  :global(html[data-style="ark"]) .list-row > :global(.num) {
+    justify-content: flex-end;
+  }
+
+  :global(html[data-style="ark"]) .list-row > .category-pill {
+    width: auto;
+    font-size: 13px;
+  }
+
+  :global(html[data-style="ark"]) .list-row > .cell-input {
+    height: auto;
+    border-top: 0;
+    border-bottom: 0;
+    border-left: 0;
+    background: transparent;
+  }
+
+  :global(html[data-style="ark"]) .list-row > .cell-input:focus {
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+
+  :global(html[data-style="ark"]) .list-row > :global(.icon-btn) {
+    align-self: center;
+    justify-self: center;
+  }
 }
 
 .list-row.income-row {
@@ -127,7 +213,7 @@
 }
 
 .list-row:hover {
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-hover);
 }
 
 .list-row span {
@@ -156,7 +242,7 @@
   align-items: center;
   justify-content: center;
   padding: 3px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-small);
   background: var(--cat-bg);
   color: var(--cat-ink);
   font-size: 12px;
@@ -185,7 +271,9 @@
 
 .mobile-new-row-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* minmax(0, …): a bare 1fr has an `auto` minimum, so a cell grows to fit
+     its input's intrinsic width instead of the input shrinking to the cell. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px 10px;
 }
 
@@ -217,7 +305,7 @@
 .category-chip {
   height: 36px;
   padding: 0 14px;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   border: 1px solid transparent;
   background: var(--cat-bg);
   color: var(--cat-ink);
@@ -242,14 +330,14 @@
   width: 100%;
   height: 48px;
   font-size: 16px;
-  border-radius: 12px;
+  border-radius: var(--radius-soft);
 }
 
 .filter-count {
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   background: var(--accent);
   color: var(--accent-contrast);
   font-size: 11px;
@@ -317,7 +405,7 @@
   width: 100%;
   height: 30px;
   padding: 0 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-small);
   border: 1px solid var(--border);
   background: var(--surface-solid);
   box-shadow: none;

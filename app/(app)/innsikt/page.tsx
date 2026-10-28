@@ -7,6 +7,7 @@ import { periodLabel } from "@/lib/period";
 import MoneyCalendar from "@/components/MoneyCalendar";
 import Waterfall from "@/components/Waterfall";
 import BubbleChart from "@/components/BubbleChart";
+import TagInsight from "@/components/TagInsight";
 import { formatCurrency } from "@/lib/format";
 import { isSpendingKind } from "@/lib/categories";
 import { categorySlots } from "@/lib/categoryColor";
@@ -22,7 +23,7 @@ export default function InnsiktPage() {
     () => ({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }),
     []
   );
-  const { selectedKeys, selectedList, single } = usePeriod(fallback);
+  const { selectedKeys, selectedList } = usePeriod(fallback);
   const label = periodLabel(selectedList);
 
   const selection = useLedgerSelection(selectedKeys);
@@ -75,11 +76,6 @@ export default function InnsiktPage() {
           <h2 className="section-title">Pengekalenderen</h2>
           <span className="helper">{label}</span>
         </div>
-        <p className={`helper ${styles["lede"]}`}>
-          {single
-            ? "Jo rødere dag, jo mer gikk ut. Prikken har fargen til dagens største utgift; en grønn prikk betyr penger inn."
-            : "Én rute per dag, én kolonne per uke. Jo rødere, jo mer gikk ut — se etter dyre helger og stille mandager."}
-        </p>
         {selectedList.length ? (
           <MoneyCalendar entries={entries} months={selectedList} slots={slots} />
         ) : (
@@ -92,10 +88,6 @@ export default function InnsiktPage() {
           <h2 className="section-title">Lønna smelter</h2>
           <span className="helper">{label}</span>
         </div>
-        <p className={`helper ${styles["lede"]}`}>
-          Fra alt som kom inn, kategori for kategori, ned til det som ble igjen.
-          Sparing regnes som igjen.
-        </p>
         <Waterfall entries={entries} slots={slots} />
       </section>
 
@@ -104,10 +96,15 @@ export default function InnsiktPage() {
           <h2 className="section-title">Bobleregnet</h2>
           <span className="helper">{label}</span>
         </div>
-        <p className={`helper ${styles["lede"]}`}>
-          Hver boble er ett kjøp, størrelsen er beløpet, gruppert per kategori.
-        </p>
         <BubbleChart entries={entries} multiYear={multiYear} slots={slots} />
+      </section>
+
+      <section className="card section-gap">
+        <div className="card-head">
+          <h2 className="section-title">Merkelapper</h2>
+          <span className="helper">Hele historikken</span>
+        </div>
+        <TagInsight />
       </section>
     </>
   );

@@ -41,6 +41,7 @@ export default function TopNav({ user }: TopNavProps) {
             key={route.href}
             href={`${route.href}${suffix}`}
             className={`${styles["nav-route"]} ${pathname === route.href ? styles["active"] : ""}`}
+            aria-current={pathname === route.href ? "page" : undefined}
           >
             <span className={styles["nav-route-full"]}>{route.label}</span>
             <span className={styles["nav-route-short"]}>{route.short}</span>

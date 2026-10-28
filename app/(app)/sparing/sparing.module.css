@@ -34,7 +34,7 @@
 
 .history-row {
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-soft);
   border: 1px solid var(--border);
   background: var(--surface-solid);
   font-size: 13px;
@@ -42,7 +42,28 @@
 }
 
 .history-row:hover {
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-hover);
+}
+
+/* Ark: one sheet of rows under a grey header band, as on /transaksjoner. */
+:global(html[data-style="ark"]) .history {
+  gap: 0;
+}
+
+:global(html[data-style="ark"]) .history-header {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+:global(html[data-style="ark"]) .history-row {
+  margin-top: -1px;
+  padding: 7px 14px;
+}
+
+:global(html[data-style="ark"]) .history-row:hover {
+  box-shadow: none;
+  background: var(--accent-soft);
 }
 
 .history-row strong {

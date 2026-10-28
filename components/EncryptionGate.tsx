@@ -200,8 +200,8 @@ export default function EncryptionGate({ session, children }: EncryptionGateProp
               style={{
                 display: "block",
                 padding: "14px 16px",
-                borderRadius: 10,
-                background: "var(--surface-2, rgba(0,0,0,0.05))",
+                borderRadius: "var(--radius-control)",
+                background: "var(--bg-alt)",
                 fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
                 fontSize: 16,
                 letterSpacing: "0.06em",
