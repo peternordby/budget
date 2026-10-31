@@ -253,3 +253,22 @@ export function placeStops(summary: TagSummary): { dayStop: number[]; stops: Sto
   // undated country still shows on the map.
   return { dayStop, stops: stops.filter((stop) => stop.index >= 0 || stop.days > 0) };
 }
+
+/**
+ * The stops a trip's map draws a dot for: every dated stop, including one
+ * passed through on the day another took over (two cities on one day give the
+ * day to the later one, so the earlier has no days of its own but was still
+ * visited); an undated place only where it holds days or is the trip's only
+ * one. An undated country around its cities is left to the shading.
+ */
+export function mapStops(stops: Stop[]): Stop[] {
+  return stops.filter(
+    (stop) => stop.place && (stop.days > 0 || stop.place.arrive || stops.length === 1)
+  );
+}
+
+/** A stop's stay in words: its days, "innom" for a dated stop with none of its own, or "ikke datert". */
+export function stayLabel(stop: Stop): string {
+  if (stop.days) return stop.days === 1 ? "1 dag" : `${stop.days} dager`;
+  return stop.place?.arrive ? "innom" : "ikke datert";
+}

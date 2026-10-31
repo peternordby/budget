@@ -10,7 +10,7 @@ import { formatCurrency } from "@/lib/format";
 import { keyToRef } from "@/lib/period";
 import { isoDate, shortDate } from "@/lib/periodStats";
 import { categoryColor, categorySlots } from "@/lib/categoryColor";
-import { daySpan, placeStops, tagDates, tagSummaries, type Stop, type TagSummary } from "@/lib/tags";
+import { daySpan, placeStops, stayLabel, tagDates, tagSummaries, type Stop, type TagSummary } from "@/lib/tags";
 import styles from "./TagInsight.module.css";
 
 /** Where a dated trip sits relative to today: "om 12 dager", "dag 3 av 7", … */
@@ -285,7 +285,9 @@ function TripDetail({ summary, tags }: { summary: TagSummary; tags: TagSummary[]
             </tr>
           </thead>
           <tbody>
-            {itinerary.stops.filter((stop) => stop.days > 0).map((stop) => (
+            {/* A city passed through on the day another took over has no
+                days of its own, but it was on the trip. */}
+            {itinerary.stops.filter((stop) => stop.days > 0 || stop.place?.arrive).map((stop) => (
               <tr
                 key={stop.index}
                 className={
@@ -301,9 +303,9 @@ function TripDetail({ summary, tags }: { summary: TagSummary; tags: TagSummary[]
                     <span className="helper"> {stop.place.country}</span>
                   ) : null}
                 </td>
-                <td className="num">{stop.days}</td>
-                <td className="num">{formatCurrency(stop.spent)}</td>
-                <td className="num">{formatCurrency(Math.round(stop.spent / stop.days))}</td>
+                <td className="num">{stop.days || stayLabel(stop)}</td>
+                <td className="num">{stop.days ? formatCurrency(stop.spent) : "–"}</td>
+                <td className="num">{stop.days ? formatCurrency(Math.round(stop.spent / stop.days)) : "–"}</td>
               </tr>
             ))}
           </tbody>
@@ -436,7 +438,7 @@ function TripsOverview({
               rows: [
                 { label: row.tag.name, value: formatCurrency(stop.spent), swatch: color },
                 {
-                  value: stop.days === 1 ? "1 dag" : stop.days ? `${stop.days} dager` : "ikke datert",
+                  value: stayLabel(stop),
                   tone: "muted" as const,
                 },
               ],

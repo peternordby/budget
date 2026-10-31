@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { LedgerEntry } from "@/lib/insights";
 import {
   orderTags,
+  mapStops,
   placeStops,
+  stayLabel,
   tagForDate,
   tagLabels,
   tagSummaries,
@@ -170,6 +172,24 @@ describe("placeStops", () => {
       [0, 0, 0],
       [1, 800, 1],
       [2, 600, 2],
+    ]);
+  });
+
+  it("keeps a city passed through on the same day as the next on the map", () => {
+    const { dayStop, stops } = placeStops(
+      summarise([
+        place("Italia"),
+        place("Roma", "2026-07-02"),
+        place("Pisa", "2026-07-03"),
+        place("Firenze", "2026-07-03"),
+      ])
+    );
+    // The day goes to the city the day ended in; Pisa holds none of its own.
+    expect(dayStop).toEqual([-1, 1, 3, 3]);
+    expect(mapStops(stops).map((stop) => [stop.place?.name, stayLabel(stop)])).toEqual([
+      ["Roma", "1 dag"],
+      ["Pisa", "innom"],
+      ["Firenze", "2 dager"],
     ]);
   });
 });
