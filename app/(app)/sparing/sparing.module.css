@@ -8,90 +8,169 @@
   margin-top: 18px;
 }
 
-/* --- History table --- */
+/* --- Entry form: a date, then a row per category --- */
+
+.entry {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-soft);
+  background: var(--surface-solid);
+  /* Opened from a history row far down the page, it is scrolled to: clear
+     the sticky header. */
+  scroll-margin-top: 96px;
+}
+
+.entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.entry-head input {
+  width: auto;
+}
+
+.entry-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 140px) 96px;
+  gap: 12px;
+  align-items: center;
+  /* A category row is a <label> (a click on the name focuses its field), so
+     undo the global small-caps field-label look. */
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+}
+
+.entry-name {
+  display: grid;
+  min-width: 0;
+}
+
+.entry-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-row input.num {
+  text-align: right;
+}
+
+.entry-row .icon-btn {
+  justify-self: end;
+}
+
+/* --- History: one collapsible row per date --- */
 
 .history {
   display: grid;
   gap: 8px;
 }
 
-.history-header,
-.history-row {
+.snapshot {
   display: grid;
-  grid-template-columns: minmax(70px, 0.7fr) minmax(100px, 1.4fr) minmax(90px, 1fr) minmax(90px, 1fr) 32px;
-  gap: 12px;
-  align-items: center;
-}
-
-.history-header {
-  padding: 0 14px 4px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
-
-.history-row {
-  padding: 10px 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 6px 8px 6px 14px;
   border-radius: var(--radius-soft);
   border: 1px solid var(--border);
   background: var(--surface-solid);
   font-size: 13px;
-  transition: box-shadow 200ms ease;
 }
 
-.history-row:hover {
-  box-shadow: var(--shadow-hover);
+/* Summary and entries share one grid, so a value lines up under the total. */
+.snapshot-summary,
+.snapshot-entry {
+  display: grid;
+  grid-template-columns: 16px minmax(80px, 0.6fr) minmax(0, 1.4fr) minmax(90px, 1fr) minmax(90px, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 30px;
 }
 
-/* Ark: one sheet of rows under a grey header band, as on /transaksjoner. */
-:global(html[data-style="ark"]) .history {
-  gap: 0;
+.snapshot-summary {
+  cursor: var(--cursor-pointer);
+  list-style: none;
 }
 
-:global(html[data-style="ark"]) .history-header {
-  padding: 6px 14px;
-  border: 1px solid var(--border);
-  background: var(--bg-alt);
+.snapshot-summary::-webkit-details-marker {
+  display: none;
 }
 
-:global(html[data-style="ark"]) .history-row {
-  margin-top: -1px;
-  padding: 7px 14px;
+.chevron {
+  display: inline-flex;
+  color: var(--muted);
+  transition: transform 140ms ease;
 }
 
-:global(html[data-style="ark"]) .history-row:hover {
-  box-shadow: none;
-  background: var(--accent-soft);
+details[open] > .snapshot-summary .chevron {
+  transform: rotate(90deg);
 }
 
-.history-row strong {
-  font-size: 14px;
-  min-width: 0;
+.snapshot-date {
+  font-weight: 700;
+}
+
+.snapshot-names {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.snapshot-entry > :first-child {
+  grid-column: 2 / span 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshot-entry {
+  min-height: 26px;
+}
+
+/* Ark: one sheet of rows, as on /transaksjoner. */
+:global(html[data-style="ark"]) .history {
+  gap: 0;
+}
+
+:global(html[data-style="ark"]) .snapshot {
+  margin-top: -1px;
+}
+
 @media (max-width: 860px) {
-  .history-header {
-    display: none;
+  /* Date and figures on the first line, the names under them. */
+  .snapshot-summary {
+    grid-template-columns: 16px minmax(0, 1fr) auto auto;
+    gap: 2px 10px;
+    padding: 4px 0;
   }
 
-  /* Stacked to one column, a right-aligned number reads as detached from the
-     row it belongs to — the same rule /innsikt's subscription table uses. */
-  .history-row {
-    grid-template-columns: 1fr auto;
-    gap: 4px 12px;
+  .snapshot-names {
+    grid-row: 2;
+    grid-column: 2 / -1;
   }
 
-  .history-row .num {
-    text-align: left;
+  .snapshot-entry {
+    grid-template-columns: 16px minmax(0, 1fr) auto auto;
+    gap: 10px;
   }
 
-  .history-row .icon-btn {
-    grid-row: 1 / span 2;
+  .snapshot-entry > :first-child {
     grid-column: 2;
+  }
+
+  .entry-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 120px) 72px;
+    gap: 8px;
   }
 }
