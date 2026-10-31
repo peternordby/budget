@@ -142,14 +142,18 @@ let shotCount = 0;
 try {
   if (target === "ios") {
     await browser.goto(base + path);
-    await sleep(4000);
+    await sleep(8000); // a first load after a change waits on the dev server compiling
   } else {
     await logIn();
   }
   console.log(`${target}: ${await browser.url()}`);
 
   for (const step of ["shot|start", ...steps]) {
-    const [command, a, b] = step.split("|");
+    // Only the first separators count: an expression or a filled-in text may
+    // contain "|" itself (`a || b`).
+    const [command, ...rest] = step.split("|");
+    const a = command === "js" ? rest.join("|") : rest[0];
+    const b = rest.slice(1).join("|");
     if (command === "click") await browser.click(a);
     else if (command === "fill") await browser.fill(a, b);
     else if (command === "wait") await sleep(Number(a));

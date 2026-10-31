@@ -1689,16 +1689,28 @@ select:focus {
   .section-title {
     font-size: 20px;
   }
+
+  /* iOS Safari zooms in on any field under 16px when it is focused, and does
+     not zoom back out: after logging in, the next page opened zoomed, wider
+     than the screen and scrolling sideways. 16px everywhere on a phone, so it
+     never zooms — and pinch-zoom still works, which `maximum-scale=1` would
+     take away on Android. A rule that sets a smaller size on a field must not
+     reach a phone. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Ark's 13px cell fields, with the same selector so this later rule wins. */
+  html[data-style="ark"] :is(input:not([type="file"], [type="color"], [type="checkbox"], [type="radio"]), select) {
+    font-size: 16px;
+  }
 }
 
 @media (max-width: 480px) {
   label {
     font-size: 11px;
-  }
-
-  input,
-  select {
-    font-size: 15px;
   }
 
   .brand {
