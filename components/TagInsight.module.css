@@ -1,12 +1,123 @@
-/* /innsikt's tag card: a picker, four small tiles, then the breakdown. */
+/* /innsikt's tag card: a row of trips, the picked one's hero and tiles, its
+   map and timeline, then the breakdown. */
 
 .body {
   display: grid;
   gap: 16px;
 }
 
-.select {
-  max-width: 280px;
+/* Every trip as a card in one scrolling row; the picked one in the accent. */
+.trips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scroll-snap-type: x proximity;
+}
+
+.trip-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  scroll-snap-align: start;
+}
+
+/* The corner toggle: adds a trip to the selection without leaving the others. */
+.trip-add {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+.trip {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 2px;
+  min-width: 140px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-soft);
+  background: var(--bg-alt);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  scroll-snap-align: start;
+}
+
+.trip-wrap .trip {
+  padding-right: 34px;
+}
+
+.trip-all strong {
+  color: var(--accent-strong);
+}
+
+.trip strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.trip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.trip-total {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-name {
+  margin: 2px 0;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.when {
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nudge {
+  margin: 0;
+}
+
+/* Per stop: days, spent, per day. Also the map's and timeline's legend. */
+.stops {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.stops th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 0 0 6px;
+}
+
+.stops td {
+  padding: 6px 0;
+  border-top: 1px solid var(--border-soft);
+}
+
+.stops td:first-child :global(.breakdown-dot) {
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.stops .num,
+.stops th:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .tiles {
@@ -84,8 +195,8 @@
 }
 
 @media (max-width: 760px) {
-  .select {
-    max-width: none;
+  .hero-name {
+    font-size: 22px;
   }
 
   .tiles {
@@ -110,4 +221,52 @@
   gap: 4px 12px;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
+}
+
+/* Hovering a stop or a trip anywhere fades the rest of the table. */
+.stops tr {
+  transition: opacity 140ms ease;
+}
+
+.faded {
+  opacity: 0.4;
+}
+
+.pickable {
+  cursor: pointer;
+}
+
+.row-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Per dag as a bar behind its figure, so the trips compare at a glance. */
+.per-day-head {
+  width: 34%;
+  text-align: right;
+}
+
+.per-day {
+  padding-left: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px;
+  align-items: center;
+  gap: 10px;
+}
+
+.per-day-track {
+  display: block;
+  height: 6px;
+}
+
+.per-day-track > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-bar);
 }

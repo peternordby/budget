@@ -52,7 +52,7 @@
     border-radius: 21px;
   }
 
-  /* Six tabs share a 375px screen: ~58px each, so the padding is nearly all
+  /* Five tabs share a 375px screen: ~70px each, so the padding is nearly all
      given up to the label and the label may not push its neighbour. */
   .nav-route {
     flex: 1 1 0;

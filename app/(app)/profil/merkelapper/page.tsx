@@ -8,11 +8,12 @@ import { encField } from "@/lib/crypto";
 import { formatCurrency } from "@/lib/format";
 import { keyToRef } from "@/lib/period";
 import { shortDate } from "@/lib/periodStats";
-import { daySpan, type Tag } from "@/lib/tags";
+import { daySpan, sortPlaces, type Place, type Tag } from "@/lib/tags";
+import PlacePicker from "@/components/PlacePicker";
 import { IconCheck, IconChevronLeft, IconPencil, IconPlus, IconTrash, IconX } from "@/components/icons";
 import styles from "./merkelapper.module.css";
 
-type Draft = { name: string; start: string; end: string; budget: string };
+type Draft = { name: string; start: string; end: string; budget: string; places: Place[] };
 
 function dateRange(start: string, end: string) {
   const withYear = start.slice(0, 4) !== end.slice(0, 4);
@@ -33,7 +34,7 @@ export default function MerkelapperPage() {
   const [busy, setBusy] = useState(false);
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [draft, setDraft] = useState<Draft>({ name: "", start: "", end: "", budget: "" });
+  const [draft, setDraft] = useState<Draft>({ name: "", start: "", end: "", budget: "", places: [] });
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   // Usage counts and first/last purchase need every expense, not the window.
@@ -79,6 +80,7 @@ export default function MerkelapperPage() {
       start: tag.start ?? "",
       end: tag.end ?? "",
       budget: tag.budget != null ? String(tag.budget) : "",
+      places: tag.places,
     });
     setEditingId(tag.id);
   }
@@ -103,7 +105,14 @@ export default function MerkelapperPage() {
 
     setBusy(true);
     setStatus(null);
-    const tag: Tag = { id, name, start: draft.start || null, end: draft.end || null, budget };
+    const tag: Tag = {
+      id,
+      name,
+      start: draft.start || null,
+      end: draft.end || null,
+      budget,
+      places: sortPlaces(draft.places),
+    };
     const { error } = await supabase
       .from("tag")
       .update({
@@ -111,6 +120,7 @@ export default function MerkelapperPage() {
         start_date: tag.start,
         end_date: tag.end,
         budget: await encField(budget),
+        places: tag.places.length ? await encField(JSON.stringify(tag.places)) : null,
       })
       .eq("id", id)
       .eq("user_id", ledger.userId);
@@ -152,7 +162,9 @@ export default function MerkelapperPage() {
           En merkelapp samler en tur eller et prosjekt. Med første og siste dag
           satt regnes kostnaden per dag over dagene du var borte, også med
           billetter kjøpt på forhånd, og nye utgifter i de dagene får
-          merkelappen forhåndsvalgt.
+          merkelappen forhåndsvalgt. Legg til byer og land for å få turen på
+          kart under <Link href="/innsikt/reiser">Innsikt › Reiser</Link>;
+          stedsøket går til OpenStreetMap, mens stedene lagres kryptert.
         </p>
 
         {status ? <div className="status">{status}</div> : null}
@@ -229,6 +241,15 @@ export default function MerkelapperPage() {
                       placeholder="Valgfritt"
                     />
                   </div>
+                  <div className={`field ${styles["places"]}`}>
+                    <label>Steder</label>
+                    <PlacePicker
+                      places={draft.places}
+                      onChange={(places) => setDraft((prev) => ({ ...prev, places }))}
+                      start={draft.start}
+                      end={draft.end}
+                    />
+                  </div>
                   {used ? (
                     <p className={`helper ${styles["hint"]}`}>
                       Første kjøp {shortDate(used.first, true)} · siste kjøp{" "}
@@ -278,6 +299,9 @@ export default function MerkelapperPage() {
                       {tag.start && tag.end
                         ? `${dateRange(tag.start, tag.end)} · ${daySpan(tag.start, tag.end)} dager`
                         : "Uten datoer"}
+                      {tag.places.length
+                        ? ` · ${tag.places.map((place) => place.name).join(", ")}`
+                        : ""}
                       {tag.budget != null ? ` · budsjett ${formatCurrency(tag.budget)}` : ""}
                       {` · ${used ? `${used.count} utgifter` : "Ikke i bruk"}`}
                     </span>
@@ -317,7 +341,7 @@ export default function MerkelapperPage() {
                           type="button"
                           onClick={() => startEdit(tag)}
                           aria-label={`Endre ${tag.name}`}
-                          title="Endre navn, datoer og budsjett"
+                          title="Endre navn, datoer, steder og budsjett"
                         >
                           <IconPencil />
                         </button>

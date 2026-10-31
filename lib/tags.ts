@@ -9,6 +9,25 @@ import { isoDate, shortDate } from "@/lib/periodStats";
 /** How many purchases the card lists. */
 export const TOP_PURCHASES = 5;
 
+/**
+ * A stop on a trip: a city or a whole country, found through OpenStreetMap's
+ * Nominatim geocoder (components/PlacePicker.tsx). Stored on the tag as one encrypted
+ * JSON array (`tag.places`), in itinerary order.
+ */
+export type Place = {
+  name: string;
+  /** The country's name, as the geocoder gave it (bokmål). */
+  country: string;
+  /** ISO 3166-1 alpha-2. */
+  cc: string;
+  lat: number;
+  lon: number;
+  kind: "city" | "country";
+  /** YYYY-MM-DD: the first day here. A stop holds every day from its arrival
+   *  until the next stop's. */
+  arrive: string | null;
+};
+
 export type Tag = {
   id: number;
   name: string;
@@ -16,7 +35,25 @@ export type Tag = {
   start: string | null;
   end: string | null;
   budget: number | null;
+  places: Place[];
 };
+
+/** The decrypted `tag.places` column; anything unreadable is no places. */
+export function parsePlaces(text: string | null): Place[] {
+  if (!text) return [];
+  try {
+    const value = JSON.parse(text);
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Dated stops in arrival order, undated ones (a country around its cities)
+ *  first in the order they were added — what a save stores. */
+export function sortPlaces(places: Place[]): Place[] {
+  return [...places].sort((a, b) => (a.arrive ?? "").localeCompare(b.arrive ?? ""));
+}
 
 function sameName(a: string, b: string) {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -54,10 +91,17 @@ export function tagForDate<T extends Tag>(tags: T[], date: string): T | undefine
   return tags.find((tag) => tag.start && tag.end && tag.start <= date && date <= tag.end);
 }
 
+/** "1. jul. – 7. jul. 2026", the year on the start only when it differs. */
+export function tagDates(start: string, end: string) {
+  if (start === end) return shortDate(start, true);
+  const withYear = start.slice(0, 4) !== end.slice(0, 4);
+  return `${shortDate(start, withYear)} – ${shortDate(end, true)}`;
+}
+
 /**
- * What a list shows for each merkelapp: the name, plus its dates (or "uten
- * datoer") when another merkelapp has the same name — "Hytta" every summer
- * would otherwise be several identical options.
+ * What a list shows for each merkelapp: the name plus its dates, so "Hytta"
+ * every summer reads as different trips. An undated one is just its name,
+ * unless another merkelapp shares it ("uten datoer" then tells them apart).
  */
 export function tagLabels(tags: Tag[]): Map<number, string> {
   const counts = new Map<string, number>();
@@ -67,12 +111,9 @@ export function tagLabels(tags: Tag[]): Map<number, string> {
   });
   return new Map(
     tags.map((tag) => {
+      if (tag.start && tag.end) return [tag.id, `${tag.name} (${tagDates(tag.start, tag.end)})`];
       if ((counts.get(tag.name.trim().toLowerCase()) ?? 0) < 2) return [tag.id, tag.name];
-      const when =
-        tag.start && tag.end
-          ? `${shortDate(tag.start, true)} – ${shortDate(tag.end, true)}`
-          : "uten datoer";
-      return [tag.id, `${tag.name} (${when})`];
+      return [tag.id, `${tag.name} (uten datoer)`];
     })
   );
 }
@@ -166,4 +207,49 @@ export function tagSummaries(entries: LedgerEntry[], tags: Tag[]): TagSummary[] 
       },
     ];
   });
+}
+
+export type Stop = {
+  /** Index into the tag's places; -1 for days no stop holds. */
+  index: number;
+  place: Place | null;
+  spent: number;
+  days: number;
+};
+
+/**
+ * Which stop each day of the trip belongs to, and what was spent at each. A
+ * day belongs to the last stop arrived at on or before it; a lone place with
+ * no arrival holds the whole trip. Days before the first arrival are `-1`
+ * ("uten sted") — as is everything when no stop is dated. Only the trip's own
+ * days are placed: tickets bought before it are `before`, not a city's.
+ */
+export function placeStops(summary: TagSummary): { dayStop: number[]; stops: Stop[] } {
+  const places = summary.tag.places;
+  const arrivals = places.map((place) =>
+    place.arrive ?? (places.length === 1 ? summary.start : null)
+  );
+  const dayStop = summary.daily.map((day) => {
+    let owner = -1;
+    arrivals.forEach((arrive, index) => {
+      if (arrive && arrive <= day.date && (owner < 0 || arrive >= (arrivals[owner] as string))) {
+        owner = index;
+      }
+    });
+    return owner;
+  });
+
+  const stops = [-1, ...places.keys()].map((index) => ({
+    index,
+    place: index < 0 ? null : places[index],
+    spent: 0,
+    days: 0,
+  }));
+  dayStop.forEach((owner, day) => {
+    stops[owner + 1].spent += summary.daily[day].spent;
+    stops[owner + 1].days += 1;
+  });
+  // The unplaced bucket only when it has days; every place always, so an
+  // undated country still shows on the map.
+  return { dayStop, stops: stops.filter((stop) => stop.index >= 0 || stop.days > 0) };
 }

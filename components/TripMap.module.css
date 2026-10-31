@@ -1,0 +1,171 @@
+/* /innsikt's trip map and day-by-day timeline. */
+
+.map,
+.timeline {
+  position: relative;
+  width: 100%;
+}
+
+.map {
+  overflow: hidden;
+  border-radius: var(--radius-soft);
+  background: color-mix(in oklab, var(--accent) 6%, var(--bg-alt));
+}
+
+.map svg,
+.timeline svg {
+  display: block;
+}
+
+.loading {
+  width: 100%;
+}
+
+.land {
+  fill: var(--surface-solid);
+  stroke: var(--border-soft);
+  stroke-width: 0.75;
+}
+
+.visited {
+  fill: color-mix(in oklab, var(--accent) 22%, var(--surface-solid));
+  stroke: color-mix(in oklab, var(--accent) 45%, var(--surface-solid));
+  stroke-width: 1;
+}
+
+.route {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  opacity: 0.55;
+}
+
+/* A surface ring, so overlapping stops stay separate. */
+.dot {
+  stroke: var(--surface-solid);
+  stroke-width: 2;
+}
+
+.label {
+  fill: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: var(--surface-solid);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.map g,
+.timeline rect {
+  transition: opacity 140ms ease;
+}
+
+.hit,
+.day-hit {
+  position: absolute;
+  outline-offset: -2px;
+}
+
+.hit {
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: zoom-in;
+}
+
+/* Countries scale with the zoom; their outlines should not. */
+.map path {
+  vector-effect: non-scaling-stroke;
+}
+
+.map {
+  cursor: grab;
+}
+
+.map:active {
+  cursor: grabbing;
+}
+
+.zoom {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 4px;
+}
+
+.zoom :global(.icon-btn),
+.zoom :global(.btn) {
+  background: var(--surface-solid);
+}
+
+.day-hit {
+  top: 0;
+}
+
+.base {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.today {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 3;
+}
+
+.run-label {
+  fill: var(--muted);
+  font-size: 11px;
+  text-anchor: middle;
+}
+
+.dates {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* The search hit thumbnail on /profil/merkelapper. */
+.mini {
+  display: block;
+  flex: 0 0 auto;
+  border-radius: var(--radius-small);
+  background: color-mix(in oklab, var(--accent) 6%, var(--bg-alt));
+}
+
+.mini-dot {
+  fill: var(--accent);
+  stroke: var(--surface-solid);
+  stroke-width: 2;
+}
+
+.hint {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* One finger scrolls the page on a touch screen, so the hint differs. */
+.hint-touch {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .hint-mouse {
+    display: none;
+  }
+
+  .hint-touch {
+    display: inline;
+  }
+}
