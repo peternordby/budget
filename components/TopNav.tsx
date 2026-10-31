@@ -11,14 +11,15 @@ type TopNavProps = {
   user?: ProfileUser | null;
 };
 
-// `short` is what the phone's bottom tab bar shows: six full names do not fit
+// `short` is what the phone's bottom tab bar shows: five full names do not fit
 // a 375px screen, so the narrow layout gets abbreviations rather than ellipses.
+// Innsikt is a section (Periode, Trender, Reiser — see InnsiktTabs), so it is
+// active on any path under it and links to its first subpage.
 const ROUTES = [
   { href: "/oversikt", label: "Oversikt", short: "Oversikt" },
   { href: "/transaksjoner", label: "Transaksjoner", short: "Trans." },
   { href: "/budsjett", label: "Budsjett", short: "Budsjett" },
-  { href: "/innsikt", label: "Innsikt", short: "Innsikt" },
-  { href: "/trender", label: "Trender", short: "Trender" },
+  { href: "/innsikt/periode", label: "Innsikt", short: "Innsikt", section: "/innsikt" },
   { href: "/sparing", label: "Sparing", short: "Sparing" },
 ];
 
@@ -36,17 +37,21 @@ export default function TopNav({ user }: TopNavProps) {
         <div className="brand">Regnskap</div>
       </div>
       <div className={styles["nav-routes"]}>
-        {ROUTES.map((route) => (
-          <Link
-            key={route.href}
-            href={`${route.href}${suffix}`}
-            className={`${styles["nav-route"]} ${pathname === route.href ? styles["active"] : ""}`}
-            aria-current={pathname === route.href ? "page" : undefined}
-          >
-            <span className={styles["nav-route-full"]}>{route.label}</span>
-            <span className={styles["nav-route-short"]}>{route.short}</span>
-          </Link>
-        ))}
+        {ROUTES.map((route) => {
+          const active =
+            "section" in route ? pathname.startsWith(route.section) : pathname === route.href;
+          return (
+            <Link
+              key={route.href}
+              href={`${route.href}${suffix}`}
+              className={`${styles["nav-route"]} ${active ? styles["active"] : ""}`}
+              aria-current={active ? "page" : undefined}
+            >
+              <span className={styles["nav-route-full"]}>{route.label}</span>
+              <span className={styles["nav-route-short"]}>{route.short}</span>
+            </Link>
+          );
+        })}
       </div>
       <div className="nav-links">
         <div className="nav-meta">

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { LedgerEntry } from "@/lib/insights";
-import { orderTags, tagForDate, tagLabels, tagSummaries, type Tag } from "@/lib/tags";
+import {
+  orderTags,
+  placeStops,
+  tagForDate,
+  tagLabels,
+  tagSummaries,
+  type Place,
+  type Tag,
+} from "@/lib/tags";
 
 let nextId = 1;
 function entry(overrides: Partial<LedgerEntry> = {}): LedgerEntry {
@@ -18,7 +26,7 @@ function entry(overrides: Partial<LedgerEntry> = {}): LedgerEntry {
 }
 
 function tag(overrides: Partial<Tag> = {}): Tag {
-  return { id: 1, name: "Roma", start: null, end: null, budget: null, ...overrides };
+  return { id: 1, name: "Roma", start: null, end: null, budget: null, places: [], ...overrides };
 }
 
 describe("tagSummaries", () => {
@@ -119,14 +127,49 @@ describe("tagForDate", () => {
 });
 
 describe("tagLabels", () => {
-  it("adds the dates only where a name repeats", () => {
+  it("always adds the dates, and 'uten datoer' only where a name repeats", () => {
     const labels = tagLabels([
       tag({ id: 1, name: "Hytta", start: "2025-07-01", end: "2025-07-07" }),
       tag({ id: 2, name: "hytta" }),
       tag({ id: 3, name: "Roma" }),
+      tag({ id: 4, name: "Paris", start: "2025-12-30", end: "2026-01-02" }),
     ]);
-    expect(labels.get(1)).toMatch(/^Hytta \(.+2025.+\)$/);
+    expect(labels.get(1)).toBe("Hytta (1. jul. – 7. jul. 2025)");
     expect(labels.get(2)).toBe("hytta (uten datoer)");
     expect(labels.get(3)).toBe("Roma");
+    expect(labels.get(4)).toBe("Paris (30. des. 2025 – 2. jan. 2026)");
+  });
+});
+
+function place(name: string, arrive: string | null = null): Place {
+  return { name, country: "Italia", cc: "IT", lat: 0, lon: 0, kind: "city", arrive };
+}
+
+describe("placeStops", () => {
+  const days = [
+    entry({ date: "2026-07-01", amount: 100 }),
+    entry({ date: "2026-07-02", amount: 200 }),
+    entry({ date: "2026-07-03", amount: 400 }),
+    entry({ date: "2026-07-04", amount: 800 }),
+  ];
+  const summarise = (places: Place[]) =>
+    tagSummaries(days, [tag({ start: "2026-07-01", end: "2026-07-04", places })])[0];
+
+  it("gives a lone undated place the whole trip", () => {
+    const { stops } = placeStops(summarise([place("Roma")]));
+    expect(stops).toEqual([expect.objectContaining({ index: 0, spent: 1500, days: 4 })]);
+  });
+
+  it("splits by arrival, and leaves days before the first arrival unplaced", () => {
+    const { dayStop, stops } = placeStops(
+      summarise([place("Italia"), place("Firenze", "2026-07-04"), place("Roma", "2026-07-02")])
+    );
+    expect(dayStop).toEqual([-1, 2, 2, 1]);
+    expect(stops.map((stop) => [stop.index, stop.spent, stop.days])).toEqual([
+      [-1, 100, 1],
+      [0, 0, 0],
+      [1, 800, 1],
+      [2, 600, 2],
+    ]);
   });
 });

@@ -1,0 +1,81 @@
+/* A trip's stops on /profil/merkelapper: the chosen places, then the search. */
+
+.picker {
+  display: grid;
+  gap: 8px;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+/* Name over country, arrival date, remove. */
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 160px) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.name {
+  display: grid;
+  min-width: 0;
+}
+
+.name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search {
+  display: grid;
+  gap: 4px;
+}
+
+.search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.hits {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-popover);
+}
+
+/* Thumbnail left, name over type · region · country right. */
+.hits button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hits button:hover,
+.hits button:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.hit-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}

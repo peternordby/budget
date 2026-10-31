@@ -9,6 +9,7 @@ import EncryptionGate from "@/components/EncryptionGate";
 import LedgerProvider, { useLedger } from "@/components/LedgerProvider";
 import PeriodPicker from "@/components/PeriodPicker";
 import TopNav from "@/components/TopNav";
+import InnsiktTabs from "@/components/InnsiktTabs";
 
 // Moved from app/visualize/page.tsx, which rendered this directly under
 // TopNav. A failed batched fetch otherwise renders as "no data" everywhere —
@@ -30,8 +31,10 @@ function LedgerErrorBanner() {
 // balance observed on a given date and shows the whole history, and /profil is
 // account settings rather than a view of the ledger at all — a period
 // selection has nothing to act on in either, and rendering the picker would
-// imply a filter that does not exist.
+// imply a filter that does not exist. Innsikt › Reiser reads each trip over
+// its own dates, so a month selection has nothing to narrow there either.
 const ROUTES_WITHOUT_PERIOD = new Set([
+  "/innsikt/reiser",
   "/sparing",
   "/profil",
   "/profil/kategorier",
@@ -45,6 +48,8 @@ function AppChrome({ children, user }: { children: ReactNode; user: User }) {
     <>
       <TopNav user={user} />
       <LedgerErrorBanner />
+      {/* Above the picker: the subpage decides whether there is a picker. */}
+      {pathname.startsWith("/innsikt") ? <InnsiktTabs /> : null}
       {!ROUTES_WITHOUT_PERIOD.has(pathname) ? <PeriodPicker /> : null}
       {children}
     </>

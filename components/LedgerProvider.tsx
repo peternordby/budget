@@ -22,7 +22,7 @@ import {
 import type { RecurringTemplate } from "@/lib/recurring";
 import { decField, decNumber, encField } from "@/lib/crypto";
 import { isoDate } from "@/lib/periodStats";
-import { orderTags, type Tag } from "@/lib/tags";
+import { orderTags, parsePlaces, type Tag } from "@/lib/tags";
 
 export type LedgerCategory = {
   id: number;
@@ -298,7 +298,7 @@ export default function LedgerProvider({
         .select("id")
         .single();
       if (error) throw new Error(error.message);
-      const tag: Tag = { id: data.id, name: name.trim(), start: null, end: null, budget: null };
+      const tag: Tag = { id: data.id, name: name.trim(), start: null, end: null, budget: null, places: [] };
       upsertTag(tag);
       return tag;
     },
@@ -361,7 +361,7 @@ export default function LedgerProvider({
             .order("day_of_month", { ascending: true }),
           supabase
             .from("tag")
-            .select("id, name, start_date, end_date, budget")
+            .select("id, name, start_date, end_date, budget, places")
             .eq("user_id", userId),
         ]);
 
@@ -388,6 +388,7 @@ export default function LedgerProvider({
           start: row.start_date ?? null,
           end: row.end_date ?? null,
           budget: row.budget == null ? null : await decNumber(row.budget),
+          places: parsePlaces(await decField(row.places ?? null)),
         }))
       );
 

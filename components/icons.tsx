@@ -84,6 +84,14 @@ export function IconPlus() {
   );
 }
 
+export function IconMinus() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24">
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
 export function IconCheck() {
   return (
     <svg className="icon" viewBox="0 0 24 24">
