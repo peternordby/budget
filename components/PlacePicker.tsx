@@ -54,22 +54,39 @@ function placeName(names: Record<string, string> | null, fallback: string) {
 
 const COUNTRY_NAMES = new Intl.DisplayNames(["nb"], { type: "region" });
 
+// Nominatim's usage policy (https://operations.osmfoundation.org/policies/nominatim/)
+// allows a user-triggered search at moderate volume, with: at most one request
+// a second (for the whole app), identification (the browser's Referer — the
+// app sets no referrer policy that would strip it), OSM attribution where the
+// results are shown, no autocomplete, and no repeated identical queries. The
+// last three are the button, the attribution line, and this cache.
+const MIN_GAP_MS = 1100;
+let lastRequest = 0;
+const cache = new Map<string, Hit[]>();
+
 /**
  * OpenStreetMap's Nominatim: keyless, CORS-open, and it knows places by their
  * Norwegian names ("Roma", "Lisboa", "Spania"), which GeoNames-based geocoders
- * do not. Its usage policy allows a search per explicit request but not
- * search-as-you-type, hence the button. Only the search text leaves the
- * browser; the chosen place is stored encrypted with the tag.
+ * do not. Only the search text leaves the browser; the chosen place is stored
+ * encrypted with the tag.
  * `accept-language=nb,en` gives the regions in Norwegian or English rather
  * than their own script (เชียงใหม่); the place's own name is picked from
  * `namedetails` by placeName.
  */
 async function geocode(query: string, signal: AbortSignal): Promise<Hit[]> {
+  const key = query.toLowerCase();
+  const cached = cache.get(key);
+  if (cached) return cached;
+  // Spaced at least a second apart, however fast Enter is pressed.
+  const wait = lastRequest + MIN_GAP_MS - Date.now();
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+  signal.throwIfAborted();
+  lastRequest = Date.now();
   const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=jsonv2&addressdetails=1&namedetails=1&layer=address&accept-language=nb,en&limit=6`;
   const response = await fetch(url, { signal });
   if (!response.ok) throw new Error("Stedsøket svarte ikke.");
   const rows: any[] = await response.json();
-  return rows
+  const hits: Hit[] = rows
     .filter((row) => row.address?.country_code)
     .map((row) => {
       const cc = String(row.address.country_code).toUpperCase();
@@ -90,6 +107,8 @@ async function geocode(query: string, signal: AbortSignal): Promise<Hit[]> {
         region: isCountry ? null : [...new Set(region)].join(" · ") || null,
       };
     });
+  cache.set(key, hits);
+  return hits;
 }
 
 /**
@@ -152,9 +171,7 @@ export default function PlacePicker({
             <li key={`${place.name}-${place.lat}-${index}`} className={styles["row"]}>
               <span className={styles["name"]}>
                 <strong>{place.name}</strong>
-                <span className="helper">
-                  {place.kind === "country" ? "Land" : place.country}
-                </span>
+                <span className="helper">{place.kind === "country" ? "Land" : place.country}</span>
               </span>
               <input
                 type="date"
@@ -213,23 +230,36 @@ export default function PlacePicker({
           </button>
         </div>
         {hits.length ? (
-          <ul className={styles["hits"]} role="listbox" aria-label="Treff">
-            {hits.map((hit) => (
-              <li key={`${hit.name}-${hit.lat}-${hit.lon}`}>
-                <button type="button" role="option" aria-selected="false" onClick={() => add(hit)}>
-                  <MiniMap lon={hit.lon} lat={hit.lat} country={hit.kind === "country"} />
-                  <span className={styles["hit-text"]}>
-                    <strong>{hit.name}</strong>
-                    <span className="helper">
-                      {[hit.type, hit.region, hit.kind === "city" ? hit.country : null]
-                        .filter(Boolean)
-                        .join(" · ")}
+          <>
+            <ul className={styles["hits"]} role="listbox" aria-label="Treff">
+              {hits.map((hit) => (
+                <li key={`${hit.name}-${hit.lat}-${hit.lon}`}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected="false"
+                    onClick={() => add(hit)}
+                  >
+                    <MiniMap lon={hit.lon} lat={hit.lat} country={hit.kind === "country"} />
+                    <span className={styles["hit-text"]}>
+                      <strong>{hit.name}</strong>
+                      <span className="helper">
+                        {[hit.type, hit.region, hit.kind === "city" ? hit.country : null]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
                     </span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <span className={styles["credit"]}>
+              Søk fra{" "}
+              <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
+                © OpenStreetMap-bidragsytere
+              </a>
+            </span>
+          </>
         ) : problem ? (
           <span className="helper">{problem}</span>
         ) : null}

@@ -79,3 +79,14 @@
   gap: 2px;
   min-width: 0;
 }
+
+/* Nominatim's policy asks for OSM attribution where its results are shown. */
+.credit {
+  padding: 4px 8px 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.credit a {
+  color: inherit;
+}
