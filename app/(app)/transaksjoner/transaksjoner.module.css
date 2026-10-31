@@ -295,7 +295,9 @@
   grid-column: 1 / -1;
 }
 
-.mobile-new-row-grid :global(input) {
+/* The select too: it sits beside the date input (Merkelapp), and left at the
+   global 36px it stood shorter than its neighbour. */
+.mobile-new-row-grid :global(:is(input, select)) {
   height: 44px;
   font-size: 16px; /* 16px or iOS zooms the page on focus */
 }
