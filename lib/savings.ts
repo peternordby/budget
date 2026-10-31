@@ -114,6 +114,135 @@ export function totalSeries(snapshots: Snapshot[]): TotalPoint[] {
   return points;
 }
 
+// --- Snapshots as dates ------------------------------------------------------
+//
+// What the page calls one registrering is every row sharing a date: one, two
+// or every category, whichever were looked at that day. No table holds it —
+// the rows already say it, and a categories-not-recorded row would carry
+// nothing the carry-forward does not.
+
+export type SnapshotGroup = {
+  date: string;
+  /** The rows recorded on this date, largest first, each with the change
+   *  since that category's own previous value (null for its first). */
+  entries: { snapshot: Snapshot; change: number | null }[];
+  /** The carried-forward total as of this date, as in totalSeries. */
+  total: number;
+  /** Total minus the previous date's total; null for the first date. */
+  change: number | null;
+};
+
+/** One group per date, newest first. */
+export function snapshotGroups(snapshots: Snapshot[]): SnapshotGroup[] {
+  const series = totalSeries(snapshots);
+  const sorted = [...snapshots].sort(byDateAscending);
+  const previous = new Map<string, number>();
+  const groups: SnapshotGroup[] = [];
+
+  let index = 0;
+  series.forEach((point, at) => {
+    const entries: SnapshotGroup["entries"] = [];
+    while (index < sorted.length && sorted[index].date === point.date) {
+      const snapshot = sorted[index];
+      const before = previous.get(snapshot.category);
+      entries.push({
+        snapshot,
+        change: before === undefined ? null : snapshot.amount - before,
+      });
+      previous.set(snapshot.category, snapshot.amount);
+      index += 1;
+    }
+    entries.sort((a, b) => b.snapshot.amount - a.snapshot.amount);
+    groups.push({
+      date: point.date,
+      entries,
+      total: point.total,
+      change: at > 0 ? point.total - series[at - 1].total : null,
+    });
+  });
+
+  return groups.reverse();
+}
+
+/** Each category's last value strictly before `date` — what a value entered
+ *  for `date` is compared with. */
+export function valuesBefore(
+  snapshots: Snapshot[],
+  date: string
+): Map<string, number> {
+  const result = new Map<string, number>();
+  for (const snapshot of [...snapshots].sort(byDateAscending)) {
+    if (snapshot.date >= date) break;
+    result.set(snapshot.category, snapshot.amount);
+  }
+  return result;
+}
+
+export type SnapshotPlan = {
+  upsert: DraftSnapshot[];
+  remove: Snapshot[];
+  /** Why the form cannot be saved as it stands; empty when it can. */
+  invalid: string[];
+};
+
+/**
+ * What saving the entry form for `date` would write.
+ *
+ * A blank field means "not recorded on this date": nothing is written, and a
+ * row already stored for that category and date is removed — which is how
+ * clearing a field in a loaded registrering deletes that value. An unchanged
+ * value is left alone. A name typed for a new category that matches an
+ * existing one (ignoring case) is that category, so "fond" does not start a
+ * second band beside "Fond".
+ */
+export function planSnapshot(
+  snapshots: Snapshot[],
+  date: string,
+  fields: { category: string; value: string }[]
+): SnapshotPlan {
+  const canonical = new Map(
+    snapshots.map((snapshot) => [snapshot.category.toLowerCase(), snapshot.category])
+  );
+  const onDate = new Map(
+    snapshots
+      .filter((snapshot) => snapshot.date === date)
+      .map((snapshot) => [snapshot.category, snapshot])
+  );
+  const plan: SnapshotPlan = { upsert: [], remove: [], invalid: [] };
+  const seen = new Set<string>();
+
+  for (const field of fields) {
+    const typed = field.category.trim();
+    const value = field.value.trim();
+    const category = canonical.get(typed.toLowerCase()) ?? typed;
+    const existing = onDate.get(category);
+
+    if (!value && !existing) continue;
+    if (!category) {
+      plan.invalid.push("En ny kategori mangler navn.");
+      continue;
+    }
+    if (seen.has(category.toLowerCase())) {
+      plan.invalid.push(`${category} står to ganger.`);
+      continue;
+    }
+    seen.add(category.toLowerCase());
+
+    if (!value) {
+      plan.remove.push(existing!);
+      continue;
+    }
+    const amount = parseAmountCell(value);
+    if (amount === null || amount < 0) {
+      plan.invalid.push(`${category}: «${value}» er ikke et gyldig beløp.`);
+      continue;
+    }
+    if (existing?.amount !== amount) plan.upsert.push({ category, date, amount });
+  }
+
+  return plan;
+}
+
 // --- Stacked chart -----------------------------------------------------------
 
 export type StackBand = {

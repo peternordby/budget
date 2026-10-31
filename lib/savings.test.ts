@@ -9,10 +9,13 @@ import {
   parseAmountCell,
   parseDateCell,
   parseSnapshotCsv,
+  planSnapshot,
   reconcileOrder,
+  snapshotGroups,
   stackedSeries,
   totalNow,
   totalSeries,
+  valuesBefore,
   type Snapshot,
 } from "./savings";
 import { axisTicks, edgeAnchor, labelledDates, shortAmount } from "./chart";
@@ -914,5 +917,110 @@ describe("labelledDates with edge-pinned labels", () => {
     const fractions = [0, 70 / 320, 120 / 320, 1];
     expect(labelledDates(fractions, 60 / 320, 30 / 320)).toEqual([0, 2, 3]);
     expect(labelledDates(fractions, 60 / 320)).toEqual([0, 1, 3]);
+  });
+});
+
+describe("snapshotGroups", () => {
+  it("groups by date newest first, with carried-forward totals and own changes", () => {
+    const groups = snapshotGroups([
+      snap("Fond", "2026-01-01", 100),
+      snap("BSU", "2026-01-01", 50),
+      snap("Fond", "2026-02-01", 130),
+      snap("BSU", "2026-03-01", 40),
+    ]);
+    expect(groups.map((group) => group.date)).toEqual([
+      "2026-03-01",
+      "2026-02-01",
+      "2026-01-01",
+    ]);
+    expect(groups.map((group) => group.total)).toEqual([170, 180, 150]);
+    expect(groups.map((group) => group.change)).toEqual([-10, 30, null]);
+    expect(groups[1].entries.map((entry) => entry.change)).toEqual([30]);
+    // Largest first, and a category's first value has nothing to compare to.
+    expect(
+      groups[2].entries.map((entry) => [entry.snapshot.category, entry.change])
+    ).toEqual([
+      ["Fond", null],
+      ["BSU", null],
+    ]);
+  });
+
+  it("returns nothing for no snapshots", () => {
+    expect(snapshotGroups([])).toEqual([]);
+  });
+});
+
+describe("valuesBefore", () => {
+  it("takes each category's last value strictly before the date", () => {
+    const before = valuesBefore(
+      [
+        snap("Fond", "2026-01-01", 100),
+        snap("Fond", "2026-02-01", 130),
+        snap("BSU", "2026-02-01", 50),
+      ],
+      "2026-02-01"
+    );
+    expect([...before]).toEqual([["Fond", 100]]);
+  });
+});
+
+describe("planSnapshot", () => {
+  const stored = [
+    snap("Fond", "2026-01-01", 100),
+    snap("BSU", "2026-01-01", 50),
+    snap("Fond", "2026-02-01", 130),
+  ];
+
+  it("writes only the filled fields of a new date", () => {
+    const plan = planSnapshot(stored, "2026-03-01", [
+      { category: "Fond", value: "140 000" },
+      { category: "BSU", value: "" },
+    ]);
+    expect(plan).toEqual({
+      upsert: [{ category: "Fond", date: "2026-03-01", amount: 140000 }],
+      remove: [],
+      invalid: [],
+    });
+  });
+
+  it("removes a cleared value, skips an unchanged one, updates a changed one", () => {
+    const plan = planSnapshot(stored, "2026-01-01", [
+      { category: "Fond", value: "100" },
+      { category: "BSU", value: "" },
+    ]);
+    expect(plan.upsert).toEqual([]);
+    expect(plan.remove.map((row) => row.category)).toEqual(["BSU"]);
+
+    const changed = planSnapshot(stored, "2026-01-01", [
+      { category: "Fond", value: "120" },
+      { category: "BSU", value: "50" },
+    ]);
+    expect(changed.upsert).toEqual([
+      { category: "Fond", date: "2026-01-01", amount: 120 },
+    ]);
+  });
+
+  it("folds a new name into an existing category regardless of case", () => {
+    const plan = planSnapshot(stored, "2026-03-01", [
+      { category: "fond", value: "1" },
+    ]);
+    expect(plan.upsert[0].category).toBe("Fond");
+
+    const twice = planSnapshot(stored, "2026-03-01", [
+      { category: "Fond", value: "1" },
+      { category: " FOND ", value: "2" },
+    ]);
+    expect(twice.invalid).toEqual(["Fond står to ganger."]);
+  });
+
+  it("rejects a bad amount, a negative one and a value without a name", () => {
+    const plan = planSnapshot(stored, "2026-03-01", [
+      { category: "Fond", value: "mye" },
+      { category: "BSU", value: "-5" },
+      { category: "", value: "10" },
+      { category: "", value: "" },
+    ]);
+    expect(plan.upsert).toEqual([]);
+    expect(plan.invalid).toHaveLength(3);
   });
 });
