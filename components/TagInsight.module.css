@@ -42,7 +42,7 @@
   font: inherit;
   font-size: 12px;
   text-align: left;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   scroll-snap-align: start;
 }
 
@@ -233,7 +233,7 @@
 }
 
 .pickable {
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .row-link {
@@ -243,7 +243,7 @@
   color: var(--ink);
   font: inherit;
   font-weight: 600;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 /* Per dag as a bar behind its figure, so the trips compare at a glance. */

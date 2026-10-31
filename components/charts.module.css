@@ -257,11 +257,11 @@
   border: none;
   background: transparent;
   border-radius: var(--radius-control);
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .hit-layer div.hit {
-  cursor: default;
+  cursor: var(--cursor-default);
 }
 
 .hit:focus-visible {

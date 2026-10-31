@@ -5,6 +5,7 @@ import { MotionConfig } from "motion/react";
 import type { User } from "@supabase/supabase-js";
 import { usePathname } from "next/navigation";
 import AuthGate from "@/components/AuthGate";
+import CursorEffects from "@/components/CursorEffects";
 import EncryptionGate from "@/components/EncryptionGate";
 import LedgerProvider, { useLedger } from "@/components/LedgerProvider";
 import PeriodPicker from "@/components/PeriodPicker";
@@ -71,6 +72,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 blanket prefers-reduced-motion override in globals.css that
                 neutralises the CSS keyframes. */}
             <MotionConfig reducedMotion="user">
+            {/* Before <main>, so Ark's selected cell sits under the cards. */}
+            <CursorEffects />
             <main className="shell">
               {/* useSearchParams (in TopNav, and later PeriodPicker) requires a
                   Suspense boundary in the App Router. One boundary covers both

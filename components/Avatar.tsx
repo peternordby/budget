@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef, useSyncExternalStore } from "react";
 import { Style, Avatar as DicebearAvatar } from "@dicebear/core";
 import definition from "@dicebear/styles/croodles-neutral.json" with { type: "json" };
 import styles from "./Avatar.module.css";
@@ -10,9 +10,45 @@ import styles from "./Avatar.module.css";
 // every nav re-render.
 const style = new Style(definition);
 
+// The easter egg: seven quick clicks on the avatar on /profil swap it for a
+// scuba diver (public/diver.svg), and seven more swap it back. Per device, in
+// localStorage; the custom event tells the nav's copy in the same tab, which
+// `storage` does not.
+const DIVER_KEY = "budget-diver";
+const DIVER_CLICKS = 7;
+
+function subscribeDiver(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  window.addEventListener(DIVER_KEY, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(DIVER_KEY, onChange);
+  };
+}
+
+function isDiver() {
+  try {
+    return window.localStorage.getItem(DIVER_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function toggleDiver() {
+  try {
+    if (isDiver()) window.localStorage.removeItem(DIVER_KEY);
+    else window.localStorage.setItem(DIVER_KEY, "1");
+  } catch {
+    // No storage: the diver stays a secret.
+  }
+  window.dispatchEvent(new Event(DIVER_KEY));
+}
+
 type AvatarProps = {
   name: string;
   size?: "sm" | "lg";
+  /** Counts clicks toward the diver (only /profil's copy). */
+  diveable?: boolean;
 };
 
 /**
@@ -33,8 +69,23 @@ type AvatarProps = {
  * Presentation-only and aria-hidden: every place it appears, the name is already
  * written next to it, so announcing it as well would just repeat it.
  */
-export default function Avatar({ name, size = "sm" }: AvatarProps) {
-  const src = useMemo(
+export default function Avatar({ name, size = "sm", diveable = false }: AvatarProps) {
+  const diver = useSyncExternalStore(subscribeDiver, isDiver, () => false);
+  // Clicks count while they come within 1.5s of each other.
+  const clicks = useRef({ count: 0, at: 0 });
+
+  function onClick() {
+    const now = Date.now();
+    const c = clicks.current;
+    c.count = now - c.at < 1500 ? c.count + 1 : 1;
+    c.at = now;
+    if (c.count === DIVER_CLICKS) {
+      c.count = 0;
+      toggleDiver();
+    }
+  }
+
+  const drawn = useMemo(
     () =>
       // Transparent: the style file defaults to white, which would cover the
       // accent tint behind the image.
@@ -44,8 +95,11 @@ export default function Avatar({ name, size = "sm" }: AvatarProps) {
 
   return (
     <img
-      className={`${styles["avatar"]} ${size === "lg" ? styles["lg"] : ""}`}
-      src={src}
+      // Keyed on the diver so the swap replays the entrance.
+      key={diver ? "diver" : "drawn"}
+      className={`${styles["avatar"]} ${size === "lg" ? styles["lg"] : ""} ${diver ? styles["diver"] : ""}`}
+      src={diver ? "/diver.svg" : drawn}
+      onClick={diveable ? onClick : undefined}
       alt=""
       width={size === "lg" ? 56 : 26}
       height={size === "lg" ? 56 : 26}

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- Neumorphism (dark), over something clickable: a disc pressed into the surface — shadowed inside at the top-left, lit at the bottom-right. Hotspot 12 12. -->
+  <defs><linearGradient id="p" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1c1e22"/><stop offset="1" stop-color="#373b42"/></linearGradient></defs>
+  <circle cx="12" cy="12" r="8.5" fill="url(#p)" stroke="#6b7280"/>
+  <circle cx="12" cy="12" r="2" fill="#6b7280"/>
+</svg>

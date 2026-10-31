@@ -252,7 +252,7 @@ export default function ProfilPage() {
     <>
       <section className="card section-gap">
         <div className={styles["identity"]}>
-          <Avatar name={name} size="lg" />
+          <Avatar name={name} size="lg" diveable />
           <div className={styles["identity-text"]}>
             <h1 className={styles["identity-name"]}>{name}</h1>
             <span className="helper">{user?.email}</span>

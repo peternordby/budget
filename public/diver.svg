@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<!-- The avatar easter egg (components/Avatar.tsx): a scuba diver, hooded, mask on, regulator in, bubbles going up past the hood. -->
+<defs>
+<linearGradient id="w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#27c2c6"/><stop offset=".55" stop-color="#007f99"/><stop offset="1" stop-color="#06264a"/></linearGradient>
+<radialGradient id="g" cx=".32" cy=".25" r=".95"><stop offset="0" stop-color="#d4fdfd"/><stop offset=".35" stop-color="#4cc3cc"/><stop offset="1" stop-color="#0b3c52"/></radialGradient>
+<linearGradient id="n" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#323a42"/><stop offset="1" stop-color="#0f1317"/></linearGradient>
+</defs>
+<rect width="64" height="64" fill="url(#w)"/>
+<path d="M14 0h7L9 64H2ZM34 0h5L27 64h-5Z" fill="#fff" opacity=".08"/>
+<path d="M4 64C6 52 17 46 32 46C47 46 58 52 60 64Z" fill="url(#n)"/>
+<path d="M19 49L23 64M45 49L41 64" stroke="#f2b632" stroke-width="3.2"/>
+<path d="M17 30C17 17 23.5 10 32 10C40.5 10 47 17 47 30C47 39 44 46 39 49H25C20 46 17 39 17 30Z" fill="url(#n)"/>
+<path d="M22.5 25C22.5 20 26.5 17 32 17C37.5 17 41.5 20 41.5 25V36C41.5 42 37 46 32 46C27 46 22.5 42 22.5 36Z" fill="#d9a07d"/>
+<path d="M17.4 25.5C24 23 40 23 46.6 25.5" stroke="#0b0e11" stroke-width="3" fill="none"/>
+<path d="M20 21.5C20 18.5 24 17.5 32 17.5C40 17.5 44 18.5 44 21.5V29.5C44 32.5 40 34 36.5 33.5C35 31.8 33.6 31 32 31C30.4 31 29 31.8 27.5 33.5C24 34 20 32.5 20 29.5Z" fill="#11161b"/>
+<path d="M22 22.2C22 20.2 25 19.5 32 19.5C39 19.5 42 20.2 42 22.2V28.8C42 31 39.5 32 37 31.6C35.4 30 33.8 29.2 32 29.2C30.2 29.2 28.6 30 27 31.6C24.5 32 22 31 22 28.8Z" fill="url(#g)"/>
+<ellipse cx="27.6" cy="25" rx="2.3" ry="1.8" fill="#fff" opacity=".92"/>
+<ellipse cx="36.4" cy="25" rx="2.3" ry="1.8" fill="#fff" opacity=".92"/>
+<circle cx="27.9" cy="25.1" r="1.2" fill="#1b2a33"/>
+<circle cx="36.7" cy="25.1" r="1.2" fill="#1b2a33"/>
+<path d="M23.5 21.4L27.5 20.6L24 28Z" fill="#fff" opacity=".45"/>
+<path d="M25 41.5H39C40.4 41.5 41.4 42.4 41.4 43.5C41.4 44.6 40.4 45.5 39 45.5H25C23.6 45.5 22.6 44.6 22.6 43.5C22.6 42.4 23.6 41.5 25 41.5Z" fill="#2a3138"/>
+<path d="M36.5 41C43 41 48 44 50 52" stroke="#1d232a" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+<circle cx="32" cy="40" r="5.2" fill="#1d232a"/>
+<circle cx="32" cy="40" r="3" fill="#f2b632"/>
+<circle cx="32" cy="40" r="1.2" fill="#c98f12"/>
+<g fill="#fff" fill-opacity=".18" stroke="#fff" stroke-opacity=".85" stroke-width=".9">
+<circle cx="20.5" cy="40" r="1.4"/><circle cx="17" cy="33" r="2.1"/><circle cx="14.6" cy="24.5" r="1.5"/><circle cx="13.5" cy="15" r="2.6"/><circle cx="16.5" cy="6.5" r="1.7"/>
+<circle cx="44.5" cy="38" r="1.2"/><circle cx="48.6" cy="29" r="1.9"/><circle cx="50" cy="19" r="1.3"/><circle cx="48" cy="9" r="2.3"/>
+</g>
+</svg>

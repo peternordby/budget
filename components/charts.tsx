@@ -19,7 +19,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
 } from "react";
@@ -28,6 +27,7 @@ import { scaleLinear } from "d3-scale";
 import { curveLinear, curveMonotoneX, type CurveFactory } from "d3-shape";
 import { T_DRAW, T_FAST, stagger } from "@/lib/motion";
 import { shareWidths } from "@/lib/chart";
+import { useAppStyle } from "@/lib/useAppStyle";
 import styles from "./charts.module.css";
 
 /* ------------------------------------------------------------------ measure */
@@ -52,24 +52,14 @@ export function barCorner(max: number): { rx: number; style: CSSProperties } {
   };
 }
 
-function subscribeStyle(onChange: () => void) {
-  const observer = new MutationObserver(onChange);
-  observer.observe(document.documentElement, { attributeFilter: ["data-style"] });
-  return () => observer.disconnect();
-}
-
 /**
- * The curve a line or area chart draws with: smoothed everywhere except Ark,
- * where a sheet's chart joins its points with straight segments. Follows
+ * The curve a line or area chart draws with: smoothed everywhere except Ark
+ * and Retro, whose charts join their points with straight segments. Follows
  * data-style live, since a curve is a path string and not a CSS property.
  */
 export function useChartCurve(): CurveFactory {
-  const style = useSyncExternalStore(
-    subscribeStyle,
-    () => document.documentElement.dataset.style,
-    () => undefined
-  );
-  return style === "ark" ? curveLinear : curveMonotoneX;
+  const style = useAppStyle();
+  return style === "ark" || style === "retro" ? curveLinear : curveMonotoneX;
 }
 
 export function useMeasure<T extends HTMLElement>() {

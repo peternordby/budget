@@ -39,7 +39,7 @@
   /* Glass: the tab bar floats — a bar of glass held off the screen edges,
      which the page scrolls under. Tinted strongly rather than blurred: its
      labels sit over rows scrolling past, and a live blur cost frame rate. */
-  :global(html[data-style="glass"]) .nav-routes {
+  :global(html:is([data-style="glass"], [data-style="akvarium"])) .nav-routes {
     inset: auto 10px calc(10px + env(safe-area-inset-bottom)) 10px;
     padding: 5px;
     border: 0;
@@ -48,7 +48,7 @@
     box-shadow: var(--glass-bevel), 0 10px 30px rgb(20 30 70 / 0.18);
   }
 
-  :global(html[data-style="glass"]) .nav-route {
+  :global(html:is([data-style="glass"], [data-style="akvarium"])) .nav-route {
     border-radius: 21px;
   }
 

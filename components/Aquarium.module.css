@@ -1,0 +1,454 @@
+/* The Akvarium backdrop (Aquarium.tsx). Hidden — and so not animating — in
+   every other style. Transform and opacity only; no filters, no blur.
+
+   Every animal's colours are variables here, read by the shared gradients in
+   Aquarium.tsx's Defs: the shallows (light) are sunlit and contrasty, the deep
+   (dark) is the photo's own light — teal from above, the bellies in shadow,
+   the jellies glowing. */
+
+.aquarium {
+  display: none;
+}
+
+:global(html[data-style="akvarium"]) .aquarium {
+  display: block;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  --aq-shark-back: #47646d;
+  --aq-shark-flank: #7895a0;
+  --aq-shark-belly: #d6e3e4;
+  --aq-shark-shadow: #9fb6ba;
+  --aq-shark-fin: #3e5961;
+  --aq-fusilier-back: #2e5fa0;
+  --aq-fusilier-flank: #6a9ccf;
+  --aq-fusilier-belly: #eef5f8;
+  --aq-fusilier-yellow: #f5cf4a;
+  --aq-shell-light: #9a8752;
+  --aq-shell-dark: #463b22;
+  --aq-scute-light: #a88f55;
+  --aq-skin: #55654a;
+  --aq-skin-light: #8a9670;
+  --aq-seam: rgb(35 28 14 / 0.6);
+  --aq-bell: rgb(255 255 255 / 0.4);
+  --aq-jelly: rgb(214 200 255 / 0.22);
+  --aq-jelly-rim: rgb(255 255 255 / 0.6);
+  --aq-gonad: rgb(206 150 255 / 0.75);
+  --aq-arm: rgb(255 214 245 / 0.42);
+  --aq-sheen: rgb(255 255 255 / 0.22);
+  --aq-line: rgb(10 30 40 / 0.22);
+  --aq-eye: #061218;
+  --aq-ray: rgb(255 255 255 / 0.2);
+  --aq-surface: rgb(255 255 255 / 0.35);
+  --aq-snow: rgb(255 255 255 / 0.5);
+  --aq-bubble: rgb(255 255 255 / 0.55);
+}
+
+:global(html[data-style="akvarium"][data-theme="dark"]) .aquarium {
+  --aq-shark-back: #3a737c;
+  --aq-shark-flank: #5b9298;
+  --aq-shark-belly: #93b9ba;
+  --aq-shark-shadow: #5e8689;
+  --aq-shark-fin: #2c5f67;
+  --aq-fusilier-back: #2a5d93;
+  --aq-fusilier-flank: #4f83b4;
+  --aq-fusilier-belly: #a9c3d4;
+  --aq-fusilier-yellow: #d8b444;
+  --aq-shell-light: #7d6d43;
+  --aq-shell-dark: #2c2416;
+  --aq-scute-light: #7f6d41;
+  --aq-skin: #3f4d36;
+  --aq-skin-light: #67745a;
+  --aq-bell: rgb(230 220 255 / 0.35);
+  --aq-jelly: rgb(170 140 255 / 0.2);
+  --aq-jelly-rim: rgb(225 205 255 / 0.6);
+  --aq-gonad: rgb(255 150 230 / 0.7);
+  --aq-arm: rgb(255 170 230 / 0.38);
+  --aq-sheen: rgb(200 255 255 / 0.16);
+  --aq-eye: #01101a;
+  --aq-ray: rgb(160 240 245 / 0.08);
+  --aq-surface: rgb(80 220 230 / 0.2);
+  --aq-snow: rgb(200 240 255 / 0.3);
+  --aq-bubble: rgb(200 240 255 / 0.4);
+}
+
+/* The shared gradients and the fusilier symbol. Not display: none — a
+   gradient inside an undisplayed <svg> does not paint where it is used. */
+.defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+/* --- Light from the surface --- */
+
+.glow {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 50vh;
+  background: radial-gradient(70% 80% at 50% 0%, var(--aq-surface), transparent);
+  animation: shimmer 9s ease-in-out infinite alternate;
+}
+
+.ray {
+  position: absolute;
+  top: -5vh;
+  left: var(--x);
+  width: 16vw;
+  height: 85vh;
+  background: radial-gradient(50% 100% at 50% 0%, var(--aq-ray), transparent);
+  transform-origin: top center;
+  animation: ray 11s ease-in-out var(--delay) infinite alternate;
+}
+
+/* Marine snow: a tile of specks drifting down by exactly one tile, so the
+   loop has no seam. */
+.snow {
+  position: absolute;
+  inset: -240px 0 0;
+  background-image:
+    radial-gradient(1.5px 1.5px at 20px 30px, var(--aq-snow), transparent),
+    radial-gradient(1px 1px at 90px 120px, var(--aq-snow), transparent),
+    radial-gradient(2px 2px at 170px 60px, var(--aq-snow), transparent),
+    radial-gradient(1px 1px at 210px 190px, var(--aq-snow), transparent),
+    radial-gradient(1.5px 1.5px at 60px 210px, var(--aq-snow), transparent),
+    radial-gradient(1px 1px at 140px 170px, var(--aq-snow), transparent);
+  background-size: 240px 240px;
+  animation: snow 40s linear infinite;
+}
+
+.bubble {
+  position: absolute;
+  bottom: -20px;
+  left: var(--x);
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  border: 1px solid var(--aq-bubble);
+  background: radial-gradient(circle at 30% 30%, rgb(255 255 255 / 0.6), transparent 45%);
+  animation: bubble var(--dur) linear var(--delay) infinite;
+}
+
+/* --- Where the animals go --- */
+
+.swim {
+  position: absolute;
+  top: var(--y, 0);
+  left: 0;
+  width: var(--size);
+  opacity: 0.78;
+  animation: swim-left var(--dur) linear var(--delay) infinite;
+}
+
+.ltr {
+  animation-name: swim-right;
+}
+
+.rise {
+  top: 0;
+  animation-name: rise;
+}
+
+/* Depth is opacity: the farther, the more of the water's own colour shows
+   through. */
+.near {
+  opacity: 0.92;
+}
+
+.distant {
+  opacity: 0.38;
+}
+
+.bob {
+  animation: bob 7s ease-in-out infinite alternate;
+}
+
+.flip {
+  transform: scaleX(-1);
+}
+
+/* --- How they are drawn --- */
+
+.sprite {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.eye {
+  fill: var(--aq-eye);
+}
+
+.glint {
+  fill: rgb(255 255 255 / 0.85);
+}
+
+.sheen {
+  fill: none;
+  stroke: var(--aq-sheen);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.line {
+  fill: none;
+  stroke: var(--aq-line);
+  stroke-width: 0.7;
+}
+
+.gills {
+  fill: none;
+  stroke: var(--aq-line);
+  stroke-width: 0.9;
+  stroke-linecap: round;
+}
+
+/* Thresher. Pivots are fill-box percentages: the tail turns at the caudal
+   peduncle, the pectoral at its root, and the head yaws against the tail. */
+.yaw {
+  transform-box: fill-box;
+  transform-origin: 45% 50%;
+  animation: yaw 2.6s ease-in-out infinite alternate;
+}
+
+.shark-tail {
+  transform-box: fill-box;
+  transform-origin: 0% 66%;
+  animation: tail 2.6s ease-in-out infinite alternate-reverse;
+}
+
+.shark-pectoral {
+  transform-box: fill-box;
+  transform-origin: 20% 0%;
+  animation: fin 5.2s ease-in-out infinite alternate;
+}
+
+/* Fusiliers. */
+.fusilier-yellow {
+  fill: var(--aq-fusilier-yellow);
+}
+
+.fin-pale {
+  fill: rgb(255 255 255 / 0.45);
+}
+
+.eye-ring {
+  fill: var(--aq-fusilier-belly);
+}
+
+.drift {
+  animation: drift 6s ease-in-out var(--delay) infinite alternate;
+}
+
+.wiggle {
+  transform-box: fill-box;
+  transform-origin: 30% 50%;
+  animation: wiggle 0.9s ease-in-out var(--delay) infinite alternate;
+}
+
+/* Turtle. Each flipper turns at its shoulder: the bounding-box corner that
+   meets the shell. */
+.flipper {
+  transform-box: fill-box;
+  animation: stroke 4.2s ease-in-out infinite alternate;
+}
+
+.front-top {
+  transform-origin: 100% 100%;
+}
+
+.front-bottom {
+  transform-origin: 100% 0%;
+  animation-name: stroke-mirrored;
+}
+
+.rear-top {
+  transform-origin: 0% 100%;
+  animation-name: paddle;
+}
+
+.rear-bottom {
+  transform-origin: 0% 0%;
+  animation-name: paddle-mirrored;
+}
+
+.scales {
+  fill: none;
+  stroke: var(--aq-skin-light);
+  stroke-width: 1.4;
+  stroke-dasharray: 1.6 2.4;
+  stroke-linecap: round;
+  opacity: 0.7;
+}
+
+.head-scales {
+  fill: none;
+  stroke: var(--aq-seam);
+  stroke-width: 0.8;
+}
+
+.seams {
+  stroke: var(--aq-seam);
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+}
+
+path.seams:not([fill]) {
+  fill: none;
+}
+
+/* Moon jelly. */
+.jelly-pulse {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  animation: pulse 3.2s cubic-bezier(0.3, 0, 0.3, 1) infinite;
+}
+
+.bell-rim {
+  stroke: var(--aq-jelly-rim);
+  stroke-width: 0.8;
+}
+
+.gonads {
+  fill: var(--aq-gonad);
+  fill-opacity: 0.25;
+  stroke: var(--aq-gonad);
+  stroke-width: 1.3;
+}
+
+.tentacles {
+  fill: none;
+  stroke: var(--aq-jelly-rim);
+  stroke-width: 0.6;
+  opacity: 0.8;
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  animation: sway 4s ease-in-out infinite alternate;
+}
+
+.arms {
+  fill: none;
+  stroke: var(--aq-arm);
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  animation: sway 5.4s ease-in-out -1.5s infinite alternate-reverse;
+}
+
+/* --- Keyframes --- */
+
+@keyframes shimmer {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+@keyframes ray {
+  from { opacity: 0.3; transform: skewX(-16deg); }
+  to { opacity: 1; transform: skewX(-7deg); }
+}
+
+@keyframes snow {
+  to { transform: translateY(240px); }
+}
+
+@keyframes bubble {
+  0% { transform: translate(0, 0); opacity: 0; }
+  10% { opacity: 1; }
+  25% { transform: translate(8px, -28vh); }
+  50% { transform: translate(-6px, -55vh); }
+  75% { transform: translate(7px, -82vh); opacity: 0.8; }
+  100% { transform: translate(0, -112vh); opacity: 0; }
+}
+
+@keyframes swim-left {
+  from { transform: translate(100vw, 0); }
+  to { transform: translate(calc(-1 * var(--size)), var(--dy, 0)); }
+}
+
+@keyframes swim-right {
+  from { transform: translate(calc(-1 * var(--size)), 0); }
+  to { transform: translate(100vw, var(--dy, 0)); }
+}
+
+@keyframes rise {
+  from { transform: translate(var(--x), 105vh); }
+  to { transform: translate(var(--x), -45vh); }
+}
+
+@keyframes bob {
+  from { transform: translateY(-12px) rotate(-1.5deg); }
+  to { transform: translateY(12px) rotate(1.5deg); }
+}
+
+@keyframes yaw {
+  from { transform: rotate(-0.8deg); }
+  to { transform: rotate(0.8deg); }
+}
+
+@keyframes tail {
+  from { transform: rotate(-7deg); }
+  to { transform: rotate(6deg); }
+}
+
+@keyframes fin {
+  from { transform: rotate(-5deg); }
+  to { transform: rotate(4deg); }
+}
+
+@keyframes drift {
+  from { transform: translate(-2px, -1.5px); }
+  to { transform: translate(2px, 1.5px); }
+}
+
+@keyframes wiggle {
+  from { transform: rotate(-4deg); }
+  to { transform: rotate(4deg); }
+}
+
+/* The power stroke sweeps the front flippers back; the recovery brings
+   them forward again. */
+@keyframes stroke {
+  from { transform: rotate(-14deg); }
+  to { transform: rotate(26deg); }
+}
+
+@keyframes stroke-mirrored {
+  from { transform: rotate(14deg); }
+  to { transform: rotate(-26deg); }
+}
+
+@keyframes paddle {
+  from { transform: rotate(8deg); }
+  to { transform: rotate(-10deg); }
+}
+
+@keyframes paddle-mirrored {
+  from { transform: rotate(-8deg); }
+  to { transform: rotate(10deg); }
+}
+
+/* A jelly contracts fast and relaxes slowly. */
+@keyframes pulse {
+  0%, 100% { transform: scale(1, 1); }
+  28% { transform: scale(0.84, 1.07); }
+}
+
+@keyframes sway {
+  from { transform: skewX(-7deg); }
+  to { transform: skewX(7deg); }
+}
+
+/* Reduced motion: a still picture, not an empty sea. The global override in
+   globals.css shrinks every animation to 0.01ms, which would leave each
+   animal at its start, off-screen; paused at its own delay instead, each one
+   holds a frame mid-swim. */
+@media (prefers-reduced-motion: reduce) {
+  :global(html[data-style="akvarium"]) .aquarium,
+  :global(html[data-style="akvarium"]) .aquarium * {
+    animation-play-state: paused !important;
+    animation-duration: var(--dur, 10s) !important;
+    animation-delay: var(--delay, 0s) !important;
+  }
+}

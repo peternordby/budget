@@ -1,0 +1,114 @@
+/* The pointer effects (CursorEffects.tsx). All fixed to the viewport and
+   none of them take pointer events. Everything but Ark's cell floats over the
+   page; the cell sits under <main> (z-index 1), on the sheet behind the cards. */
+
+/* Standard: an accent ring where you click. */
+.ripple {
+  position: fixed;
+  z-index: 1000;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  pointer-events: none;
+}
+
+/* Neumorfisme: a dimple pressed into the surface. */
+.press {
+  position: fixed;
+  z-index: 1000;
+  width: 60px;
+  height: 60px;
+  margin: -30px 0 0 -30px;
+  border-radius: 50%;
+  background: var(--surface-solid);
+  box-shadow: var(--control-shadow-sunk);
+  pointer-events: none;
+}
+
+/* Ark: the selected cell — the accent frame, its fill handle, its name. */
+.cell {
+  position: fixed;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  width: calc(64px + 1px);
+  height: calc(20px + 1px);
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  pointer-events: none;
+}
+
+.cell::after {
+  content: "";
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  outline: 1px solid var(--surface-solid);
+}
+
+.cell-name {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: -2px;
+  padding: 0 4px;
+  font: 600 11px/16px var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-contrast);
+  background: var(--accent);
+  white-space: nowrap;
+}
+
+/* Glass: the lens. Brighter glass than a pane, with the same soft glow. */
+.lens {
+  position: fixed;
+  z-index: 1000;
+  top: 0;
+  left: 0;
+  background: rgb(255 255 255 / 0.16);
+  box-shadow:
+    inset 0 0 10px 1px rgb(255 255 255 / 0.5),
+    0 4px 14px rgb(20 30 70 / 0.12);
+  pointer-events: none;
+}
+
+:global(html[data-theme="dark"]) .lens {
+  background: rgb(255 255 255 / 0.07);
+  box-shadow:
+    inset 0 0 10px 1px rgb(255 255 255 / 0.16),
+    0 4px 14px rgb(0 0 0 / 0.3);
+}
+
+/* Retro: a ghost of the cursor, the same picture the style's cursor is. */
+.ghost {
+  position: fixed;
+  z-index: 1000;
+  top: 0;
+  left: 0;
+  width: 11px;
+  height: 19px;
+  background: url("/cursors/retro.svg") no-repeat;
+  pointer-events: none;
+}
+
+/* The hand's hotspot is its fingertip, 5px in. */
+.ghost[data-hand] {
+  width: 17px;
+  height: 22px;
+  margin-left: -5px;
+  background-image: url("/cursors/retro-hand.svg");
+}
+
+/* Akvarium: one canvas for every bubble. */
+.bubbles {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}

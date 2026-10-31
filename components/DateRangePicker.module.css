@@ -21,7 +21,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .trigger[data-empty="true"] {
@@ -45,7 +45,7 @@
   border-radius: var(--radius-small);
   background: none;
   color: var(--muted);
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .clear:hover {
@@ -101,7 +101,7 @@
   font: inherit;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .day:hover {

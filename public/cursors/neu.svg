@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- Neumorphism (light): the arrow pressed out of the surface — a dark shadow down-right, a highlight up-left, and an outline, since a shape the colour of the page is otherwise invisible. Hotspot 4 2. -->
+  <path d="M4 2V19.5L8.6 15.4L11.6 22.2L14.6 20.9L11.7 14.2H18Z" stroke-linejoin="round" fill="#a3b1c6" stroke="#a3b1c6" stroke-width="2" transform="translate(1.2 1.2)"/>
+  <path d="M4 2V19.5L8.6 15.4L11.6 22.2L14.6 20.9L11.7 14.2H18Z" stroke-linejoin="round" fill="#ffffff" stroke="#ffffff" stroke-width="2" transform="translate(-0.8 -0.8)"/>
+  <path d="M4 2V19.5L8.6 15.4L11.6 22.2L14.6 20.9L11.7 14.2H18Z" stroke-linejoin="round" fill="#e0e5ec" stroke="#8d98ab" stroke-width="1"/>
+</svg>
