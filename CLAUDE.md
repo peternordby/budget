@@ -8,6 +8,17 @@ Personal budget tracking app built with Next.js and Supabase.
 - `pnpm build` - Production build (use to verify changes compile)
 - `pnpm start` - Start production server
 - `pnpm test` - vitest (`lib/**/*.test.ts` and `test/**/*.test.ts`)
+- `pnpm check:browser <chrome|chrome-phone|safari|ios> <path> [step ...]` - log in as the test user and screenshot a page in a real browser (`scripts/browser-check.mjs`; steps `click|<css>`, `fill|<css>|<text>`, `wait|<ms>`, `shot|<name>`, `js|<expr>`; screenshots in `.browser-check/<browser>/`)
+
+## Before finishing a task
+
+A task is not done until all of these have passed, and every UI change has been **looked at** in all four browsers, not only compiled:
+
+1. `pnpm test`
+2. `pnpm build`
+3. For each page the change touches, `pnpm check:browser` in **`chrome`** (desktop), **`chrome-phone`** (390px), **`safari`** (macOS Safari) and **`ios`** (Mobile Safari, iPhone 16 Pro), adding steps to reach the changed state (open the form, fill it, save), and read the screenshots. `ios` cannot click or type (below), so it shows each page as it loads; a state behind a click is checked in `chrome-phone` and the page itself in `ios`. Mobile Safari is not optional: date inputs, safe areas, the bottom tab bar and 16px-or-zoom inputs only misbehave there, and Chromium at phone width does not reproduce them
+
+Setup, once per machine: `BUDGET_TEST_EMAIL`/`BUDGET_TEST_PASSWORD` in `.env.local` (a test account, never a real one); `pnpm exec playwright-core install chromium-headless-shell` (the `chrome` targets are Chromium, the engine Chrome is built on — Google Chrome itself is not needed); `sudo safaridriver --enable` (it needs a real terminal; from the `!` prompt use `osascript -e 'do shell script "safaridriver --enable" with administrator privileges'`); Xcode with an iOS runtime and a simulator named **iPhone 16 Pro** (`xcrun simctl create "iPhone 16 Pro" com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro <runtime>`), **logged in once by hand** in its Safari as the test user. The simulator's Safari has no Remote Automation setting (iOS 27.2: no Web Inspector or Remote Automation under Advanced), so safaridriver answers "Could not find any session hosts" and cannot drive it; the `ios` target therefore opens the page with `xcrun simctl openurl` and takes the device screenshot with `simctl io` — status bar and home indicator included, which is what safe-area changes need — and accepts only `wait|`/`shot|` steps. A screenshot of `/logg-inn` means the session there has lapsed (the data key's 7 days). The script boots the simulator itself; to watch it, Xcode 27 shows it in `DeviceHub.app` (`/Applications/Xcode.app/Contents/Applications/`), not `Simulator.app`. The dev server must be running on :3000 (or set `BUDGET_URL`)
 
 ## Stack
 
@@ -25,7 +36,9 @@ Personal budget tracking app built with Next.js and Supabase.
 ```
 app/
   layout.tsx                  Root layout, font (Schibsted Grotesk), theme init script, background
-  page.tsx                    Redirects to /oversikt
+  page.tsx                    Redirects to the start page (lib/home.ts: /transaksjoner on a phone, /oversikt elsewhere); also the installed app's start_url
+  manifest.ts                 Web app manifest (installable PWA: standalone, start_url "/", icons in public/icon-*.png)
+  apple-icon.png              The 180px home-screen icon (icon.png stays the 96px favicon)
   visualize/page.tsx          Redirects to /oversikt (kept for old links)
   trender/page.tsx            Redirects to /innsikt/trender (kept for old links)
   logg-inn/page.tsx           Login (renders AuthPanel) — public, outside AuthGate
@@ -103,6 +116,7 @@ lib/
   motion.ts           Motion tokens: one easing curve, three durations, stagger()
   useAppStyle.ts      data-style followed live (MutationObserver) for what CSS cannot carry: useChartCurve, CursorEffects
   profile.ts          displayName/fullName over the session user; no profile table
+  home.ts             homePath: the start page — /transaksjoner at ≤640px (the phone layout), /oversikt otherwise
   crypto.ts           Client-side AES-GCM field encryption, the wrapped data key, the recovery phrase
   reencrypt.ts        The one-time pass (button on /profil) that encrypts pre-encryption rows
   csv.ts              RFC 4180 CSV encoding (activity table export) and parsing (savings + transaction import), with delimiter sniffing
@@ -141,7 +155,8 @@ Six tables in Supabase: `category`, `expense`, `budget`, `recurring_expense`, `s
 - Changing an email sends a confirmation to **both** the old and the new address (Supabase's default "Secure email change") and applies only when both are opened; `user.new_email` carries the pending address in the meantime
 - Auth is client-only (`@supabase/supabase-js`, implicit flow, no `@supabase/ssr`, no middleware, no route handlers). The four public auth routes sit outside the `(app)` group so `AuthGate` never wraps them. `/nytt-passord` accepts both link shapes — `?token_hash=&type=` via `verifyOtp`, or a session already parsed from the URL fragment by `detectSessionInUrl`
 - Migrations in `supabase/migrations/` are applied by hand. An already-applied migration is never edited; a later numbered one supersedes it
-- **A date input on iOS Safari is `appearance: none` with `min-width: 0`** (`globals.css`): natively it is a centred button with an intrinsic minimum width wider than half a phone, so it overflowed the two-column entry form. A grid that holds one uses `minmax(0, 1fr)`, not bare `1fr`, whose `auto` minimum lets the cell grow to the input instead
+- **The site installs as an app (PWA)**: `app/manifest.ts` (standalone, `start_url: "/"`), `app/apple-icon.png` plus `public/icon-192.png`/`icon-512.png` (one full-bleed 512 serves as the maskable icon too — the coins sit inside the central 80%), and in `app/layout.tsx` `appleWebApp` with status bar style `default` (`black-translucent` always draws white text, invisible on the light theme) and `viewport-fit=cover` with a light/dark `themeColor`. Cover is what makes `env(safe-area-inset-*)` non-zero, which the bottom tab bar and `.shell` already pad by. **The start page is `homePath()`** (`lib/home.ts`): `/transaksjoner` on a phone, where adding a purchase is the main use, `/oversikt` elsewhere — used by `/`, the login and `/nytt-passord`. There is **no service worker**: iOS installs without one and every read needs Supabase anyway. On iOS the installed app has its own storage, separate from Safari's, so it needs one login and key unlock of its own, and email links (reset, confirmation) open in Safari, not in the app
+- **A date input on iOS Safari is `appearance: none` with `min-width: 0`** (`globals.css`): natively it is a centred button with an intrinsic minimum width wider than half a phone, so it overflowed the two-column entry form. A grid that holds one uses `minmax(0, 1fr)`, not bare `1fr`, whose `auto` minimum lets the cell grow to the input instead. It stays `display: flex; align-items: center` — WebKit's iOS stylesheet makes it an inline flex box, and that is what centres the value vertically; `display: block` left the date stuck to the top of the field. A select beside it gets the same height as the inputs (the phone entry form sets 44px on both)
 - **The phone's bottom tab bar needs the header without `backdrop-filter`.** `backdrop-filter` makes an element the containing block for its `position: fixed` descendants, so on `.nav` it pinned the "bottom" bar to the header; at ≤640px the header is solid instead, and `.shell` reserves the bar's height at the bottom
 - **A tooltip must never overflow the chart it belongs to.** Two rules in `globals.css` box it in: `.card > *` gives every direct child `position: relative; z-index: 1`, so a *later* sibling in the same card (a legend, a stat row) paints over anything overflowing an earlier one — equal z-index, DOM order wins; and `.card` carries `backdrop-filter`, which always makes an element a stacking context, so escaping the card entirely just puts it under the next section. `ChartTooltip` derives its side from the anchor's `y`; a chart whose tooltip would overflow passes `flip` explicitly to point it inward (`ShareBar` does — its bar is 24px from the top of the card, so the derived "below" put the tooltip under the legend; `Sparkline` pins `above` for the same reason, being 32px tall)
 - **Every chart is SVG drawn in measured pixels**, from `d3-scale`/`d3-shape` on top of `components/charts.tsx`. Three rules: a chart **measures its own box** (`useMeasure`) rather than stretching a fixed viewBox with `preserveAspectRatio="none"` — that stretch is what forced every old label to be HTML positioned in percentages and every stroke to carry `vector-effect`; **the scale arithmetic lives in `lib/chart.ts`**, not in the component, so it is unit-tested (`lib/chart.test.ts`, `lib/savings.test.ts`) instead of eyeballed; and **there is exactly one tooltip**, `ChartTooltip`, so a hover readout looks and behaves the same on every route. Hit areas are real HTML `<button>`/`<div role="img">` elements tiled over the SVG, not handlers on the shapes, which is what gives keyboard focus, `aria-pressed` and an accessible name carrying the same figures the tooltip shows

@@ -797,6 +797,9 @@ a {
   max-width: 1180px;
   margin: 0 auto;
   padding: 24px 20px 72px;
+  /* The notch side in landscape, once viewport-fit=cover is on. */
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
   position: relative;
   z-index: 1;
 }
@@ -1111,12 +1114,16 @@ select {
 /* iOS Safari draws a date input as a centred button with an intrinsic minimum
    width wider than half a phone, so in a two-column grid it pushed past its
    cell. Dropping the native appearance lets `width` win; the value is then
-   left-aligned like every other field. */
+   left-aligned like every other field. Flex, not block: WebKit's own iOS
+   stylesheet makes it an inline flex box with `align-items: center`, which is
+   what centres the value vertically — `display: block` dropped that and left
+   the date stuck to the top of a 44px field. */
 input[type="date"] {
   -webkit-appearance: none;
   appearance: none;
   min-width: 0;
-  display: block;
+  display: flex;
+  align-items: center;
 }
 
 input[type="date"]::-webkit-date-and-time-value {

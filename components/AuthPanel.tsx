@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { hasSupabaseEnv, supabase } from "@/lib/supabaseClient";
+import { homePath } from "@/lib/home";
 import { hasEncryption, unlockWithPassword, type EncMeta } from "@/lib/crypto";
 
 export default function AuthPanel() {
@@ -18,7 +19,7 @@ export default function AuthPanel() {
   useEffect(() => {
     if (!hasSupabaseEnv) return;
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) router.replace("/oversikt");
+      if (data.session) router.replace(homePath());
     });
   }, [router]);
 
@@ -56,7 +57,7 @@ export default function AuthPanel() {
 
     // AuthGate's onAuthStateChange would pick this up on its own, but only
     // once something renders it — and nothing does on this route.
-    router.replace("/oversikt");
+    router.replace(homePath());
   }
 
   return (

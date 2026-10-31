@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
+import { homePath } from "@/lib/home";
 
 // The landing page for both a password-reset link and a dashboard invite —
 // the two differ only in which email template sent them, and in both cases
@@ -93,7 +94,7 @@ function NyttPassordForm() {
     setPending(false);
     // The link already signed them in, so there is nowhere to send them but
     // into the app.
-    router.replace("/oversikt");
+    router.replace(homePath());
   }
 
   return (
