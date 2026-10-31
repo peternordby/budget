@@ -20,7 +20,7 @@ import { IconMinus, IconPlus } from "@/components/icons";
 import { T_BASE } from "@/lib/motion";
 import { formatCurrency } from "@/lib/format";
 import { shortDate } from "@/lib/periodStats";
-import type { Stop, TagSummary } from "@/lib/tags";
+import { mapStops, stayLabel, type Stop, type TagSummary } from "@/lib/tags";
 import styles from "./TripMap.module.css";
 
 type Country = Feature;
@@ -435,12 +435,10 @@ export function TripMap({
   );
 }
 
-/** A trip's stops as map points: one group per stop, one route through the
- *  dated ones. Stops with no days (a country around its cities) are left to
- *  the shading, unless the place is the trip's only one. */
+/** A trip's stops as map points (the ones `mapStops` keeps): one group per
+ *  stop, one route through the dated ones. */
 export function stopPoints(stops: Stop[], color: StopColor): MapPoint[] {
-  return stops
-    .filter((stop) => stop.place && (stop.days > 0 || stops.length === 1))
+  return mapStops(stops)
     .map((stop) => {
       const place = stop.place!;
       return {
@@ -456,14 +454,16 @@ export function stopPoints(stops: Stop[], color: StopColor): MapPoint[] {
         rows: [
           { value: formatCurrency(stop.spent), swatch: color(stop) },
           {
-            label: stop.days === 1 ? "1 dag" : `${stop.days} dager`,
+            label: stayLabel(stop),
             value: stop.days
               ? `${formatCurrency(Math.round(stop.spent / stop.days))} / dag`
-              : "ikke datert",
+              : place.arrive
+                ? "dagen telles på neste stopp"
+                : "ikke datert",
             tone: "muted",
           },
         ],
-        ariaLabel: `${place.name}: ${formatCurrency(stop.spent)} over ${stop.days} dager. Klikk for å zoome inn.`,
+        ariaLabel: `${place.name}: ${formatCurrency(stop.spent)}, ${stayLabel(stop)}. Klikk for å zoome inn.`,
       };
     });
 }

@@ -41,6 +41,13 @@
      a control is a border, and these stay empty. */
   --control-shadow: none;
   --control-shadow-sunk: none;
+  /* Cursors: every style draws its own (public/cursors/), with the system
+     cursor as the fallback. --cursor-pointer replaces every `cursor: pointer`
+     in the app, the way the radius tokens replaced literal corners, so a
+     style changes the hand everywhere at once. Text fields keep the I-beam;
+     grab, crosshair, zoom-in and not-allowed stay the system's. */
+  --cursor-default: url("/cursors/standard.svg") 4 2, default;
+  --cursor-pointer: pointer;
   --card-pad: 20px;
   /* Corners: six tokens and nothing else, each style (data-style) setting its
      own — a card, a panel or row inside one, a control, a small mark (a chip,
@@ -159,7 +166,7 @@ html[data-theme="dark"] {
 }
 
 /* ------------------------------------------------------------------ styles
-   Four looks, chosen on /profil and synced through the account
+   Six looks, chosen on /profil and synced through the account
    (lib/appearance.ts), set as data-style on <html> before first paint.
    Standard is :root above plus its block here. Each block moves tokens —
    corners, surfaces, borders, shadows — and adds the few rules a token cannot
@@ -179,6 +186,7 @@ html[data-style="standard"] .nav {
    bar on every card, cells for inputs, a 2px "selected cell" focus, flat
    ribbon buttons and Office's typeface where the machine has it. */
 html[data-style="ark"] {
+  --cursor-default: url("/cursors/ark.svg") 10 10, cell;
   --font-sans: "Aptos", "Calibri", "Segoe UI", system-ui, -apple-system, sans-serif;
   --radius-card: 0;
   --radius-soft: 0;
@@ -283,6 +291,8 @@ html[data-style="ark"] :is(.empty, .import-preview) {
    fixed to the viewport. Translucency over a soft wallpaper is composited
    for free; a live blur is recomputed whenever anything moves beneath it. */
 html[data-style="glass"] {
+  --cursor-default: url("/cursors/glass.svg") 12 12, default;
+  --cursor-pointer: url("/cursors/glass-pointer.svg") 12 12, pointer;
   --glass-clear: 1;
   --glass-tint: calc((1 - var(--glass-clear)) * 0.65);
   --glass: rgb(255 255 255 / calc(0.08 + var(--glass-tint)));
@@ -327,27 +337,27 @@ html[data-style="glass"] .bg-ambient {
 }
 
 /* Cards: the clear material with the bevel, and the glow from the light. */
-html[data-style="glass"] .card {
+html:is([data-style="glass"], [data-style="akvarium"]) .card {
   border-color: transparent;
   background: var(--glass-light), var(--glass-card);
 }
 
 /* Controls: glass by fill and bevel. */
-html[data-style="glass"] :is(.btn-ghost, .icon-btn, input:not([type="range"], [type="color"]), select, .user-chip) {
+html:is([data-style="glass"], [data-style="akvarium"]) :is(.btn-ghost, .icon-btn, input:not([type="range"], [type="color"]), select, .user-chip) {
   background: var(--glass);
   border-color: transparent;
   box-shadow: var(--control-shadow);
 }
 
 /* Enabled only: on a disabled button the glow read as a stray shadow. */
-html[data-style="glass"] .btn-primary:not(:disabled) {
+html:is([data-style="glass"], [data-style="akvarium"]) .btn-primary:not(:disabled) {
   box-shadow:
     inset 0 0 10px rgb(255 255 255 / 0.2),
     0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 /* The current tab: a drop of brighter glass inside the bar. */
-html[data-style="glass"] .nav [aria-current="page"] {
+html:is([data-style="glass"], [data-style="akvarium"]) .nav [aria-current="page"] {
   background: rgb(20 30 70 / 0.07);
   box-shadow: var(--glass-bevel);
 }
@@ -355,7 +365,7 @@ html[data-style="glass"] .nav [aria-current="page"] {
 /* A floating bar the page scrolls under. Desktop only: on a phone the tab
    bar is the floating glass instead (TopNav.module.css). */
 @media (min-width: 641px) {
-  html[data-style="glass"] .nav {
+  html:is([data-style="glass"], [data-style="akvarium"]) .nav {
     border-radius: 26px;
     border-color: transparent;
     background: var(--glass-bar);
@@ -368,6 +378,8 @@ html[data-style="glass"] .nav [aria-current="page"] {
    edge. Raised: cards, buttons, chips. Sunk: inputs, wells, and anything
    that is on (the current tab, a pressed toggle, a held button). */
 html[data-style="neu"] {
+  --cursor-default: url("/cursors/neu.svg") 4 2, default;
+  --cursor-pointer: url("/cursors/neu-pointer.svg") 12 12, pointer;
   --radius-card: 20px;
   --radius-soft: 14px;
   --radius-control: 12px;
@@ -457,11 +469,13 @@ html[data-style="glass"][data-theme="dark"] {
   --ambient-b: color-mix(in srgb, var(--cat-3) 26%, transparent);
 }
 
-html[data-style="glass"][data-theme="dark"] .nav [aria-current="page"] {
+html:is([data-style="glass"], [data-style="akvarium"])[data-theme="dark"] .nav [aria-current="page"] {
   background: rgb(255 255 255 / calc(0.12 + var(--glass-tint) * 0.3));
 }
 
 html[data-style="neu"][data-theme="dark"] {
+  --cursor-default: url("/cursors/neu-dark.svg") 4 2, default;
+  --cursor-pointer: url("/cursors/neu-pointer-dark.svg") 12 12, pointer;
   --bg-base: #2a2d32;
   --bg-alt: #2a2d32;
   --surface: #2a2d32;
@@ -470,6 +484,240 @@ html[data-style="neu"][data-theme="dark"] {
   --border-soft: rgba(0, 0, 0, 0.3);
   --neu-dark: rgba(0, 0, 0, 0.55);
   --neu-light: rgba(255, 255, 255, 0.06);
+}
+
+/* Retro: Windows 98. A teal desktop, grey windows with the two-pixel bevel
+   (light top-left, dark bottom-right), an accent title bar on every card
+   whose first child is its .card-head, sunken white fields, raised buttons
+   that press in, a dithered face for anything that is on, a dotted focus
+   rectangle and Tahoma where the machine has it. The bevel is four inset
+   shadows over five face colours, so the dark variant only swaps colours. */
+html[data-style="retro"] {
+  --cursor-default: url("/cursors/retro.svg") 0 0, default;
+  --cursor-pointer: url("/cursors/retro-hand.svg") 5 0, pointer;
+  --font-sans: "Pixelated MS Sans Serif", "MS Sans Serif", "Tahoma", "Geneva", "Verdana", sans-serif;
+  --radius-card: 0;
+  --radius-soft: 0;
+  --radius-control: 0;
+  --radius-small: 0;
+  --radius-chip: 0;
+  --radius-bar: 0;
+  --bar-cap: butt;
+  --w-face: #c0c0c0;
+  --w-hi: #ffffff;
+  --w-light: #dfdfdf;
+  --w-shadow: #808080;
+  --w-dark: #0a0a0a;
+  --w-field: #ffffff;
+  --w-raised: inset -1px -1px var(--w-dark), inset 1px 1px var(--w-hi),
+    inset -2px -2px var(--w-shadow), inset 2px 2px var(--w-light);
+  --w-window: inset -1px -1px var(--w-dark), inset 1px 1px var(--w-light),
+    inset -2px -2px var(--w-shadow), inset 2px 2px var(--w-hi);
+  --w-sunken: inset -1px -1px var(--w-hi), inset 1px 1px var(--w-shadow),
+    inset -2px -2px var(--w-light), inset 2px 2px var(--w-dark);
+  --w-pressed: inset -1px -1px var(--w-hi), inset 1px 1px var(--w-dark),
+    inset -2px -2px var(--w-light), inset 2px 2px var(--w-shadow);
+  --w-dither: repeating-conic-gradient(var(--w-face) 0 25%, var(--w-hi) 0 50%) 0 0 / 2px 2px;
+  --accent: #000080;
+  --accent-contrast: #ffffff;
+  --muted: #404040;
+  --income: #006400;
+  --expense: #a00000;
+  --bg-base: #008080;
+  --bg-alt: var(--w-light);
+  --surface: var(--w-face);
+  --surface-solid: var(--w-face);
+  --surface-popover: var(--w-face);
+  --border: var(--w-shadow);
+  --border-soft: #a8a8a8;
+  --shadow-soft: var(--w-window);
+  --shadow-tight: var(--w-raised);
+  --shadow-hover: none;
+  --shadow-popover: var(--w-window), 2px 2px 0 rgb(0 0 0 / 0.35);
+  --control-shadow: var(--w-raised);
+  --control-shadow-sunk: var(--w-sunken);
+  --ambient-a: transparent;
+  --card-pad: 16px;
+  scrollbar-color: var(--w-shadow) var(--w-light);
+}
+
+html[data-style="retro"] :is(.card, .nav, .btn, .icon-btn, .user-chip) {
+  border-color: transparent;
+}
+
+html[data-style="retro"] :is(.btn, .icon-btn) {
+  background: var(--w-face);
+  color: var(--ink);
+  box-shadow: var(--w-raised);
+  transition: none;
+}
+
+/* The default button: the same face with a black frame round it. */
+html[data-style="retro"] .btn-primary:not(:disabled) {
+  border-color: var(--w-dark);
+}
+
+html[data-style="retro"] :is(.btn, .icon-btn):active:not(:disabled) {
+  box-shadow: var(--w-pressed);
+  transform: none;
+}
+
+/* Disabled: grey text with a white emboss, not faded. */
+html[data-style="retro"] :is(.btn, .icon-btn):disabled {
+  opacity: 1;
+  background: var(--w-face);
+  color: var(--w-shadow);
+  text-shadow: 1px 1px var(--w-hi);
+}
+
+/* On: pressed in over the checkered face of a held toolbar button. Only
+   .btn — the charts' hit areas are aria-pressed buttons too. */
+html[data-style="retro"] :is(.btn.is-on, .icon-btn.is-on, .btn[aria-pressed="true"]) {
+  background: var(--w-dither);
+  box-shadow: var(--w-pressed);
+}
+
+html[data-style="retro"] :is(.btn, .icon-btn):focus-visible {
+  outline: 1px dotted var(--ink);
+  outline-offset: -5px;
+}
+
+html[data-style="retro"] :is(input:not([type="file"], [type="color"], [type="checkbox"], [type="radio"]), select) {
+  border-color: transparent;
+  background-color: var(--w-field);
+  box-shadow: var(--w-sunken);
+}
+
+html[data-style="retro"] :is(input, select):focus {
+  border-color: transparent;
+  box-shadow: var(--w-sunken);
+  outline: 1px dotted var(--ink);
+  outline-offset: -4px;
+}
+
+/* The drop-down's own little raised button, arrow and all. */
+html[data-style="retro"] select {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 4'%3E%3Cpath d='M0 0h8L4 4z'/%3E%3C/svg%3E"),
+    linear-gradient(var(--w-face), var(--w-face));
+  background-size: 8px 4px, 16px calc(100% - 4px);
+  background-position: right 6px center, right 2px center;
+  background-repeat: no-repeat;
+}
+
+/* The title bar: the accent fading out to the right, white bold text. */
+html[data-style="retro"] .card > .card-head:first-child {
+  margin: calc(3px - var(--card-pad)) calc(3px - var(--card-pad)) 14px;
+  padding: 3px 3px 3px 8px;
+  background: linear-gradient(90deg, var(--accent), color-mix(in oklab, var(--accent) 55%, #ffffff));
+  color: var(--accent-contrast);
+}
+
+html[data-style="retro"] .card > .card-head:first-child:last-child {
+  margin-bottom: calc(3px - var(--card-pad));
+}
+
+html[data-style="retro"] .card > .card-head:first-child .helper {
+  color: inherit;
+}
+
+html[data-style="retro"] .section-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+html[data-style="retro"] .nav [aria-current="page"] {
+  background: var(--w-dither);
+  box-shadow: var(--w-pressed);
+  color: var(--ink);
+}
+
+html[data-style="retro"] :is(.empty, .import-preview, .status) {
+  border-color: transparent;
+  background: var(--w-face);
+  box-shadow: var(--w-sunken);
+}
+
+html[data-style="retro"][data-theme="dark"] {
+  --w-face: #3a3a3a;
+  --w-hi: #6e6e6e;
+  --w-light: #4e4e4e;
+  --w-shadow: #232323;
+  --w-dark: #000000;
+  --w-field: #1c1c1c;
+  --muted: #bdbdbd;
+  --income: #5fd38a;
+  --expense: #ff8a80;
+  --bg-base: #003c3c;
+  --border-soft: #2c2c2c;
+}
+
+/* Akvarium: under water, after a photo of a thresher shark. The page is the
+   sea — sunlit teal at the top sinking to near-black, the photo's own
+   colours — with light rays, marine snow, bubbles and a few animals drifting
+   past (components/Aquarium.tsx). The cards are Glass's panes (its rules are
+   shared, keyed on both styles), tinted sea-green and rounder. Light is the
+   shallows, dark the deep. Same performance rules as Glass: no blur. */
+html[data-style="akvarium"] {
+  --cursor-default: url("/cursors/fish.svg") 7 7, default;
+  --cursor-pointer: url("/cursors/fish-pointer.svg") 7 7, pointer;
+  --radius-card: 26px;
+  --radius-soft: 16px;
+  --radius-control: 14px;
+  --radius-small: 8px;
+  --radius-chip: 14px;
+  --radius-bar: 6px;
+  --accent: #127f8c;
+  --accent-contrast: #ffffff;
+  --ink: #06232c;
+  --muted: #2c5560;
+  --bg-base: #008ca3;
+  --glass: rgb(240 253 255 / 0.32);
+  --glass-bar: rgb(226 248 250 / 0.8);
+  --glass-bevel: inset 0 0 16px 1px rgb(255 255 255 / 0.4);
+  --light-glow: rgb(255 255 255 / 0.35);
+  --glass-light: radial-gradient(120% 140% at 0% 0%, var(--light-glow), transparent 60%);
+  --glass-card: rgb(228 249 251 / 0.62);
+  --surface: var(--glass-card);
+  --surface-solid: var(--glass);
+  --surface-popover: rgb(232 250 252 / 0.95);
+  --bg-alt: rgb(0 70 90 / 0.08);
+  --border: rgb(0 50 70 / 0.12);
+  --border-soft: rgb(0 50 70 / 0.08);
+  --shadow-soft: var(--glass-bevel), 0 12px 40px rgb(0 30 60 / 0.22);
+  --shadow-tight: 0 1px 3px rgb(0 30 60 / 0.14);
+  --shadow-popover: var(--glass-bevel), 0 18px 48px rgb(0 30 60 / 0.3);
+  --control-shadow: var(--glass-bevel), 0 2px 8px rgb(0 30 60 / 0.1);
+}
+
+html[data-style="akvarium"] .bg-ambient {
+  background: linear-gradient(180deg, #27c2c6 0%, #00b2bc 14%, #008ca3 34%, #005c7d 62%, #003754 88%, #0a1a3a 100%);
+}
+
+html[data-style="akvarium"][data-theme="dark"] {
+  --accent: #3cc4c9;
+  --accent-contrast: #032029;
+  --ink: #e4f7f8;
+  --muted: #9cc4ca;
+  --income: #5fd3a0;
+  --expense: #ff8f86;
+  --glass: rgb(110 210 220 / 0.1);
+  --glass-bar: rgb(3 24 40 / 0.85);
+  --glass-bevel: inset 0 0 16px 1px rgb(140 230 240 / 0.09);
+  --light-glow: rgb(120 230 240 / 0.1);
+  --glass-card: rgb(4 28 46 / 0.58);
+  --surface-popover: rgb(5 28 46 / 0.96);
+  --bg-alt: rgb(160 230 240 / 0.07);
+  --border: rgb(160 230 240 / 0.14);
+  --border-soft: rgb(160 230 240 / 0.08);
+  --shadow-soft: var(--glass-bevel), 0 12px 40px rgb(0 0 10 / 0.45);
+  --shadow-popover: var(--glass-bevel), 0 18px 48px rgb(0 0 10 / 0.55);
+  --control-shadow: var(--glass-bevel), 0 2px 8px rgb(0 0 10 / 0.3);
+}
+
+html[data-style="akvarium"][data-theme="dark"] .bg-ambient {
+  background: linear-gradient(180deg, #0a7d92 0%, #005c7d 18%, #003754 40%, #061131 68%, #000115 100%);
 }
 
 *,
@@ -485,6 +733,18 @@ body {
 
 html {
   scroll-behavior: smooth;
+  cursor: var(--cursor-default);
+}
+
+/* Zero specificity, so a component's own cursor (not-allowed on a disabled
+   button) still wins. A <button> is `default` in the user-agent sheet and
+   every link `pointer`; both go through the token instead. */
+:where(a[href], button:not(:disabled), summary, select) {
+  cursor: var(--cursor-pointer);
+}
+
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), textarea) {
+  cursor: text;
 }
 
 /* Smooth crossfade while switching theme; class is added briefly by ThemeToggle. */
@@ -680,7 +940,7 @@ a {
   box-shadow: var(--control-shadow);
   display: grid;
   place-items: center;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   transition: background 150ms ease, color 150ms ease, transform 120ms ease;
 }
 
@@ -908,7 +1168,7 @@ select:focus {
   line-height: 1;
   white-space: nowrap;
   text-decoration: none;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   transition: background 150ms ease, box-shadow 150ms ease, color 150ms ease,
     transform 120ms ease;
 }
@@ -1203,7 +1463,7 @@ select:focus {
 .import-file {
   padding: 8px;
   font-size: 13px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .import-file::file-selector-button {
@@ -1216,7 +1476,7 @@ select:focus {
   font-family: inherit;
   font-size: 12px;
   font-weight: 600;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .import-file::file-selector-button:hover {
@@ -1236,7 +1496,7 @@ select:focus {
   font-size: 13px;
   font-weight: 600;
   color: var(--warn-ink);
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .import-errors ul {

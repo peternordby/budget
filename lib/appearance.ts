@@ -1,4 +1,4 @@
-// The look of the app: one of four styles and an accent colour, chosen on
+// The look of the app: one of six styles and an accent colour, chosen on
 // /profil. Synced through the account (user_metadata.appearance, written by
 // AppearanceSettings, applied by AuthGate at sign-in) and cached in
 // localStorage so the pre-paint script can apply it before the session
@@ -6,13 +6,15 @@
 // <html> (data-style, and --accent/--accent-contrast inline) — globals.css
 // derives every other accent token from those two, so nothing else reads this.
 
-export type AppStyle = "standard" | "ark" | "glass" | "neu";
+export type AppStyle = "standard" | "ark" | "glass" | "neu" | "retro" | "akvarium";
 
 export const APP_STYLES: { value: AppStyle; label: string; description: string }[] = [
   { value: "standard", label: "Standard", description: "Rene flater, tynne kanter" },
   { value: "ark", label: "Ark", description: "Rutenett og rette hjørner, som et regneark" },
   { value: "glass", label: "Glass", description: "Gjennomsiktige flater over farge" },
   { value: "neu", label: "Neumorfisme", description: "Myke former presset ut av flaten" },
+  { value: "retro", label: "Retro", description: "Grå vinduer og blå tittellinjer, som Windows 98" },
+  { value: "akvarium", label: "Akvarium", description: "Drømmende glass under vann, med hai, skilpadde og fisk" },
 ];
 
 /** Apple's system hues, toned down a step so the accent sits in the page rather than shouting over it. */
@@ -87,4 +89,4 @@ export function applyAppearance(next: Appearance) {
 }
 
 /** The same, as app/layout.tsx's pre-paint script, so a reload never flashes the default look. */
-export const appearanceInitScript = `(function(){try{var a=JSON.parse(localStorage.getItem("${APPEARANCE_STORAGE_KEY}")||"{}"),r=document.documentElement;r.dataset.style=${JSON.stringify(["standard","ark","glass","neu"])}.indexOf(a.style)>-1?a.style:"standard";if(/^#[0-9a-f]{6}$/i.test(a.accent||"")&&a.ink){r.style.setProperty("--accent",a.accent);r.style.setProperty("--accent-contrast",a.ink);}}catch(e){}})();`;
+export const appearanceInitScript = `(function(){try{var a=JSON.parse(localStorage.getItem("${APPEARANCE_STORAGE_KEY}")||"{}"),r=document.documentElement;r.dataset.style=${JSON.stringify(APP_STYLES.map((s) => s.value))}.indexOf(a.style)>-1?a.style:"standard";if(/^#[0-9a-f]{6}$/i.test(a.accent||"")&&a.ink){r.style.setProperty("--accent",a.accent);r.style.setProperty("--accent-contrast",a.ink);}}catch(e){}})();`;

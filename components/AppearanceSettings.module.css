@@ -1,4 +1,4 @@
-/* /profil's Utseende card: four style buttons, then a row of accent swatches. */
+/* /profil's Utseende card: five style buttons, then a row of accent swatches. */
 
 .body {
   display: grid;
@@ -7,7 +7,7 @@
 
 .styles {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 8px;
 }
 
@@ -23,7 +23,7 @@
   border-radius: var(--radius-soft);
   background: var(--surface-solid);
   box-shadow: var(--control-shadow);
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .style[aria-pressed="true"] {
@@ -46,7 +46,7 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
 
@@ -63,7 +63,7 @@
   font-size: 13px;
   text-transform: none;
   letter-spacing: 0;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .custom input {
@@ -75,7 +75,7 @@
   overflow: hidden;
   background: none;
   box-shadow: none;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .custom input::-webkit-color-swatch-wrapper {
@@ -92,8 +92,3 @@
   outline-offset: 2px;
 }
 
-@media (max-width: 760px) {
-  .styles {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}

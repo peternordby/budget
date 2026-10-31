@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Schibsted_Grotesk } from "next/font/google";
 import { appearanceInitScript } from "@/lib/appearance";
+import Aquarium from "@/components/Aquarium";
 import "./globals.css";
 
 const sans = Schibsted_Grotesk({
@@ -25,7 +26,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: themeInitScript + appearanceInitScript }} />
       </head>
       <body>
-        <div className="bg-ambient" aria-hidden="true" />
+        <div className="bg-ambient" aria-hidden="true">
+          <Aquarium />
+        </div>
         {children}
       </body>
     </html>

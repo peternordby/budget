@@ -6,7 +6,7 @@ Apple-inspired and deliberately calm: neutral greys rather than warm stone,
 text near black, secondary text dark enough to read, separators you can see,
 and colours a step down from Apple's system palette so nothing shouts.
 
-The user picks one of **four styles** and an **accent colour** on `/profil` (`components/AppearanceSettings.tsx`,
+The user picks one of **six styles** and an **accent colour** on `/profil` (`components/AppearanceSettings.tsx`,
 `lib/appearance.ts`). The choice is **synced through the account**
 (`auth.users.user_metadata.appearance`, written debounced on every change and
 applied by `AuthGate` on load and at sign-in — not on `USER_UPDATED`, which is
@@ -44,6 +44,44 @@ On `<html>` it becomes `data-style` plus inline `--accent` and
   that size is cut off by the next row. The pressed rule names `.btn` on
   purpose: the charts' hit areas are `aria-pressed` buttons, and filling one
   painted over the selected month's bars.
+- **Retro** (`retro`): Windows 98. A teal desktop, grey windows drawn with
+  the classic two-pixel bevel (four inset shadows over five `--w-*` face
+  colours, so the dark variant swaps colours and nothing else), an accent
+  title bar fading to the right on every card whose first child is its
+  `.card-head` (navy by default; the user's accent replaces it), sunken white
+  fields, raised buttons that press in, a black frame on `.btn-primary`, a
+  checkered face for anything *on* (`.is-on`, an `aria-pressed` `.btn`, the
+  current tab), a dotted focus rectangle, grey-with-emboss disabled text,
+  selects with their own little arrow button, Tahoma where installed, no
+  corners, square donut ends and straight chart segments (like Ark).
+- **Akvarium** (`akvarium`): under water, after a photo of a thresher shark.
+  The page is a vertical sea gradient in the photo's own colours (`#27c2c6`
+  at the surface to `#000115` in the deep; light mode is the shallows, dark
+  the deep), and the cards are Glass's panes — the Glass rules in
+  `globals.css` and `TopNav.module.css` are keyed on
+  `html:is([data-style="glass"], [data-style="akvarium"])` and Akvarium sets
+  its own `--glass*` tokens, sea-tinted and rounder. Behind them,
+  `components/Aquarium.tsx` (static markup in `app/layout.tsx`'s
+  `.bg-ambient`, `display: none` in every other style so its animations do not
+  run): light rays and a surface glow, marine snow (a tile translated by
+  exactly one tile, so the loop has no seam), bubbles, and the animals —
+  a pelagic thresher near and another far off (countershaded, big eye, gill
+  slits, sickle pectorals, the upper tail lobe as long as the body, the head
+  yawing against the tail beat), a school of yellowtail fusiliers each
+  wiggling and drifting on its own phase, a green sea turtle drawn top-down
+  and squashed to an oblique view so its plates and all four flippers show
+  (each plate lit in its own centre — the tortoiseshell look — and the front
+  flippers beating together, as a turtle's do), and moon jellies with the
+  four-leaf clover of gonad rings, contracting fast and relaxing slowly.
+  Gradients and the fusilier are defined once (`Defs`, ids `aq-*`) and every
+  colour is a CSS variable in `Aquarium.module.css`, so the dark theme
+  re-lights every animal without a second drawing. Every animation is a CSS
+  keyframe on `transform`/`opacity` with a negative delay, so the scene is
+  already populated on load; pivots are `transform-box: fill-box`
+  percentages. Under reduced motion the global 0.01ms override would leave
+  every animal at its start, off-screen, so the module pauses each at its own
+  delay instead — a still picture. Same performance rules as Glass: nothing
+  blurs. A manta ray was tried and taken out: it did not look good enough.
 
 ## Core Variables
 
@@ -65,7 +103,7 @@ variants) come after the dark theme so a style wins where both set a token.
   bars and columns, via `barCorner(max)` in `components/charts.tsx`, which sets
   the CSS `rx` property capped at half the bar's thinner side). A literal
   `border-radius` other than `50%` or a 1–3px mark, or a literal `rx`, is a bug.
-  `--bar-cap` is the donut's line cap (round; butt in Ark).
+  `--bar-cap` is the donut's line cap (round; butt in Ark and Retro).
 - `--shadow-soft`, `--shadow-tight`, `--shadow-inset`, `--shadow-hover`,
   `--control-shadow`, `--control-shadow-sunk`: depth.
 - `--shadow-popover`: everything that floats over a card
@@ -77,10 +115,36 @@ variants) come after the dark theme so a style wins where both set a token.
 - `--card-pad`: card padding (20px, 16px on a phone), a token so Ark's header
   strip can bleed to the card edge.
 - Things a token cannot carry: `useChartCurve()` in `components/charts.tsx`
-  returns `curveLinear` in Ark and `curveMonotoneX` elsewhere, following
-  `data-style` live (a curve is a path string, not CSS).
+  returns `curveLinear` in Ark and Retro and `curveMonotoneX` elsewhere, and
+  `CursorEffects` picks its effect — both follow `data-style` live through
+  `lib/useAppStyle.ts` (a curve is a path string, an effect is a component).
 - A disabled `.btn-primary` is a neutral fill with muted text, not the accent
   at half opacity, which vanished on glass and pale accents.
+
+## Cursors
+
+Each style has its own pointer: `--cursor-default` (set on `<html>`) and
+`--cursor-pointer` (every `cursor: pointer` in the app reads it — a literal one
+is a bug, like a literal corner) point at SVGs in `public/cursors/`, each with
+a system keyword as the fallback. Text fields keep the I-beam; grab,
+crosshair, zoom-in and not-allowed stay the system's.
+
+| Style | Cursor | Over something clickable | Effect (`components/CursorEffects.tsx`) |
+| --- | --- | --- | --- |
+| Standard | rounded arrow, white rim, soft shadow | system hand | accent ring on click |
+| Ark | Excel's fat white cross | system hand | the cell under the pointer selected on the sheet behind the cards, fill handle and name ("C14") |
+| Glass | a drop of clear glass with a centre dot | the drop filled in | an iPadOS-style lens trailing the pointer, wrapping the control it is over |
+| Neumorfisme | an arrow embossed out of the surface (dark variant) | a disc pressed in | a dimple pressed where you click |
+| Retro | Windows 98's pixel arrow | its link hand | pointer trails, folding back into the cursor at rest |
+| Akvarium | a clownfish nosing at the hotspot | the fish blowing bubbles | bubbles: a trail, a breath at rest, a fizz on a control, a burst and ripple on click |
+
+The Retro pair is generated from bitmaps (one rect per run of pixels), so
+each pixel is exactly Windows 98's. The effects are mouse-only except the
+click effects, which also answer a tap; they are off under reduced motion
+(read from the (app) `MotionConfig`); nothing in them takes pointer events.
+Ark's cell sits under `<main>`, on the sheet; everything else floats over the
+page. The Akvarium bubbles are one canvas, stamped from a pre-drawn sprite,
+and the loop runs only while a bubble is alive.
 
 When adjusting theme behavior, update variables first before changing component rules.
 

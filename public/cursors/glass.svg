@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- Glass: a drop of clear glass with a dark hairline so it reads on white, and a centre dot for precision. Hotspot 12 12. -->
+  <defs><radialGradient id="g" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/><stop offset="0.5" stop-color="#ffffff" stop-opacity="0.25"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.55"/></radialGradient></defs>
+  <circle cx="12" cy="12" r="8" fill="none" stroke="#141e46" stroke-opacity="0.35"/>
+  <circle cx="12" cy="12" r="7" fill="url(#g)" stroke="#ffffff" stroke-opacity="0.95" stroke-width="1.2"/>
+  <circle cx="12" cy="12" r="1.4" fill="#141e46" fill-opacity="0.75"/>
+</svg>

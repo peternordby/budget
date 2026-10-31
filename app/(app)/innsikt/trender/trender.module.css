@@ -50,7 +50,7 @@
   border: 1px solid var(--border);
   background: var(--surface-solid);
   text-align: left;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   transition: box-shadow 150ms ease, border-color 150ms ease;
 }
 

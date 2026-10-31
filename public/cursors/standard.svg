@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- Standard: a rounded arrow, near-black with a white rim and a soft shadow. Hotspot 4 2. -->
+  <defs><filter id="s" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="1" stdDeviation="0.9" flood-opacity="0.35"/></filter></defs>
+  <path d="M4 2V19.5L8.6 15.4L11.6 22.2L14.6 20.9L11.7 14.2H18Z" fill="#1d1d1f" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke" filter="url(#s)"/>
+</svg>

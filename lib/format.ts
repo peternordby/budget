@@ -72,3 +72,12 @@ export function monthLabel(year: number, month: number) {
 
 // "jan".."des", for axis labels and compact dates.
 export const SHORT_MONTH_NAMES = MONTH_NAMES.map((name) => name.slice(0, 3));
+
+/** A spreadsheet column's letters from its 0-based index: A..Z, AA..AZ, BA.. (Ark's cell cursor). */
+export function columnName(index: number) {
+  let name = "";
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) {
+    name = String.fromCharCode(65 + ((n - 1) % 26)) + name;
+  }
+  return name;
+}

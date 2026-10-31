@@ -81,7 +81,7 @@
   letter-spacing: 0.03em;
   text-transform: uppercase;
   text-align: left;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -207,6 +207,16 @@
   }
 }
 
+/* Retro: a list view — white rows inside the grey window. */
+:global(html[data-style="retro"]) .list-row:not(.income-row) {
+  background: var(--w-field);
+  border-color: var(--border-soft);
+}
+
+:global(html[data-style="retro"]) .list-row:not(.income-row):hover {
+  background: var(--bg-alt);
+}
+
 .list-row.income-row {
   background: var(--income-row-bg);
   border-color: var(--income-row-border);
@@ -227,7 +237,7 @@
 }
 
 .list-row[title] {
-  cursor: default;
+  cursor: var(--cursor-default);
 }
 
 .list-row:focus-visible {
@@ -312,7 +322,7 @@
   font: inherit;
   font-size: 14px;
   font-weight: 600;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
 .category-chip[aria-checked="true"] {
