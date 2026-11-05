@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { hasSupabaseEnv, supabase } from "@/lib/supabaseClient";
 import { homePath } from "@/lib/home";
-import { hasEncryption, unlockWithPassword, type EncMeta } from "@/lib/crypto";
+import { hasEncryption, type EncMeta } from "@/lib/crypto";
+import { signIn, unlock } from "@/lib/auth";
 
 export default function AuthPanel() {
   const router = useRouter();
@@ -34,10 +35,7 @@ export default function AuthPanel() {
     }
 
     setPending(true);
-    const result = await supabase.auth.signInWithPassword({
-      email: trimmedEmail,
-      password,
-    });
+    const result = await signIn(trimmedEmail, password);
 
     if (result.error) {
       setMessage(result.error.message);
@@ -52,7 +50,7 @@ export default function AuthPanel() {
     // (no key yet, or one wrapped under a password since reset).
     const meta = result.data.user?.user_metadata as EncMeta | undefined;
     if (hasEncryption(meta)) {
-      await unlockWithPassword(password, meta!, result.data.user!.id).catch(() => {});
+      await unlock(password, meta!, result.data.user!.id).catch(() => {});
     }
 
     // AuthGate's onAuthStateChange would pick this up on its own, but only

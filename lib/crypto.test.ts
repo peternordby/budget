@@ -4,8 +4,8 @@ import {
   decField,
   decNumber,
   encField,
+  authSecret,
   hasEncryption,
-  isPlaintext,
   isUnlocked,
   lock,
   newRecoveryPhrase,
@@ -46,12 +46,45 @@ describe("crypto", () => {
     expect(await encField(500)).not.toBe(await encField(500));
   });
 
-  it("passes plaintext through, so a half-migrated table still reads", async () => {
+  it("refuses plaintext, which only a write past the app can have put there", async () => {
     await createKeys("passord", "t");
-    expect(await decNumber("4200")).toBe(4200);
-    expect(await decField("Rema 1000")).toBe("Rema 1000");
-    expect(isPlaintext("4200")).toBe(true);
-    expect(isPlaintext(await encField(4200))).toBe(false);
+    await expect(decField("Rema 1000")).rejects.toThrow();
+    // An amount fails soft like any unreadable one: 0, never the planted figure.
+    expect(await decNumber("4200")).toBe(0);
+  });
+
+  it("derives an auth secret that is stable, prefixed, and not the password", async () => {
+    const secret = await authSecret("riktig hest batteri");
+    expect(secret).toBe(await authSecret("riktig hest batteri"));
+    expect(secret).not.toBe(await authSecret("riktig hest batterj"));
+    expect(secret).toMatch(/^rk1\.[A-Za-z0-9+/]{43}=$/);
+    expect(secret).not.toContain("hest");
+  });
+
+  it("opens a 300 000-iteration wrap and returns a stronger one to save", async () => {
+    // A wrap from before enc_iter existed, built by hand: 300 000 iterations, no field.
+    const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const raw = crypto.getRandomValues(new Uint8Array(32));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const kek = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt, iterations: 300_000, hash: "SHA-256" },
+      await crypto.subtle.importKey("raw", new TextEncoder().encode("riktig"), "PBKDF2", false, ["deriveKey"]),
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt"]
+    );
+    const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, kek, raw));
+    const legacy = { enc_salt: b64(salt), enc_dek: b64(new Uint8Array([...iv, ...sealed])) };
+
+    const upgraded = await unlockWithPassword("riktig", legacy, "t");
+    expect(upgraded?.enc_iter).toBe(600_000);
+    const value = await encField(77);
+
+    lock();
+    const next = { ...legacy, ...upgraded };
+    expect(await unlockWithPassword("riktig", next, "t")).toBeNull();
+    expect(await decNumber(value)).toBe(77);
   });
 
   it("keeps null null", async () => {
