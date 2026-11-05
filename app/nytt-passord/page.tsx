@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
+import { authSecret } from "@/lib/crypto";
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth";
 import { homePath } from "@/lib/home";
 
 // The landing page for both a password-reset link and a dashboard invite —
@@ -74,8 +76,8 @@ function NyttPassordForm() {
     event.preventDefault();
     setMessage(null);
 
-    if (password.length < 6) {
-      setMessage("Passordet må være minst 6 tegn.");
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setMessage(`Passordet må være minst ${MIN_PASSWORD_LENGTH} tegn.`);
       return;
     }
     if (password !== confirm) {
@@ -84,7 +86,10 @@ function NyttPassordForm() {
     }
 
     setPending(true);
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error } = await supabase.auth.updateUser({
+      password: await authSecret(password),
+      data: { auth_v: 1 },
+    });
     if (error) {
       setMessage(error.message);
       setPending(false);
@@ -128,7 +133,7 @@ function NyttPassordForm() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete="new-password"
-                minLength={6}
+                minLength={MIN_PASSWORD_LENGTH}
                 required
               />
             </div>
@@ -140,7 +145,7 @@ function NyttPassordForm() {
                 value={confirm}
                 onChange={(event) => setConfirm(event.target.value)}
                 autoComplete="new-password"
-                minLength={6}
+                minLength={MIN_PASSWORD_LENGTH}
                 required
               />
             </div>

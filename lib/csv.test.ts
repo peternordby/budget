@@ -6,6 +6,13 @@ describe("escapeCsvField", () => {
     expect(escapeCsvField("Rema 1000")).toBe("Rema 1000");
   });
 
+  it("defuses text a spreadsheet would run as a formula, but not numbers", () => {
+    expect(escapeCsvField('=HYPERLINK("http://x","klikk")')).toBe(`"'=HYPERLINK(""http://x"",""klikk"")"`);
+    expect(escapeCsvField("@SUM(A1)")).toBe("'@SUM(A1)");
+    expect(escapeCsvField("-50% salg")).toBe("'-50% salg");
+    expect(escapeCsvField(-3005)).toBe("-3005");
+  });
+
   it("renders null as empty", () => {
     expect(escapeCsvField(null)).toBe("");
   });

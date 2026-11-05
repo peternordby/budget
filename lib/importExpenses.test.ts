@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { expenseKey, guessKind, parseExpenseCsv } from "./importExpenses";
+import { toCsv } from "./csv";
 
 // The round trip that has to hold: the headers our own CSV export writes.
 const exported = [
@@ -24,6 +25,11 @@ describe("parseExpenseCsv", () => {
     });
     expect(result.categories).toEqual(["Lån", "Inntekt"]);
     expect(result.signed).toBe(true);
+  });
+
+  it("reads back a description the export defused as a formula", () => {
+    const csv = toCsv(["Dato", "Beskrivelse", "Beløp", "Kategori"], [["2026-09-01", "=1+1", -50, "+Mat"]]);
+    expect(parseExpenseCsv(csv).rows[0]).toMatchObject({ item: "=1+1", category: "+Mat" });
   });
 
   it("takes a semicolon file with dotted dates and kroner labels", () => {

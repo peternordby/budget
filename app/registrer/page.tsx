@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { authSecret } from "@/lib/crypto";
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth";
 
 export default function RegistrerPage() {
   const [email, setEmail] = useState("");
@@ -20,10 +22,9 @@ export default function RegistrerPage() {
       setMessage("E-post og passord er påkrevd.");
       return;
     }
-    // Supabase's own minimum. Checking it here turns a round trip and an
-    // English error message into an immediate Norwegian one.
-    if (password.length < 6) {
-      setMessage("Passordet må være minst 6 tegn.");
+    // The only place the rule can live: Supabase sees the derived secret.
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setMessage(`Passordet må være minst ${MIN_PASSWORD_LENGTH} tegn.`);
       return;
     }
 
@@ -33,8 +34,11 @@ export default function RegistrerPage() {
     // be on the redirect allow list in the Supabase dashboard.
     const { error } = await supabase.auth.signUp({
       email: trimmedEmail,
-      password,
-      options: { emailRedirectTo: `${window.location.origin}/logg-inn` },
+      password: await authSecret(password),
+      options: {
+        emailRedirectTo: `${window.location.origin}/logg-inn`,
+        data: { auth_v: 1 },
+      },
     });
 
     if (error) {
@@ -88,7 +92,7 @@ export default function RegistrerPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete="new-password"
-                  minLength={6}
+                  minLength={MIN_PASSWORD_LENGTH}
                   required
                 />
               </div>

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
 import { Schibsted_Grotesk } from "next/font/google";
 import { appearanceInitScript } from "@/lib/appearance";
 import Aquarium from "@/components/Aquarium";
@@ -34,11 +35,14 @@ export const viewport: Viewport = {
 // and accent, apply without a flash.
 const themeInitScript = `(function(){try{var stored=localStorage.getItem("budget-theme");var theme=stored==="dark"||stored==="light"?stored:(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.dataset.theme=theme;}catch(e){document.documentElement.dataset.theme="light";}})();`;
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+// The nonce proxy.ts put in this request's CSP; without it the browser refuses
+// the pre-paint script below.
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="no" suppressHydrationWarning className={sans.variable}>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript + appearanceInitScript }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeInitScript + appearanceInitScript }} />
       </head>
       <body>
         <div className="bg-ambient" aria-hidden="true">

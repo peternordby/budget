@@ -7,8 +7,8 @@ import AppearanceSettings from "@/components/AppearanceSettings";
 import Avatar from "@/components/Avatar";
 import { supabase } from "@/lib/supabaseClient";
 import { displayName, fullName } from "@/lib/profile";
-import { lock, rewrapForPassword, type EncMeta } from "@/lib/crypto";
-import { countPlaintext, reencryptAll } from "@/lib/reencrypt";
+import { authSecret, lock, rewrapForPassword, type EncMeta } from "@/lib/crypto";
+import { MIN_PASSWORD_LENGTH, signIn } from "@/lib/auth";
 import styles from "./profil.module.css";
 
 type Feedback = { tone: "ok" | "error"; text: string } | null;
@@ -33,10 +33,6 @@ export default function ProfilPage() {
 
   const [signingOut, setSigningOut] = useState(false);
 
-  // Rows written before encryption existed. Null while unknown.
-  const [plaintextRows, setPlaintextRows] = useState<number | null>(null);
-  const [encrypting, setEncrypting] = useState(false);
-  const [encryptFeedback, setEncryptFeedback] = useState<Feedback>(null);
 
   // The user object rather than the session: `new_email` (the pending address
   // during a change) lives on it, and it is what auth.updateUser returns.
@@ -119,8 +115,11 @@ export default function ProfilPage() {
     event.preventDefault();
     setPasswordFeedback(null);
 
-    if (newPassword.length < 6) {
-      setPasswordFeedback({ tone: "error", text: "Nytt passord må være minst 6 tegn." });
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      setPasswordFeedback({
+        tone: "error",
+        text: `Nytt passord må være minst ${MIN_PASSWORD_LENGTH} tegn.`,
+      });
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -135,10 +134,7 @@ export default function ProfilPage() {
     // laptop would otherwise be enough to change the password and lock the
     // owner out. Signing in with the entered one verifies it; it returns a
     // session for the same user, so nothing else changes.
-    const check = await supabase.auth.signInWithPassword({
-      email: user.email,
-      password: currentPassword,
-    });
+    const check = await signIn(user.email, currentPassword);
     if (check.error) {
       setPasswordFeedback({ tone: "error", text: "Nåværende passord stemmer ikke." });
       setPasswordSaving(false);
@@ -167,7 +163,10 @@ export default function ProfilPage() {
     }
 
     const { error } = await supabase.auth.updateUser({
-      password: newPassword,
+      password: await authSecret(newPassword),
+      // Required by the project's auth settings; signIn above has just made
+      // sure the account is on the derived secret, so that is the current one.
+      current_password: await authSecret(currentPassword),
       data: rewrapped,
     });
     if (error) {
@@ -181,60 +180,16 @@ export default function ProfilPage() {
     setPasswordSaving(false);
   }
 
-  useEffect(() => {
-    if (!user?.id) return;
-    let active = true;
-    countPlaintext(user.id)
-      .then((count) => {
-        if (active) setPlaintextRows(count);
-      })
-      // A failure here only means the button stays hidden; nothing on this page
-      // depends on the number.
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [user?.id]);
-
-  async function handleEncryptExisting() {
-    if (!user?.id) return;
-    setEncrypting(true);
-    setEncryptFeedback(null);
-    try {
-      const { updated } = await reencryptAll(user.id, ({ updated: done }) =>
-        setEncryptFeedback({ tone: "ok", text: `Krypterer... ${done} rader.` })
-      );
-      setPlaintextRows(await countPlaintext(user.id));
-      setEncryptFeedback({
-        tone: "ok",
-        text: updated
-          ? `Ferdig. ${updated} rader er kryptert.`
-          : "Alt var allerede kryptert.",
-      });
-    } catch (error) {
-      setEncryptFeedback({
-        tone: "error",
-        // Half-finished is a working state, so this is a "try again", not a
-        // "something is broken".
-        text: `${error instanceof Error ? error.message : "Ukjent feil"}. Radene som ble ferdige er kryptert — kjør igjen for resten.`,
-      });
-    }
-    setEncrypting(false);
-  }
-
   async function handleSignOut() {
     setSigningOut(true);
     // Awaited, unlike the old nav button: a failed sign-out that is never
     // awaited leaves the session in place with nothing said about it.
     const { error } = await supabase.auth.signOut();
-    if (error) {
-      setSigningOut(false);
-    } else {
-      // Drop the ledger key with the session. Without this, the next person to
-      // sign in on this tab would inherit an unlocked key that is not theirs —
-      // it would decrypt nothing of their own, but it has no business staying.
-      lock();
-    }
+    // Drop the ledger key whether or not the sign-out reached the server: a
+    // failed one (offline) would otherwise leave the key on this device for the
+    // rest of its 7 days, and pressing "Logg ut" means this device is done.
+    lock();
+    if (error) setSigningOut(false);
     // On success AuthGate's listener sees the null session and redirects.
   }
 
@@ -401,7 +356,7 @@ export default function ProfilPage() {
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
               autoComplete="new-password"
-              minLength={6}
+              minLength={MIN_PASSWORD_LENGTH}
               required
             />
           </div>
@@ -413,7 +368,7 @@ export default function ProfilPage() {
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
               autoComplete="new-password"
-              minLength={6}
+              minLength={MIN_PASSWORD_LENGTH}
               required
             />
           </div>
@@ -441,31 +396,6 @@ export default function ProfilPage() {
           en server, så dette beskytter dataene i databasen, ikke mot koden som
           kjører i nettleseren din.
         </p>
-        {plaintextRows === null ? null : plaintextRows > 0 ? (
-          <>
-            <p className="helper">
-              {plaintextRows} rader ble lagret før krypteringen ble slått på, og
-              ligger fortsatt i klartekst.
-            </p>
-            <div className="form-actions">
-              <button
-                className="btn btn-primary"
-                type="button"
-                onClick={handleEncryptExisting}
-                disabled={encrypting}
-              >
-                {encrypting ? "Krypterer..." : "Krypter eksisterende data"}
-              </button>
-            </div>
-          </>
-        ) : (
-          <p className="helper">Alle radene dine er krypterte.</p>
-        )}
-        {encryptFeedback ? (
-          <span className={encryptFeedback.tone === "ok" ? "helper" : "status"}>
-            {encryptFeedback.text}
-          </span>
-        ) : null}
       </section>
 
       <section className="card section-gap">

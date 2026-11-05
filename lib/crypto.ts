@@ -16,7 +16,13 @@
 //
 //   enc_salt          random 16 bytes, base64. The PBKDF2 salt.
 //   enc_dek           the data key, wrapped under PBKDF2(password, salt).
+//   enc_iter          the PBKDF2 iterations enc_dek was wrapped with (absent:
+//                     300 000, the count before it was raised).
 //   enc_dek_recovery  the same data key, wrapped under PBKDF2(phrase, salt).
+//
+// Supabase Auth never sees the password either: it gets `authSecret(password)`,
+// a separate PBKDF2 output, so whoever runs the auth server holds neither the
+// password nor anything that opens enc_dek without guessing the password.
 //
 // The data key is random and wrapped rather than derived from the password
 // directly. That is the cheaper design, not the fancier one: changing a
@@ -26,7 +32,17 @@
 // before the account exists and must survive an email change.
 
 const PREFIX = "gc:";
-const ITERATIONS = 300_000;
+// New password wraps: OWASP's figure for PBKDF2-SHA256. A wrap made with fewer
+// (enc_iter says how many) is rewrapped at the next unlock with the password.
+const PASSWORD_ITERATIONS = 600_000;
+const LEGACY_ITERATIONS = 300_000;
+// The recovery phrase is 120 random bits, so stretching it buys nothing — and
+// raising it would need the phrase itself to rewrap.
+const RECOVERY_ITERATIONS = 300_000;
+// The salt for the auth secret is fixed, not per account: it has to be known
+// before sign-in, when enc_salt is not readable yet, and survive an email
+// change. Versioned so a future change of derivation can tell the two apart.
+const AUTH_SALT = "regnskap/auth/v1";
 const IV_BYTES = 12;
 // v2 because the stored value gained an expiry field. A v1 entry is simply not
 // read, which locks the tab once and costs one password.
@@ -40,6 +56,7 @@ const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export type EncMeta = {
   enc_salt?: string;
   enc_dek?: string;
+  enc_iter?: number;
   enc_dek_recovery?: string;
 };
 
@@ -71,20 +88,24 @@ async function importDek(raw: Uint8Array) {
   ]);
 }
 
-/** PBKDF2 over a secret the user knows, salted with the account's own salt. */
-async function deriveKek(secret: string, salt: string) {
-  const material = await crypto.subtle.importKey(
+function pbkdf2(secret: string, usage: "deriveKey" | "deriveBits") {
+  return crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret) as BufferSource,
     "PBKDF2",
     false,
-    ["deriveKey"]
+    [usage]
   );
+}
+
+/** PBKDF2 over a secret the user knows, salted with the account's own salt. */
+async function deriveKek(secret: string, salt: string, iterations: number) {
+  const material = await pbkdf2(secret, "deriveKey");
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
       salt: fromBase64(salt) as BufferSource,
-      iterations: ITERATIONS,
+      iterations,
       hash: "SHA-256",
     },
     material,
@@ -92,6 +113,26 @@ async function deriveKek(secret: string, salt: string) {
     false,
     ["encrypt", "decrypt"]
   );
+}
+
+/**
+ * What is sent to Supabase Auth in place of the password — at sign-up, sign-in
+ * and every password change. A different salt from enc_salt makes it unrelated
+ * to the key that wraps enc_dek. The "rk1." prefix is fixed so the secret meets
+ * any character-class rule the auth server might be configured with.
+ */
+export async function authSecret(password: string) {
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt: new TextEncoder().encode(AUTH_SALT) as BufferSource,
+      iterations: PASSWORD_ITERATIONS,
+      hash: "SHA-256",
+    },
+    await pbkdf2(password, "deriveBits"),
+    256
+  );
+  return `rk1.${toBase64(new Uint8Array(bits))}`;
 }
 
 async function sealBytes(key: CryptoKey, plaintext: Uint8Array) {
@@ -262,9 +303,9 @@ export async function createKeys(password: string, userId: string) {
 
   const meta: EncMeta = {
     enc_salt: salt,
-    enc_dek: await sealBytes(await deriveKek(password, salt), raw),
+    ...(await wrapForPassword(password, salt, raw)),
     enc_dek_recovery: await sealBytes(
-      await deriveKek(normalisePhrase(phrase), salt),
+      await deriveKek(normalisePhrase(phrase), salt, RECOVERY_ITERATIONS),
       raw
     ),
   };
@@ -273,18 +314,36 @@ export async function createKeys(password: string, userId: string) {
   return { meta, phrase };
 }
 
-/** Unwraps with the password. Throws if it is wrong. */
+/** The password wrap, at today's iteration count. */
+async function wrapForPassword(password: string, salt: string, raw: Uint8Array) {
+  return {
+    enc_dek: await sealBytes(await deriveKek(password, salt, PASSWORD_ITERATIONS), raw),
+    enc_iter: PASSWORD_ITERATIONS,
+  } satisfies EncMeta;
+}
+
+/** Opens enc_dek with the password, at whatever count it was wrapped with. */
+async function openWithPassword(password: string, meta: EncMeta) {
+  if (!meta.enc_salt || !meta.enc_dek) throw new Error("Mangler nøkkelmateriale.");
+  return openBytes(
+    await deriveKek(password, meta.enc_salt, meta.enc_iter ?? LEGACY_ITERATIONS),
+    meta.enc_dek
+  );
+}
+
+/**
+ * Unwraps with the password. Throws if it is wrong. Returns the metadata to
+ * save when the wrap was made with fewer iterations than today's, else null.
+ */
 export async function unlockWithPassword(
   password: string,
   meta: EncMeta,
   userId: string
-) {
-  if (!meta.enc_salt || !meta.enc_dek) throw new Error("Mangler nøkkelmateriale.");
-  const raw = await openBytes(
-    await deriveKek(password, meta.enc_salt),
-    meta.enc_dek
-  );
+): Promise<EncMeta | null> {
+  const raw = await openWithPassword(password, meta);
   await remember(raw, userId);
+  if ((meta.enc_iter ?? LEGACY_ITERATIONS) >= PASSWORD_ITERATIONS) return null;
+  return wrapForPassword(password, meta.enc_salt!, raw);
 }
 
 /**
@@ -303,14 +362,11 @@ export async function recoverWithPhrase(
     throw new Error("Kontoen har ingen gjenopprettingskode.");
   }
   const raw = await openBytes(
-    await deriveKek(normalisePhrase(phrase), meta.enc_salt),
+    await deriveKek(normalisePhrase(phrase), meta.enc_salt, RECOVERY_ITERATIONS),
     meta.enc_dek_recovery
   );
   await remember(raw, userId);
-  return {
-    ...meta,
-    enc_dek: await sealBytes(await deriveKek(newPassword, meta.enc_salt), raw),
-  } satisfies EncMeta;
+  return { ...meta, ...(await wrapForPassword(newPassword, meta.enc_salt, raw)) };
 }
 
 /**
@@ -323,15 +379,8 @@ export async function rewrapForPassword(
   newPassword: string,
   meta: EncMeta
 ) {
-  if (!meta.enc_salt || !meta.enc_dek) throw new Error("Mangler nøkkelmateriale.");
-  const raw = await openBytes(
-    await deriveKek(currentPassword, meta.enc_salt),
-    meta.enc_dek
-  );
-  return {
-    ...meta,
-    enc_dek: await sealBytes(await deriveKek(newPassword, meta.enc_salt), raw),
-  } satisfies EncMeta;
+  const raw = await openWithPassword(currentPassword, meta);
+  return { ...meta, ...(await wrapForPassword(newPassword, meta.enc_salt!, raw)) };
 }
 
 // ---------------------------------------------------------------------------
@@ -354,16 +403,14 @@ export async function encField(value: string | number | null): Promise<string | 
 }
 
 /**
- * Decrypts one field, passing through anything without the marker.
- *
- * The passthrough is what makes the rollout a background pass rather than a
- * flag day: after `alter column price type text` the old rows are still bare
- * digit strings, and they keep rendering correctly until the re-encrypt pass
- * gets to them. It also means a half-finished pass is a consistent state.
+ * Decrypts one field. A value without the marker is refused, not passed
+ * through: every row is encrypted now, so a plain value can only have been
+ * written past the app — by whoever administers the database — and showing it
+ * would present a figure nobody in the app wrote as the owner's own.
  */
 export async function decField(value: string | null): Promise<string | null> {
   if (value === null) return null;
-  if (!value.startsWith(PREFIX)) return value;
+  if (!value.startsWith(PREFIX)) throw new Error("Ukryptert verdi i databasen.");
   const plain = await openBytes(requireDek(), value.slice(PREFIX.length));
   return new TextDecoder().decode(plain);
 }
@@ -379,10 +426,4 @@ export async function decNumber(value: string | number | null): Promise<number> 
   } catch {
     return 0;
   }
-}
-
-/** True for a value still stored in the clear, i.e. one the re-encrypt pass
- *  has yet to reach. */
-export function isPlaintext(value: string | number | null) {
-  return value !== null && !String(value).startsWith(PREFIX);
 }

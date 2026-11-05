@@ -10,9 +10,9 @@ import {
   lock,
   recoverWithPhrase,
   resumeStoredKey,
-  unlockWithPassword,
   type EncMeta,
 } from "@/lib/crypto";
+import { signIn, unlock } from "@/lib/auth";
 
 // The door between a valid session and readable data.
 //
@@ -82,7 +82,7 @@ export default function EncryptionGate({ session, children }: EncryptionGateProp
     // wrap the key under a password nobody knows, and the account would be one
     // sign-out away from being readable only with a phrase it has not been
     // shown yet.
-    const check = await supabase.auth.signInWithPassword({ email, password });
+    const check = await signIn(email, password);
     if (check.error) {
       setMessage("Feil passord.");
       setPending(false);
@@ -111,7 +111,7 @@ export default function EncryptionGate({ session, children }: EncryptionGateProp
     setMessage(null);
     setPending(true);
     try {
-    await unlockWithPassword(password, meta ?? {}, session.user.id);
+      await unlock(password, meta ?? {}, session.user.id);
       setPassword("");
       setMode("open");
     } catch {
@@ -130,7 +130,7 @@ export default function EncryptionGate({ session, children }: EncryptionGateProp
     // Same reason as setup: the key is about to be rewrapped under whatever is
     // typed here, and a typo would wrap it under a password nobody knows. The
     // phrase would still open it, but only into this same screen, every time.
-    const check = await supabase.auth.signInWithPassword({ email, password });
+    const check = await signIn(email, password);
     if (check.error) {
       setMessage("Feil passord.");
       setPending(false);
@@ -138,7 +138,7 @@ export default function EncryptionGate({ session, children }: EncryptionGateProp
     }
 
     try {
-    const next = await recoverWithPhrase(phraseInput, password, meta ?? {}, session.user.id);
+      const next = await recoverWithPhrase(phraseInput, password, meta ?? {}, session.user.id);
       await saveMeta(next);
       setPhraseInput("");
       setPassword("");

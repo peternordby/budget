@@ -1,4 +1,4 @@
-import { parseCsv } from "./csv";
+import { parseCsv, unguardCell } from "./csv";
 import { parseAmountCell, parseDateCell } from "./savings";
 
 export type DraftExpense = {
@@ -114,7 +114,7 @@ export function parseExpenseCsv(text: string): ExpenseImport {
     const rawAmount = cells[amountAt] ?? "";
     const date = parseDateCell(rawDate);
     const amount = parseAmountCell(rawAmount);
-    const item = (cells[itemAt] ?? "").trim();
+    const item = unguardCell((cells[itemAt] ?? "").trim());
 
     if (!date) {
       errors.push(`Linje ${line}: «${rawDate.trim()}» er ikke en dato.`);
@@ -140,8 +140,8 @@ export function parseExpenseCsv(text: string): ExpenseImport {
       date,
       item,
       price: Math.abs(amount),
-      category: categoryAt >= 0 ? (cells[categoryAt] ?? "").trim() : "",
-      tag: tagAt >= 0 ? (cells[tagAt] ?? "").trim() || null : null,
+      category: categoryAt >= 0 ? unguardCell((cells[categoryAt] ?? "").trim()) : "",
+      tag: tagAt >= 0 ? unguardCell((cells[tagAt] ?? "").trim()) || null : null,
       incoming: amount > 0,
     });
   });

@@ -1,7 +1,19 @@
+// A spreadsheet runs a cell starting with one of these as a formula, so a
+// description like `=HYPERLINK(...)` from an imported bank file would execute
+// when the export is opened. OWASP's fix: a leading apostrophe, which Excel and
+// Numbers hide and treat as "this is text".
+const FORMULA_START = /^[=+\-@\t\r]/;
+
+/** Undoes the apostrophe escapeCsvField adds, so an export reads back in unchanged. */
+export function unguardCell(value: string): string {
+  return value.startsWith("'") && FORMULA_START.test(value.slice(1)) ? value.slice(1) : value;
+}
+
 /**
  * Escape a single CSV field according to RFC 4180.
  * - null becomes empty string
  * - numbers are stringified without quoting
+ * - strings that a spreadsheet would run as a formula get a leading apostrophe
  * - strings are quoted if they contain comma, double quote, CR, or LF
  * - double quotes are escaped by doubling
  */
@@ -10,7 +22,7 @@ export function escapeCsvField(value: string | number | null): string {
     return "";
   }
 
-  const str = String(value);
+  const str = typeof value === "string" && FORMULA_START.test(value) ? `'${value}` : String(value);
 
   // Check if field needs quoting: contains comma, quote, CR, or LF
   const needsQuoting =
